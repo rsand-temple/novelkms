@@ -13,7 +13,7 @@ public class NovelKmsConfig extends Configuration {
         String adminUser;
         String adminPwd;
     }
-    
+
     @JsonProperty
     Database database;
 }

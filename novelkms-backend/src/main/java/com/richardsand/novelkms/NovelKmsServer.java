@@ -1,6 +1,5 @@
 package com.richardsand.novelkms;
 
-
 import java.sql.SQLException;
 import java.time.Duration;
 
@@ -92,7 +91,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(config).to(NovelKmsConfig.class);
             }
         });
-        
+
         // Health checks
         env.healthChecks().register("database", new DataSourceHealthCheck(ds));
     }

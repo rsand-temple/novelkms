@@ -1,0 +1,122 @@
+package com.richardsand.novelkms.dao;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.apache.commons.dbcp2.BasicDataSource;
+
+import com.richardsand.novelkms.model.Project;
+
+public class ProjectDao {
+
+    private final BasicDataSource ds;
+
+    public ProjectDao(BasicDataSource ds) {
+        this.ds = ds;
+    }
+
+    // -------------------------------------------------------------------------
+    // Row mapper
+    // -------------------------------------------------------------------------
+
+    private Project map(ResultSet rs) throws SQLException {
+        return Project.builder()
+                .id(rs.getObject("id", UUID.class))
+                .name(rs.getString("name"))
+                .description(rs.getString("description"))
+                .createdAt(rs.getTimestamp("created_at").toInstant())
+                .updatedAt(rs.getTimestamp("updated_at").toInstant())
+                .build();
+    }
+
+    // -------------------------------------------------------------------------
+    // Queries
+    // -------------------------------------------------------------------------
+
+    public List<Project> findAll() throws SQLException {
+        String        sql    = "SELECT * FROM project ORDER BY name";
+        List<Project> result = new ArrayList<>();
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                result.add(map(rs));
+            }
+        }
+        return result;
+    }
+
+    public Optional<Project> findById(UUID id) throws SQLException {
+        String sql = "SELECT * FROM project WHERE id = ?";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(map(rs)) : Optional.empty();
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Mutations
+    // -------------------------------------------------------------------------
+
+    public Project create(String name, String description) throws SQLException {
+        UUID    id  = UUID.randomUUID();
+        Instant now = Instant.now();
+        String  sql = """
+                INSERT INTO project (id, name, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, id);
+            ps.setString(2, name);
+            ps.setString(3, description);
+            ps.setTimestamp(4, Timestamp.from(now));
+            ps.setTimestamp(5, Timestamp.from(now));
+            ps.executeUpdate();
+        }
+        return Project.builder()
+                .id(id).name(name).description(description)
+                .createdAt(now).updatedAt(now)
+                .build();
+    }
+
+    public Optional<Project> update(UUID id, String name, String description) throws SQLException {
+        Instant now = Instant.now();
+        String  sql = """
+                UPDATE project SET name = ?, description = ?, updated_at = ?
+                WHERE id = ?
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, name);
+            ps.setString(2, description);
+            ps.setTimestamp(3, Timestamp.from(now));
+            ps.setObject(4, id);
+            int rows = ps.executeUpdate();
+            if (rows == 0) {
+                return Optional.empty();
+            }
+        }
+        return findById(id);
+    }
+
+    public boolean delete(UUID id) throws SQLException {
+        String sql = "DELETE FROM project WHERE id = ?";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, id);
+            return ps.executeUpdate() > 0;
+        }
+    }
+}
