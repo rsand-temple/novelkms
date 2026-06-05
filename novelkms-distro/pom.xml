@@ -100,7 +100,7 @@
 	<dependencies>
 		<dependency>
 			<groupId>com.richardsand.novelkms</groupId>
-			<artifactId>novemkms-backend</artifactId>
+			<artifactId>novelkms-backend</artifactId>
 			<version>${project.version}</version>
 			<type>jar</type>
 		</dependency>

@@ -3,16 +3,16 @@ import {
 	Dialog, DialogTitle, DialogContent, DialogActions,
 	TextField, Button
 } from '@mui/material'
-import { useCreateProject } from '../../../hooks/useProjects'
+import { useCreateScene } from '../../../hooks/useScenes'
 
-export default function AddProjectDialog({ open, onClose }) {
+export default function AddSceneDialog({ open, onClose, chapterId }) {
 	const [title, setTitle] = useState('')
-	const createProject = useCreateProject()
+	const createScene = useCreateScene()
 
 	const handleSubmit = () => {
 		if (!title.trim()) return
-		createProject.mutate(
-			{ title: title.trim() },
+		createScene.mutate(
+			{ chapterId, data: { title: title.trim() } },
 			{
 				onSuccess: () => {
 					setTitle('')
@@ -28,14 +28,12 @@ export default function AddProjectDialog({ open, onClose }) {
 	}
 
 	return (
-		<Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth
-		  disableRestoreFocus
-		>
-			<DialogTitle>New Project</DialogTitle>
+		<Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth disableRestoreFocus>
+			<DialogTitle>New Scene</DialogTitle>
 			<DialogContent>
 				<TextField
 					autoFocus
-					label="Project Title"
+					label="Scene Title"
 					fullWidth
 					variant="outlined"
 					value={title}
@@ -49,7 +47,7 @@ export default function AddProjectDialog({ open, onClose }) {
 				<Button
 					onClick={handleSubmit}
 					variant="contained"
-					disabled={!title.trim() || createProject.isPending}
+					disabled={!title.trim() || createScene.isPending}
 				>
 					Create
 				</Button>

@@ -3,16 +3,16 @@ import {
 	Dialog, DialogTitle, DialogContent, DialogActions,
 	TextField, Button
 } from '@mui/material'
-import { useCreateProject } from '../../../hooks/useProjects'
+import { useCreateBook } from '../../../hooks/useBooks'
 
-export default function AddProjectDialog({ open, onClose }) {
+export default function AddBookDialog({ open, onClose, projectId }) {
 	const [title, setTitle] = useState('')
-	const createProject = useCreateProject()
+	const createBook = useCreateBook()
 
 	const handleSubmit = () => {
 		if (!title.trim()) return
-		createProject.mutate(
-			{ title: title.trim() },
+		createBook.mutate(
+			{ projectId, data: { title: title.trim() } },
 			{
 				onSuccess: () => {
 					setTitle('')
@@ -28,14 +28,12 @@ export default function AddProjectDialog({ open, onClose }) {
 	}
 
 	return (
-		<Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth
-		  disableRestoreFocus
-		>
-			<DialogTitle>New Project</DialogTitle>
+		<Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth disableRestoreFocus>
+			<DialogTitle>New Book</DialogTitle>
 			<DialogContent>
 				<TextField
 					autoFocus
-					label="Project Title"
+					label="Book Title"
 					fullWidth
 					variant="outlined"
 					value={title}
@@ -49,7 +47,7 @@ export default function AddProjectDialog({ open, onClose }) {
 				<Button
 					onClick={handleSubmit}
 					variant="contained"
-					disabled={!title.trim() || createProject.isPending}
+					disabled={!title.trim() || createBook.isPending}
 				>
 					Create
 				</Button>

@@ -19,7 +19,7 @@ export default function SceneItem({ scene, selection, setSelection }) {
 			</ListItemIcon>
 			<ListItemText
 				primary={scene.title}
-				primaryTypographyProps={{ variant: 'body2' }}
+				slotProps={{ primary: { variant: 'body2' } }}
 			/>
 		</ListItemButton>
 	)

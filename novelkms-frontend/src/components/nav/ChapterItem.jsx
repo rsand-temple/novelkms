@@ -32,7 +32,7 @@ export default function ChapterItem({ chapter, selection, setSelection }) {
 				</ListItemIcon>
 				<ListItemText
 					primary={chapter.title}
-					primaryTypographyProps={{ variant: 'body2' }}
+					slotProps={{ primary: { variant: 'body2' } }}
 				/>
 			</ListItemButton>
 

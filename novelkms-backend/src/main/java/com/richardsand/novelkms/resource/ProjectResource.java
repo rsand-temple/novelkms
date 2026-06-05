@@ -25,7 +25,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.ToString;
 
-@Path("/api/projects")
+@Path("/api")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class ProjectResource {
@@ -62,6 +62,7 @@ public class ProjectResource {
     // -------------------------------------------------------------------------
 
     @GET
+    @Path("/projects")
     public Response listProjects() {
         try {
             List<Project> projects = projectDao.findAll();
@@ -73,7 +74,7 @@ public class ProjectResource {
     }
 
     @GET
-    @Path("/{id}")
+    @Path("/projects/{id}")
     public Response getProject(@PathParam("id") UUID id) {
         try {
             return projectDao.findById(id)
@@ -86,6 +87,7 @@ public class ProjectResource {
     }
 
     @POST
+    @Path("/projects")
     public Response createProject(CreateRequest req) {
         if (StringUtils.isBlank(req.title)) {
             logger.debug("title is required");
@@ -102,7 +104,7 @@ public class ProjectResource {
     }
 
     @PUT
-    @Path("/{id}")
+    @Path("/projects/{id}")
     public Response updateProject(@PathParam("id") UUID id, UpdateRequest req) {
         if (StringUtils.isBlank(req.title)) {
             return Response.status(Response.Status.BAD_REQUEST)
@@ -119,7 +121,7 @@ public class ProjectResource {
     }
 
     @DELETE
-    @Path("/{id}")
+    @Path("/projects/{id}")
     public Response deleteProject(@PathParam("id") UUID id) {
         try {
             return projectDao.delete(id)

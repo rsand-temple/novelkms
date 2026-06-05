@@ -32,7 +32,7 @@ export default function BookItem({ book, selection, setSelection }) {
 				</ListItemIcon>
 				<ListItemText
 					primary={book.title}
-					primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
+					slotProps={{ primary: { variant: 'body2', sx: { fontWeight: 500 } } }}
 				/>
 			</ListItemButton>
 

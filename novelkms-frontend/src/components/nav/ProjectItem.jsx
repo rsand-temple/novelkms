@@ -32,7 +32,7 @@ export default function ProjectItem({ project, selection, setSelection }) {
 				</ListItemIcon>
 				<ListItemText
 					primary={project.title}
-					primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
+					slotProps={{ primary: { variant: 'body2', sx: { fontWeight: 600 } } }}
 				/>
 			</ListItemButton>
 
