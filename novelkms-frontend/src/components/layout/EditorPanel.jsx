@@ -52,6 +52,7 @@ export default function EditorPanel({ sceneId }) {
 					'padding: 0 8px',
 					'min-height: 400px',
 					'outline: none',
+					'white-space: pre-wrap',
 				].join('; '),
 			},
 		},
