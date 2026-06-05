@@ -1,53 +1,56 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { projectsApi } from '../api/projects'
+import { booksApi } from '../api/books'
+import { PROJECT_KEYS } from './useProjects'
 
-export const PROJECT_KEYS = {
-	all: ['projects'],
-	detail: (id) => ['projects', id],
+export const BOOK_KEYS = {
+  byProject: (projectId) => ['books', 'byProject', projectId],
+  detail: (id) => ['books', id],
 }
 
-export const useProjects = () => {
-	return useQuery({
-		queryKey: PROJECT_KEYS.all,
-		queryFn: projectsApi.getAll,
-	})
+export const useBooks = (projectId) => {
+  return useQuery({
+    queryKey: BOOK_KEYS.byProject(projectId),
+    queryFn: () => booksApi.getByProject(projectId),
+    enabled: !!projectId,
+  })
 }
 
-export const useProject = (id) => {
-	return useQuery({
-		queryKey: PROJECT_KEYS.detail(id),
-		queryFn: () => projectsApi.getById(id),
-		enabled: !!id,
-	})
+export const useBook = (id) => {
+  return useQuery({
+    queryKey: BOOK_KEYS.detail(id),
+    queryFn: () => booksApi.getById(id),
+    enabled: !!id,
+  })
 }
 
-export const useCreateProject = () => {
-	const queryClient = useQueryClient()
-	return useMutation({
-		mutationFn: (data) => projectsApi.create(data),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: PROJECT_KEYS.all })
-		},
-	})
+export const useCreateBook = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, data }) => booksApi.create(projectId, data),
+    onSuccess: (_, { projectId }) => {
+      queryClient.invalidateQueries({ queryKey: BOOK_KEYS.byProject(projectId) })
+    },
+  })
 }
 
-export const useUpdateProject = () => {
-	const queryClient = useQueryClient()
-	return useMutation({
-		mutationFn: ({ id, data }) => projectsApi.update(id, data),
-		onSuccess: (_, { id }) => {
-			queryClient.invalidateQueries({ queryKey: PROJECT_KEYS.detail(id) })
-			queryClient.invalidateQueries({ queryKey: PROJECT_KEYS.all })
-		},
-	})
+export const useUpdateBook = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }) => booksApi.update(id, data),
+    onSuccess: (_, { id, data }) => {
+      queryClient.invalidateQueries({ queryKey: BOOK_KEYS.detail(id) })
+      queryClient.invalidateQueries({ queryKey: BOOK_KEYS.byProject(data.projectId) })
+    },
+  })
 }
 
-export const useDeleteProject = () => {
-	const queryClient = useQueryClient()
-	return useMutation({
-		mutationFn: (id) => projectsApi.delete(id),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: PROJECT_KEYS.all })
-		},
-	})
+export const useDeleteBook = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, projectId }) => booksApi.delete(id),
+    onSuccess: (_, { projectId }) => {
+      queryClient.invalidateQueries({ queryKey: BOOK_KEYS.byProject(projectId) })
+      queryClient.invalidateQueries({ queryKey: PROJECT_KEYS.all })
+    },
+  })
 }

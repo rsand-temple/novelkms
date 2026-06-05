@@ -4,7 +4,7 @@
 
 CREATE TABLE project (
     id            UUID         NOT NULL PRIMARY KEY,
-    name          VARCHAR(255) NOT NULL,
+    title         VARCHAR(255) NOT NULL,
     description   TEXT,
     created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP

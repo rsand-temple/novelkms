@@ -30,7 +30,7 @@ public class ProjectDao {
     private Project map(ResultSet rs) throws SQLException {
         return Project.builder()
                 .id(rs.getObject("id", UUID.class))
-                .name(rs.getString("name"))
+                .title(rs.getString("title"))
                 .description(rs.getString("description"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .updatedAt(rs.getTimestamp("updated_at").toInstant())
@@ -42,7 +42,7 @@ public class ProjectDao {
     // -------------------------------------------------------------------------
 
     public List<Project> findAll() throws SQLException {
-        String        sql    = "SELECT * FROM project ORDER BY name";
+        String        sql    = "SELECT * FROM project ORDER BY title";
         List<Project> result = new ArrayList<>();
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql);
@@ -69,37 +69,37 @@ public class ProjectDao {
     // Mutations
     // -------------------------------------------------------------------------
 
-    public Project create(String name, String description) throws SQLException {
+    public Project create(String title, String description) throws SQLException {
         UUID    id  = UUID.randomUUID();
         Instant now = Instant.now();
         String  sql = """
-                INSERT INTO project (id, name, description, created_at, updated_at)
+                INSERT INTO project (id, title, description, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?)
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
-            ps.setString(2, name);
+            ps.setString(2, title);
             ps.setString(3, description);
             ps.setTimestamp(4, Timestamp.from(now));
             ps.setTimestamp(5, Timestamp.from(now));
             ps.executeUpdate();
         }
         return Project.builder()
-                .id(id).name(name).description(description)
+                .id(id).title(title).description(description)
                 .createdAt(now).updatedAt(now)
                 .build();
     }
 
-    public Optional<Project> update(UUID id, String name, String description) throws SQLException {
+    public Optional<Project> update(UUID id, String title, String description) throws SQLException {
         Instant now = Instant.now();
         String  sql = """
-                UPDATE project SET name = ?, description = ?, updated_at = ?
+                UPDATE project SET title = ?, description = ?, updated_at = ?
                 WHERE id = ?
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, name);
+            ps.setString(1, title);
             ps.setString(2, description);
             ps.setTimestamp(3, Timestamp.from(now));
             ps.setObject(4, id);

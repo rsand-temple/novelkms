@@ -33,7 +33,7 @@ class ProjectDaoTest extends NovelKmsTestBase {
         Project p = projectDao.create("The Alone Man", "A novel");
 
         assertNotNull(p.getId());
-        assertEquals("The Alone Man", p.getName());
+        assertEquals("The Alone Man", p.getTitle());
         assertEquals("A novel", p.getDescription());
         assertNotNull(p.getCreatedAt());
         assertNotNull(p.getUpdatedAt());
@@ -44,7 +44,7 @@ class ProjectDaoTest extends NovelKmsTestBase {
         Project p = projectDao.create("Threads of Time", null);
 
         assertNotNull(p.getId());
-        assertEquals("Threads of Time", p.getName());
+        assertEquals("Threads of Time", p.getTitle());
     }
 
     // -------------------------------------------------------------------------
@@ -59,7 +59,7 @@ class ProjectDaoTest extends NovelKmsTestBase {
 
         assertTrue(found.isPresent());
         assertEquals(created.getId(), found.get().getId());
-        assertEquals("Legacy", found.get().getName());
+        assertEquals("Legacy", found.get().getTitle());
         assertEquals("Family saga", found.get().getDescription());
     }
 
@@ -90,9 +90,9 @@ class ProjectDaoTest extends NovelKmsTestBase {
         List<Project> projects = projectDao.findAll();
 
         assertEquals(3, projects.size());
-        assertEquals("Alpha Project", projects.get(0).getName());
-        assertEquals("Middle Project", projects.get(1).getName());
-        assertEquals("Zebra Project", projects.get(2).getName());
+        assertEquals("Alpha Project", projects.get(0).getTitle());
+        assertEquals("Middle Project", projects.get(1).getTitle());
+        assertEquals("Zebra Project", projects.get(2).getTitle());
     }
 
     // -------------------------------------------------------------------------
@@ -101,14 +101,14 @@ class ProjectDaoTest extends NovelKmsTestBase {
 
     @Test
     void update_changesNameAndDescription() throws SQLException {
-        Project original = projectDao.create("Old Name", "Old description");
+        Project original = projectDao.create("Old Title", "Old description");
 
         Instant createdAt = projectDao.findById(original.getId()).get().getCreatedAt();
         
-        Optional<Project> updated = projectDao.update(original.getId(), "New Name", "New description");
+        Optional<Project> updated = projectDao.update(original.getId(), "New Title", "New description");
  
         assertTrue(updated.isPresent());
-        assertEquals("New Name",        updated.get().getName());
+        assertEquals("New Title",        updated.get().getTitle());
         assertEquals("New description", updated.get().getDescription());
         assertFalse(updated.get().getUpdatedAt().isBefore(createdAt));    }
 

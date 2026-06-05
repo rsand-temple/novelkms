@@ -4,6 +4,10 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.model.Project;
@@ -19,12 +23,13 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import lombok.ToString;
 
 @Path("/api/projects")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class ProjectResource {
-
+    private static Logger logger = LoggerFactory.getLogger(ProjectResource.class);
     private final ProjectDao projectDao;
 
     @Inject
@@ -36,16 +41,18 @@ public class ProjectResource {
     // Request DTOs
     // -------------------------------------------------------------------------
 
+    @ToString
     public static class CreateRequest {
         @JsonProperty
-        public String name;
+        public String title;
         @JsonProperty
         public String description;
     }
 
+    @ToString
     public static class UpdateRequest {
         @JsonProperty
-        public String name;
+        public String title;
         @JsonProperty
         public String description;
     }
@@ -59,8 +66,9 @@ public class ProjectResource {
         try {
             List<Project> projects = projectDao.findAll();
             return Response.ok(projects).build();
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            logger.error("SQL exception: {}", sqle.getMessage());
+            return serverError(sqle);
         }
     }
 
@@ -71,38 +79,42 @@ public class ProjectResource {
             return projectDao.findById(id)
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            logger.error("SQL exception: {}", sqle.getMessage());
+            return serverError(sqle);
         }
     }
 
     @POST
     public Response createProject(CreateRequest req) {
-        if (req == null || req.name == null || req.name.isBlank()) {
+        if (StringUtils.isBlank(req.title)) {
+            logger.debug("title is required");
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("name is required").build();
+                    .entity("title is required").build();
         }
         try {
-            Project project = projectDao.create(req.name, req.description);
+            Project project = projectDao.create(req.title, req.description);
             return Response.status(Response.Status.CREATED).entity(project).build();
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            logger.error("SQL exception: {}", sqle.getMessage());
+            return serverError(sqle);
         }
     }
 
     @PUT
     @Path("/{id}")
     public Response updateProject(@PathParam("id") UUID id, UpdateRequest req) {
-        if (req == null || req.name == null || req.name.isBlank()) {
+        if (StringUtils.isBlank(req.title)) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("name is required").build();
+                    .entity("title is required").build();
         }
         try {
-            return projectDao.update(id, req.name, req.description)
+            return projectDao.update(id, req.title, req.description)
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            logger.error("SQL exception: {}", sqle.getMessage());
+            return serverError(sqle);
         }
     }
 
@@ -113,8 +125,9 @@ public class ProjectResource {
             return projectDao.delete(id)
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            logger.error("SQL exception: {}", sqle.getMessage());
+            return serverError(sqle);
         }
     }
 

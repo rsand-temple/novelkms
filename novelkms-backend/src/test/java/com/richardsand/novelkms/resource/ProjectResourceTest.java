@@ -76,7 +76,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
         assertEquals(200, r.getStatus());
         Project found = r.readEntity(Project.class);
         assertEquals(p.getId(), found.getId());
-        assertEquals("The Alone Man", found.getName());
+        assertEquals("The Alone Man", found.getTitle());
     }
 
     @Test
@@ -94,12 +94,12 @@ class ProjectResourceTest extends NovelKmsTestBase {
     void createProject_validRequest_returns201WithProject() {
         Response r = RESOURCES.target("/api/projects")
                 .request(MediaType.APPLICATION_JSON)
-                .post(Entity.json(Map.of("name", "New Project", "description", "A description")));
+                .post(Entity.json(Map.of("title", "New Project", "description", "A description")));
 
         assertEquals(201, r.getStatus());
         Project created = r.readEntity(Project.class);
         assertNotNull(created.getId());
-        assertEquals("New Project", created.getName());
+        assertEquals("New Project", created.getTitle());
         assertEquals("A description", created.getDescription());
         assertNotNull(created.getCreatedAt());
     }
@@ -132,11 +132,11 @@ class ProjectResourceTest extends NovelKmsTestBase {
 
         Response r = RESOURCES.target("/api/projects/" + p.getId())
                 .request(MediaType.APPLICATION_JSON)
-                .put(Entity.json(Map.of("name", "Updated Name", "description", "Updated desc")));
+                .put(Entity.json(Map.of("title", "Updated Title", "description", "Updated desc")));
 
         assertEquals(200, r.getStatus());
         Project updated = r.readEntity(Project.class);
-        assertEquals("Updated Name", updated.getName());
+        assertEquals("Updated Title", updated.getTitle());
         assertEquals("Updated desc", updated.getDescription());
     }
 
@@ -144,7 +144,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
     void updateProject_unknownId_returns404() {
         Response r = RESOURCES.target("/api/projects/" + UUID.randomUUID())
                 .request(MediaType.APPLICATION_JSON)
-                .put(Entity.json(Map.of("name", "Ghost")));
+                .put(Entity.json(Map.of("title", "Ghost")));
 
         assertEquals(404, r.getStatus());
     }

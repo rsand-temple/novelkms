@@ -20,7 +20,7 @@ public class Project {
     private UUID id;
 
     @JsonProperty
-    private String name;
+    private String title;
 
     @JsonProperty
     private String description;
