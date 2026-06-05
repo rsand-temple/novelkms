@@ -1,16 +1,16 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-  <artifactId>novelkms-backend</artifactId>
-  <name>Novel Authoring Knowledge Management System - Backend</name>
-  <parent>
-  <groupId>com.richardsand.novelkms</groupId>
-    <artifactId>novelkms-parent</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
-    </parent>
-  <packaging>pom</packaging>
-  
+	<modelVersion>4.0.0</modelVersion>
+	<artifactId>novelkms-frontend</artifactId>
+	<name>Novel Authoring Knowledge Management System - Backend</name>
+	<parent>
+		<groupId>com.richardsand.novelkms</groupId>
+		<artifactId>novelkms-parent</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+	<packaging>pom</packaging>
+
 	<build>
 		<plugins>
 			<plugin>
@@ -56,7 +56,7 @@
 				<artifactId>maven-assembly-plugin</artifactId>
 				<version>3.7.1</version>
 				<configuration>
-					<finalName>security-ui</finalName>
+					<finalName>novelkms-ui</finalName>
 					<appendAssemblyId>false</appendAssemblyId>
 					<descriptors>
 						<descriptor>assembly/ui.xml</descriptor>
@@ -74,5 +74,4 @@
 			</plugin>
 		</plugins>
 	</build>
-
 </project>

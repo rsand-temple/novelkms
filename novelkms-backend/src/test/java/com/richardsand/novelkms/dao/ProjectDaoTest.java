@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,7 +30,7 @@ class ProjectDaoTest extends NovelKmsTestBase {
 
     @Test
     void create_assignsIdAndReturnsPopulatedProject() throws SQLException {
-        Project p = projectDao.create("The Alone Man", "A thriller");
+        Project p = projectDao.create("The Alone Man", "A novel");
 
         assertNotNull(p.getId());
         assertEquals("The Alone Man", p.getName());
@@ -102,14 +103,14 @@ class ProjectDaoTest extends NovelKmsTestBase {
     void update_changesNameAndDescription() throws SQLException {
         Project original = projectDao.create("Old Name", "Old description");
 
+        Instant createdAt = projectDao.findById(original.getId()).get().getCreatedAt();
+        
         Optional<Project> updated = projectDao.update(original.getId(), "New Name", "New description");
-
+ 
         assertTrue(updated.isPresent());
-        assertEquals("New Name", updated.get().getName());
+        assertEquals("New Name",        updated.get().getName());
         assertEquals("New description", updated.get().getDescription());
-        // updatedAt should be at or after createdAt
-        assertFalse(updated.get().getUpdatedAt().isBefore(original.getCreatedAt()));
-    }
+        assertFalse(updated.get().getUpdatedAt().isBefore(createdAt));    }
 
     @Test
     void update_unknownId_returnsEmpty() throws SQLException {
