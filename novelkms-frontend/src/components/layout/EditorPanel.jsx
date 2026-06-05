@@ -151,7 +151,7 @@ export default function EditorPanel({ sceneId }) {
 					py: 4,
 					px: 2,
 					'& .tiptap': { outline: 'none' },
-					'& .tiptap p.is-editor-empty:first-child::before': {
+					'& .tiptap p.is-editor-empty:first-of-type::before': {
 						content: 'attr(data-placeholder)',
 						color: 'text.disabled',
 						pointerEvents: 'none',
