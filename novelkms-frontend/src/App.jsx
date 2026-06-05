@@ -2,6 +2,7 @@ import { Box, AppBar, Toolbar, Typography } from '@mui/material'
 import NavPanel from './components/layout/NavPanel'
 import EditorPanel from './components/layout/EditorPanel'
 import PropertiesPanel from './components/layout/PropertiesPanel'
+//import { useProjects } from './hooks/useProjects'
 
 const NAV_WIDTH = 280
 const PROPS_WIDTH = 280

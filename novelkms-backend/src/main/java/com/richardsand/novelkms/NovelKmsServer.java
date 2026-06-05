@@ -10,7 +10,15 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.richardsand.novelkms.dao.BookDao;
+import com.richardsand.novelkms.dao.ChapterDao;
+import com.richardsand.novelkms.dao.ProjectDao;
+import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
+import com.richardsand.novelkms.resource.BookResource;
+import com.richardsand.novelkms.resource.ChapterResource;
+import com.richardsand.novelkms.resource.ProjectResource;
+import com.richardsand.novelkms.resource.SceneResource;
 
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
@@ -71,17 +79,21 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         flyway.migrate();
 
         // DAOs
-
+        ProjectDao projectDao = new ProjectDao(ds);
+        BookDao    bookDao    = new BookDao(ds);
+        ChapterDao chapterDao = new ChapterDao(ds);
+        SceneDao   sceneDao   = new SceneDao(ds);
+        
         // Resources
+        env.jersey().register(BookResource.class);
+        env.jersey().register(ChapterResource.class);
+        env.jersey().register(ProjectResource.class);
+        env.jersey().register(SceneResource.class);
 
         // ObjectMapper
         ObjectMapper mapper = env.getObjectMapper();
         mapper.findAndRegisterModules();
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
-        // Schedule jobs from config
-
-        // Services
 
         // Make classes injectable to resources with HK2
         env.jersey().register(new org.glassfish.hk2.utilities.binding.AbstractBinder() {
@@ -89,7 +101,10 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
             protected void configure() {
                 bind(mapper).to(ObjectMapper.class);
                 bind(config).to(NovelKmsConfig.class);
-            }
+                bind(projectDao).to(ProjectDao.class);
+                bind(bookDao).to(BookDao.class);
+                bind(chapterDao).to(ChapterDao.class);
+                bind(sceneDao).to(SceneDao.class);            }
         });
 
         // Health checks
