@@ -41,7 +41,7 @@ export default function App() {
 				</Box>
 
 				<Box sx={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-					<EditorPanel selection={selection} />
+					<EditorPanel sceneId={selection.sceneId} />
 				</Box>
 
 				<Box sx={{

@@ -30,5 +30,4 @@ export const scenesApi = {
 	delete: async (id) => {
 		await client.delete(`/scenes/${id}`)
 	},
-
 }
