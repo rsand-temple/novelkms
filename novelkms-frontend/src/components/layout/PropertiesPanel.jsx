@@ -4,21 +4,25 @@ import {
 	Box, Typography, TextField, Divider, CircularProgress,
 	Stack, Chip, Button,
 } from '@mui/material';
-import { useScene } from '../../hooks/useScenes';
-import { useChapter } from '../../hooks/useChapters';
+import { useScene, SCENE_KEYS } from '../../hooks/useScenes';
+import { useChapter, CHAPTER_KEYS } from '../../hooks/useChapters';
 import { scenesApi } from '../../api/scenes';
 import { chaptersApi } from '../../api/chapters';
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
-function SceneForm({ scene, sceneId }) {
+function SceneForm({ scene, sceneId, chapterId }) {
 	const qc = useQueryClient();
 	const [title, setTitle] = useState(scene.title ?? '');
 	const [synopsis, setSynopsis] = useState(scene.synopsis ?? '');
 
 	const { mutate: save, isPending } = useMutation({
 		mutationFn: (patch) => scenesApi.update(sceneId, patch),
-		onSuccess: () => qc.invalidateQueries({ queryKey: ['scene', sceneId] }),
+		onSuccess: () => {
+			// Fix key mismatch (was ['scene', …]) + refresh nav tree list
+			qc.invalidateQueries({ queryKey: SCENE_KEYS.detail(sceneId) });
+			if (chapterId) qc.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(chapterId) });
+		},
 	});
 
 	return (
@@ -55,7 +59,7 @@ function SceneForm({ scene, sceneId }) {
 	);
 }
 
-function SceneProperties({ sceneId }) {
+function SceneProperties({ sceneId, chapterId }) {
 	const { data: scene, isLoading } = useScene(sceneId);
 
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
@@ -63,19 +67,23 @@ function SceneProperties({ sceneId }) {
 
 	// key={scene.id} remounts SceneForm when the selected scene changes,
 	// resetting local title/synopsis state without needing an effect.
-	return <SceneForm key={scene.id} scene={scene} sceneId={sceneId} />;
+	return <SceneForm key={scene.id} scene={scene} sceneId={sceneId} chapterId={chapterId} />;
 }
 
 // ── Chapter ───────────────────────────────────────────────────────────────────
 
-function ChapterForm({ chapter, chapterId }) {
+function ChapterForm({ chapter, chapterId, bookId }) {
 	const qc = useQueryClient();
 	const [title, setTitle] = useState(chapter.title ?? '');
 	const [notes, setNotes] = useState(chapter.notes ?? '');
 
 	const { mutate: save, isPending } = useMutation({
 		mutationFn: (patch) => chaptersApi.update(chapterId, patch),
-		onSuccess: () => qc.invalidateQueries({ queryKey: ['chapter', chapterId] }),
+		onSuccess: () => {
+			// Fix key mismatch (was ['chapter', …]) + refresh nav tree list
+			qc.invalidateQueries({ queryKey: CHAPTER_KEYS.detail(chapterId) });
+			if (bookId) qc.invalidateQueries({ queryKey: CHAPTER_KEYS.byBook(bookId) });
+		},
 	});
 
 	return (
@@ -111,19 +119,19 @@ function ChapterForm({ chapter, chapterId }) {
 	);
 }
 
-function ChapterProperties({ chapterId }) {
+function ChapterProperties({ chapterId, bookId }) {
 	const { data: chapter, isLoading } = useChapter(chapterId);
 
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!chapter) return null;
 
-	return <ChapterForm key={chapter.id} chapter={chapter} chapterId={chapterId} />;
+	return <ChapterForm key={chapter.id} chapter={chapter} chapterId={chapterId} bookId={bookId} />;
 }
 
 // ── Root panel ────────────────────────────────────────────────────────────────
 
 export default function PropertiesPanel({ selection }) {
-	const { sceneId, chapterId } = selection ?? {};
+	const { sceneId, chapterId, bookId } = selection ?? {};
 
 	if (!sceneId && !chapterId) {
 		return (
@@ -135,9 +143,9 @@ export default function PropertiesPanel({ selection }) {
 
 	return (
 		<Box sx={{ height: '100%', overflowY: 'auto' }}>
-			{sceneId && <SceneProperties sceneId={sceneId} />}
+			{sceneId && <SceneProperties sceneId={sceneId} chapterId={chapterId} />}
 			{sceneId && chapterId && <Divider />}
-			{chapterId && <ChapterProperties chapterId={chapterId} />}
+			{chapterId && <ChapterProperties chapterId={chapterId} bookId={bookId} />}
 		</Box>
 	);
 }

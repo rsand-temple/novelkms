@@ -4,6 +4,9 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.model.Chapter;
@@ -24,7 +27,7 @@ import jakarta.ws.rs.core.Response;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class ChapterResource {
-
+    private static final Logger logger = LoggerFactory.getLogger(ChapterResource.class);
     private final ChapterDao chapterDao;
 
     @Inject
@@ -125,8 +128,9 @@ public class ChapterResource {
 
     // -------------------------------------------------------------------------
 
-    private Response serverError(SQLException e) {
+    private Response serverError(SQLException sqle) {
+        logger.info("SQLException: {}", sqle.getMessage());
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(e.getMessage()).build();
+                .entity(sqle.getMessage()).build();
     }
 }

@@ -40,8 +40,8 @@ export default function App() {
 					<NavPanel selection={selection} setSelection={setSelection} />
 				</Box>
 
-				<Box sx={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-					<EditorPanel sceneId={selection.sceneId} />
+				<Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+					<EditorPanel chapterId={selection.chapterId} projectId={selection.projectId} />
 				</Box>
 
 				<Box sx={{

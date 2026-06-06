@@ -4,6 +4,9 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.model.Scene;
@@ -24,6 +27,7 @@ import jakarta.ws.rs.core.Response;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class SceneResource {
+    private static final Logger logger = LoggerFactory.getLogger(SceneResource.class);
 
     private final SceneDao sceneDao;
 
@@ -37,17 +41,22 @@ public class SceneResource {
     // -------------------------------------------------------------------------
 
     public static class CreateRequest {
-        @JsonProperty public String title;
-        @JsonProperty public String notes;
+        @JsonProperty
+        public String title;
+        @JsonProperty
+        public String notes;
     }
 
     public static class UpdateRequest {
-        @JsonProperty public String title;
-        @JsonProperty public String notes;
+        @JsonProperty
+        public String title;
+        @JsonProperty
+        public String notes;
     }
 
     public static class SaveContentRequest {
-        @JsonProperty public String content;
+        @JsonProperty
+        public String content;
         @JsonProperty
         public int    wordCount;
     }
@@ -62,8 +71,8 @@ public class SceneResource {
         try {
             List<Scene> scenes = sceneDao.findByChapterId(chapterId);
             return Response.ok(scenes).build();
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            return serverError(sqle);
         }
     }
 
@@ -74,39 +83,38 @@ public class SceneResource {
             return sceneDao.findById(id)
                     .map(s -> Response.ok(s).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            return serverError(sqle);
         }
     }
 
     @POST
     @Path("/chapters/{chapterId}/scenes")
     public Response createScene(@PathParam("chapterId") UUID chapterId, CreateRequest req) {
-        if (req == null || req.title == null || req.title.isBlank()) {
+        if (req == null || req.title == null) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("title is required").build();
         }
         try {
             Scene scene = sceneDao.create(chapterId, req.title, req.notes);
             return Response.status(Response.Status.CREATED).entity(scene).build();
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            return serverError(sqle);
         }
     }
 
     @PUT
     @Path("/scenes/{id}")
     public Response updateScene(@PathParam("id") UUID id, UpdateRequest req) {
-        if (req == null || req.title == null || req.title.isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("title is required").build();
+        if (req == null || req.title == null) {
+            return Response.status(Response.Status.BAD_REQUEST).entity("title is required").build();
         }
         try {
             return sceneDao.update(id, req.title, req.notes)
                     .map(s -> Response.ok(s).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            return serverError(sqle);
         }
     }
 
@@ -125,8 +133,8 @@ public class SceneResource {
             return sceneDao.saveContent(id, req.content, req.wordCount)
                     .map(s -> Response.ok(s).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            return serverError(sqle);
         }
     }
 
@@ -137,15 +145,16 @@ public class SceneResource {
             return sceneDao.delete(id)
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
-        } catch (SQLException e) {
-            return serverError(e);
+        } catch (SQLException sqle) {
+            return serverError(sqle);
         }
     }
 
     // -------------------------------------------------------------------------
 
-    private Response serverError(SQLException e) {
+    private Response serverError(SQLException sqle) {
+        logger.info("SQLException: {}", sqle.getMessage());
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(e.getMessage()).build();
+                .entity(sqle.getMessage()).build();
     }
 }

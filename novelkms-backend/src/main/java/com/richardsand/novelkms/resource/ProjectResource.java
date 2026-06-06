@@ -68,7 +68,6 @@ public class ProjectResource {
             List<Project> projects = projectDao.findAll();
             return Response.ok(projects).build();
         } catch (SQLException sqle) {
-            logger.error("SQL exception: {}", sqle.getMessage());
             return serverError(sqle);
         }
     }
@@ -81,7 +80,6 @@ public class ProjectResource {
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException sqle) {
-            logger.error("SQL exception: {}", sqle.getMessage());
             return serverError(sqle);
         }
     }
@@ -98,7 +96,6 @@ public class ProjectResource {
             Project project = projectDao.create(req.title, req.description);
             return Response.status(Response.Status.CREATED).entity(project).build();
         } catch (SQLException sqle) {
-            logger.error("SQL exception: {}", sqle.getMessage());
             return serverError(sqle);
         }
     }
@@ -115,7 +112,6 @@ public class ProjectResource {
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException sqle) {
-            logger.error("SQL exception: {}", sqle.getMessage());
             return serverError(sqle);
         }
     }
@@ -128,15 +124,15 @@ public class ProjectResource {
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
         } catch (SQLException sqle) {
-            logger.error("SQL exception: {}", sqle.getMessage());
             return serverError(sqle);
         }
     }
 
     // -------------------------------------------------------------------------
 
-    private Response serverError(SQLException e) {
+    private Response serverError(SQLException sqle) {
+        logger.info("SQLException: {}", sqle.getMessage());
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(e.getMessage()).build();
+                .entity(sqle.getMessage()).build();
     }
 }
