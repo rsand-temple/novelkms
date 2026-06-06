@@ -11,6 +11,7 @@ export default function App() {
 	const [selection, setSelection] = useState({
 		projectId: null,
 		bookId: null,
+		partId: null,
 		chapterId: null,
 		sceneId: null,
 	})

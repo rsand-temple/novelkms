@@ -1,7 +1,7 @@
 import { ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
 import TheatersIcon from '@mui/icons-material/Theaters'
 
-export default function SceneItem({ scene, selection, setSelection }) {
+export default function SceneItem({ scene, selection, setSelection, depth = 0 }) {
 	const isSelected = selection.sceneId === scene.id
 
 	const handleClick = () => {
@@ -12,7 +12,7 @@ export default function SceneItem({ scene, selection, setSelection }) {
 		<ListItemButton
 			selected={isSelected}
 			onClick={handleClick}
-			sx={{ pl: 10 }}
+			sx={{ pl: 10 + depth * 3 }}
 		>
 			<ListItemIcon sx={{ minWidth: 28 }}>
 				<TheatersIcon fontSize="small" />

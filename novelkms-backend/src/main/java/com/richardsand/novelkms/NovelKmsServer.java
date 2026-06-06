@@ -12,11 +12,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
+import com.richardsand.novelkms.dao.PartDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterResource;
+import com.richardsand.novelkms.resource.PartResource;
 import com.richardsand.novelkms.resource.ProjectResource;
 import com.richardsand.novelkms.resource.SceneResource;
 
@@ -81,12 +83,14 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         // DAOs
         ProjectDao projectDao = new ProjectDao(ds);
         BookDao    bookDao    = new BookDao(ds);
+        PartDao    partDao    = new PartDao(ds);
         ChapterDao chapterDao = new ChapterDao(ds);
         SceneDao   sceneDao   = new SceneDao(ds);
         
         // Resources
         env.jersey().register(BookResource.class);
         env.jersey().register(ChapterResource.class);
+        env.jersey().register(PartResource.class);
         env.jersey().register(ProjectResource.class);
         env.jersey().register(SceneResource.class);
 
@@ -103,6 +107,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(config).to(NovelKmsConfig.class);
                 bind(projectDao).to(ProjectDao.class);
                 bind(bookDao).to(BookDao.class);
+                bind(partDao).to(PartDao.class);
                 bind(chapterDao).to(ChapterDao.class);
                 bind(sceneDao).to(SceneDao.class);            }
         });

@@ -6,7 +6,7 @@ import ArticleIcon from '@mui/icons-material/Article'
 import { useScenes } from '../../hooks/useScenes'
 import SceneItem from './SceneItem'
 
-export default function ChapterItem({ chapter, selection, setSelection }) {
+export default function ChapterItem({ chapter, selection, setSelection, depth = 0 }) {
 	const [open, setOpen] = useState(false)
 	const { data: scenes } = useScenes(open ? chapter.id : null)
 
@@ -14,7 +14,16 @@ export default function ChapterItem({ chapter, selection, setSelection }) {
 
 	const handleClick = () => {
 		setOpen((prev) => !prev)
-		setSelection((prev) => ({ ...prev, chapterId: chapter.id, sceneId: null }))
+		// Carry the chapter's own partId into selection so the toolbar and
+		// PropertiesPanel know whether this chapter lives inside a part.
+		// chapter.partId is null for direct-book chapters, which clears any
+		// stale partId left from a previous part selection.
+		setSelection((prev) => ({
+			...prev,
+			partId: chapter.partId ?? null,
+			chapterId: chapter.id,
+			sceneId: null,
+		}))
 	}
 
 	return (
@@ -22,7 +31,7 @@ export default function ChapterItem({ chapter, selection, setSelection }) {
 			<ListItemButton
 				selected={isSelected}
 				onClick={handleClick}
-				sx={{ pl: 7 }}
+				sx={{ pl: 7 + depth * 3 }}
 			>
 				<ListItemIcon sx={{ minWidth: 28 }}>
 					{open ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
@@ -44,6 +53,7 @@ export default function ChapterItem({ chapter, selection, setSelection }) {
 							scene={scene}
 							selection={selection}
 							setSelection={setSelection}
+							depth={depth}
 						/>
 					))}
 				</Box>

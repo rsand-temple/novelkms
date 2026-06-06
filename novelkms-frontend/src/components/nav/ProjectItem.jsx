@@ -14,7 +14,7 @@ export default function ProjectItem({ project, selection, setSelection }) {
 
 	const handleClick = () => {
 		setOpen((prev) => !prev)
-		setSelection({ projectId: project.id, bookId: null, chapterId: null, sceneId: null })
+		setSelection({ projectId: project.id, bookId: null, partId: null, chapterId: null, sceneId: null })
 	}
 
 	return (

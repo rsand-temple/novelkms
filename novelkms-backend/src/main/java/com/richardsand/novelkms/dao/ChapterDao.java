@@ -47,11 +47,28 @@ public class ChapterDao {
     // -------------------------------------------------------------------------
 
     public List<Chapter> findByBookId(UUID bookId) throws SQLException {
-        String        sql    = "SELECT * FROM chapter WHERE book_id = ? ORDER BY display_order, title";
+        // Returns only chapters that sit directly under the book (part_id IS NULL).
+        // Chapters inside a part are fetched via findByPartId.
+        String        sql    = "SELECT * FROM chapter WHERE book_id = ? AND part_id IS NULL ORDER BY display_order, title";
         List<Chapter> result = new ArrayList<>();
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(map(rs));
+                }
+            }
+        }
+        return result;
+    }
+
+    public List<Chapter> findByPartId(UUID partId) throws SQLException {
+        String        sql    = "SELECT * FROM chapter WHERE part_id = ? ORDER BY display_order, title";
+        List<Chapter> result = new ArrayList<>();
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, partId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     result.add(map(rs));
@@ -79,7 +96,10 @@ public class ChapterDao {
     public Chapter create(UUID bookId, UUID partId, String title, String notes) throws SQLException {
         UUID    id           = UUID.randomUUID();
         Instant now          = Instant.now();
-        int     displayOrder = nextDisplayOrder(bookId);
+        // Scope display_order to the immediate parent: part (if set) or book (direct).
+        int     displayOrder = (partId != null)
+                ? nextDisplayOrderInPart(partId)
+                : nextDisplayOrderInBook(bookId);
         String  sql          = """
                 INSERT INTO chapter (id, book_id, part_id, title, display_order, notes, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -170,11 +190,62 @@ public class ChapterDao {
         }
     }
 
-    private int nextDisplayOrder(UUID bookId) throws SQLException {
-        String sql = "SELECT COALESCE(MAX(display_order), -1) + 1 FROM chapter WHERE book_id = ?";
+    /**
+     * Assigns display_order 0..n-1 to the given chapter IDs within a part.
+     * The part_id guard prevents accidental updates to chapters in a different part.
+     */
+    public void reorderInPart(UUID partId, List<UUID> ids) throws SQLException {
+        String sql = """
+                UPDATE chapter SET display_order = ?, updated_at = ?
+                WHERE id = ? AND part_id = ?
+                """;
+        try (Connection c = ds.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            c.setAutoCommit(false);
+            try {
+                Instant now = Instant.now();
+                for (int i = 0; i < ids.size(); i++) {
+                    ps.setInt(1, i);
+                    ps.setTimestamp(2, Timestamp.from(now));
+                    ps.setObject(3, ids.get(i));
+                    ps.setObject(4, partId);
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
+
+    /**
+     * Scopes display_order to direct-book chapters only (part_id IS NULL).
+     * Used when creating a chapter directly under a book.
+     */
+    private int nextDisplayOrderInBook(UUID bookId) throws SQLException {
+        String sql = "SELECT COALESCE(MAX(display_order), -1) + 1 FROM chapter WHERE book_id = ? AND part_id IS NULL";
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
+    }
+
+    /**
+     * Scopes display_order to chapters within a specific part.
+     * Used when creating a chapter inside a part.
+     */
+    private int nextDisplayOrderInPart(UUID partId) throws SQLException {
+        String sql = "SELECT COALESCE(MAX(display_order), -1) + 1 FROM chapter WHERE part_id = ?";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, partId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getInt(1) : 0;
             }

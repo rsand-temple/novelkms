@@ -4,10 +4,12 @@ import {
 	Box, Typography, TextField, Divider, CircularProgress,
 	Stack, Chip, Button,
 } from '@mui/material';
-import { useScene, SCENE_KEYS } from '../../hooks/useScenes';
+import { useScene, SCENE_KEYS }     from '../../hooks/useScenes';
 import { useChapter, CHAPTER_KEYS } from '../../hooks/useChapters';
-import { scenesApi } from '../../api/scenes';
+import { usePart, PART_KEYS }       from '../../hooks/useParts';
+import { scenesApi }   from '../../api/scenes';
 import { chaptersApi } from '../../api/chapters';
+import { partsApi }    from '../../api/parts';
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
@@ -128,15 +130,72 @@ function ChapterProperties({ chapterId, bookId }) {
 	return <ChapterForm key={chapter.id} chapter={chapter} chapterId={chapterId} bookId={bookId} />;
 }
 
+// ── Part ──────────────────────────────────────────────────────────────────────
+
+function PartForm({ part, partId, bookId }) {
+	const qc = useQueryClient();
+	const [title, setTitle] = useState(part.title ?? '');
+	const [notes, setNotes] = useState(part.notes ?? '');
+
+	const { mutate: save, isPending } = useMutation({
+		mutationFn: (patch) => partsApi.update(partId, patch),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: PART_KEYS.detail(partId) });
+			if (bookId) qc.invalidateQueries({ queryKey: PART_KEYS.byBook(bookId) });
+		},
+	});
+
+	return (
+		<Stack spacing={2} sx={{ p: 2 }}>
+			<Typography variant="overline" color="text.secondary">Part</Typography>
+			<TextField
+				label="Title"
+				size="small"
+				fullWidth
+				value={title}
+				onChange={(e) => setTitle(e.target.value)}
+			/>
+			<TextField
+				label="Notes"
+				size="small"
+				fullWidth
+				multiline
+				minRows={3}
+				value={notes}
+				onChange={(e) => setNotes(e.target.value)}
+			/>
+			<Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+				<Button
+					size="small"
+					variant="contained"
+					onClick={() => save({ title, notes })}
+					disabled={isPending}
+				>
+					Save
+				</Button>
+			</Box>
+		</Stack>
+	);
+}
+
+function PartProperties({ partId, bookId }) {
+	const { data: part, isLoading } = usePart(partId);
+
+	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
+	if (!part) return null;
+
+	return <PartForm key={part.id} part={part} partId={partId} bookId={bookId} />;
+}
+
 // ── Root panel ────────────────────────────────────────────────────────────────
 
 export default function PropertiesPanel({ selection }) {
-	const { sceneId, chapterId, bookId } = selection ?? {};
+	const { sceneId, chapterId, partId, bookId } = selection ?? {};
 
-	if (!sceneId && !chapterId) {
+	if (!sceneId && !chapterId && !partId) {
 		return (
 			<Box sx={{ p: 2, color: 'text.disabled' }}>
-				<Typography variant="body2">Select a scene or chapter to view properties.</Typography>
+				<Typography variant="body2">Select a scene, chapter, or part to view properties.</Typography>
 			</Box>
 		);
 	}
@@ -146,6 +205,8 @@ export default function PropertiesPanel({ selection }) {
 			{sceneId && <SceneProperties sceneId={sceneId} chapterId={chapterId} />}
 			{sceneId && chapterId && <Divider />}
 			{chapterId && <ChapterProperties chapterId={chapterId} bookId={bookId} />}
+			{/* Part properties show only when a part is selected with no chapter active */}
+			{partId && !chapterId && <PartProperties partId={partId} bookId={bookId} />}
 		</Box>
 	);
 }
