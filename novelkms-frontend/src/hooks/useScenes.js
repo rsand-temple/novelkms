@@ -64,3 +64,19 @@ export const useDeleteScene = () => {
 		},
 	})
 }
+
+/**
+ * Reorders scenes within a chapter.
+ * Call with: reorderScenes({ chapterId, ids: [uuid, uuid, ...] })
+ * ids must be the complete ordered list of scene IDs for the chapter,
+ * including the first scene (which has no SceneBreak node preceding it).
+ */
+export const useReorderScenes = () => {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: ({ chapterId, ids }) => scenesApi.reorderInChapter(chapterId, ids),
+		onSuccess: (_, { chapterId }) => {
+			queryClient.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(chapterId) })
+		},
+	})
+}

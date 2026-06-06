@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.dao.ChapterDao;
+import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.model.Chapter;
 
 import jakarta.inject.Inject;
@@ -29,10 +30,12 @@ import jakarta.ws.rs.core.Response;
 public class ChapterResource {
     private static final Logger logger = LoggerFactory.getLogger(ChapterResource.class);
     private final ChapterDao chapterDao;
+    private final SceneDao   sceneDao;
 
     @Inject
-    public ChapterResource(ChapterDao chapterDao) {
+    public ChapterResource(ChapterDao chapterDao, SceneDao sceneDao) {
         this.chapterDao = chapterDao;
+        this.sceneDao   = sceneDao;
     }
 
     // -------------------------------------------------------------------------
@@ -56,8 +59,17 @@ public class ChapterResource {
         public String notes;
     }
 
+    /**
+     * Shared by both reorder endpoints.
+     * Body: { "ids": ["uuid1", "uuid2", ...] } in the desired display order.
+     */
+    public static class ReorderRequest {
+        @JsonProperty
+        public List<UUID> ids;
+    }
+
     // -------------------------------------------------------------------------
-    // Endpoints
+    // Endpoints — chapters
     // -------------------------------------------------------------------------
 
     @GET
@@ -121,6 +133,55 @@ public class ChapterResource {
             return chapterDao.delete(id)
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    /**
+     * PUT /api/books/{bookId}/chapters/reorder
+     *
+     * Reorders all chapters within a book.  The request body must contain the
+     * complete ordered list of chapter IDs for this book.  Chapters not present
+     * in the list are unaffected (their display_order is not touched), which
+     * means the caller should always send the full sibling list.
+     */
+    @PUT
+    @Path("/books/{bookId}/chapters/reorder")
+    public Response reorderChapters(@PathParam("bookId") UUID bookId, ReorderRequest req) {
+        if (req == null || req.ids == null || req.ids.isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("ids is required").build();
+        }
+        try {
+            chapterDao.reorderInBook(bookId, req.ids);
+            return Response.noContent().build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Endpoints — scene ordering (lives here because the path is
+    // /chapters/{id}/scenes/reorder and ChapterResource owns /chapters/*)
+    // -------------------------------------------------------------------------
+
+    /**
+     * PUT /api/chapters/{chapterId}/scenes/reorder
+     *
+     * Reorders all scenes within a chapter.  The request body must contain the
+     * complete ordered list of scene IDs for this chapter.
+     */
+    @PUT
+    @Path("/chapters/{chapterId}/scenes/reorder")
+    public Response reorderScenes(@PathParam("chapterId") UUID chapterId, ReorderRequest req) {
+        if (req == null || req.ids == null || req.ids.isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("ids is required").build();
+        }
+        try {
+            sceneDao.reorderInChapter(chapterId, req.ids);
+            return Response.noContent().build();
         } catch (SQLException e) {
             return serverError(e);
         }

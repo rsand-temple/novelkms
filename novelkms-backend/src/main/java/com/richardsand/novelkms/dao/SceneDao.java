@@ -79,6 +79,10 @@ public class SceneDao {
         UUID    id           = UUID.randomUUID();
         Instant now          = Instant.now();
         int     displayOrder = nextDisplayOrder(chapterId);
+        // Default title for programmatically-created scenes (e.g. scene breaks)
+        if (title == null || title.isBlank()) {
+            title = "New Scene [" + id.toString().substring(0, 4) + "]";
+        }
         String  sql          = """
                 INSERT INTO scene (id, chapter_id, title, display_order, content, word_count, notes, created_at, updated_at)
                 VALUES (?, ?, ?, ?, NULL, 0, ?, ?, ?)
@@ -158,6 +162,40 @@ public class SceneDao {
     // -------------------------------------------------------------------------
     // Ordering
     // -------------------------------------------------------------------------
+
+    /**
+     * Assigns display_order 0..n-1 to the given scene IDs in the order supplied.
+     * The chapter_id guard in the WHERE clause prevents updates to scenes belonging
+     * to a different chapter if a stale ID list is passed in.
+     * Runs as a single batched transaction.
+     */
+    public void reorderInChapter(UUID chapterId, List<UUID> ids) throws SQLException {
+        String sql = """
+                UPDATE scene SET display_order = ?, updated_at = ?
+                WHERE id = ? AND chapter_id = ?
+                """;
+        try (Connection c = ds.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            c.setAutoCommit(false);
+            try {
+                Instant now = Instant.now();
+                for (int i = 0; i < ids.size(); i++) {
+                    ps.setInt(1, i);
+                    ps.setTimestamp(2, Timestamp.from(now));
+                    ps.setObject(3, ids.get(i));
+                    ps.setObject(4, chapterId);
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
 
     private int nextDisplayOrder(UUID chapterId) throws SQLException {
         String sql = "SELECT COALESCE(MAX(display_order), -1) + 1 FROM scene WHERE chapter_id = ?";

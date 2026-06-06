@@ -29,7 +29,7 @@ import jakarta.ws.rs.core.Response;
 class ChapterResourceTest extends NovelKmsTestBase {
 
     static final ResourceExtension RESOURCES = ResourceExtension.builder()
-            .addResource(new ChapterResource(chapterDao))
+            .addResource(new ChapterResource(chapterDao, sceneDao))
             .setMapper(createMapper())
             .build();
 

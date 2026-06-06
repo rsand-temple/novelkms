@@ -30,4 +30,12 @@ export const scenesApi = {
 	delete: async (id) => {
 		await client.delete(`/scenes/${id}`)
 	},
+
+	/**
+	 * Reorders scenes within a chapter.
+	 * ids — complete ordered array of scene UUIDs for this chapter.
+	 */
+	reorderInChapter: async (chapterId, ids) => {
+		await client.put(`/chapters/${chapterId}/scenes/reorder`, { ids })
+	},
 }

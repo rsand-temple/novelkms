@@ -136,6 +136,40 @@ public class ChapterDao {
     // Ordering
     // -------------------------------------------------------------------------
 
+    /**
+     * Assigns display_order 0..n-1 to the given chapter IDs in the order supplied.
+     * The book_id guard in the WHERE clause prevents updates to chapters belonging
+     * to a different book if a stale ID list is passed in.
+     * Runs as a single batched transaction.
+     */
+    public void reorderInBook(UUID bookId, List<UUID> ids) throws SQLException {
+        String sql = """
+                UPDATE chapter SET display_order = ?, updated_at = ?
+                WHERE id = ? AND book_id = ?
+                """;
+        try (Connection c = ds.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            c.setAutoCommit(false);
+            try {
+                Instant now = Instant.now();
+                for (int i = 0; i < ids.size(); i++) {
+                    ps.setInt(1, i);
+                    ps.setTimestamp(2, Timestamp.from(now));
+                    ps.setObject(3, ids.get(i));
+                    ps.setObject(4, bookId);
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
+
     private int nextDisplayOrder(UUID bookId) throws SQLException {
         String sql = "SELECT COALESCE(MAX(display_order), -1) + 1 FROM chapter WHERE book_id = ?";
         try (Connection c = ds.getConnection();

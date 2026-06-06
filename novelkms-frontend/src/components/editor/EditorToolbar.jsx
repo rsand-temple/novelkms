@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useEditorState } from '@tiptap/react'
 import {
-	Box, Paper, Toolbar, IconButton, Tooltip, Divider,
+	Box, Toolbar, IconButton, Tooltip, Divider,
 	Select, MenuItem, CircularProgress, Typography,
 } from '@mui/material'
 import FormatBoldIcon           from '@mui/icons-material/FormatBold'
@@ -195,7 +195,7 @@ export default function EditorToolbar({ editor, settings, onSettingsChange, onSc
 	// ── render ───────────────────────────────────────────────────────────────
 
 	return (
-		<Paper elevation={0} square sx={{ borderBottom: 1, borderColor: 'divider' }}>
+		<Box sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
 
 			{/* ── Row 1: style / font / size / b-i-u / settings ─────────────── */}
 			<Toolbar variant="dense" disableGutters sx={{ px: 1, gap: 0.25, minHeight: 38 }}>
@@ -366,6 +366,6 @@ export default function EditorToolbar({ editor, settings, onSettingsChange, onSc
 				settings={settings}
 				onSave={onSettingsChange}
 			/>
-		</Paper>
+		</Box>
 	)
 }

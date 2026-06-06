@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -11,7 +12,7 @@ import { StyledParagraph } from '../../extensions/StyledParagraph';
 import { FontSize } from '../../extensions/FontSize';
 import { SceneBreak } from '../../extensions/SceneBreak';
 import { useProjectSettings } from '../../hooks/useProjectSettings';
-import { useScenes, useCreateScene, useDeleteScene } from '../../hooks/useScenes';
+import { useScenes, useDeleteScene, SCENE_KEYS } from '../../hooks/useScenes';
 import { scenesApi } from '../../api/scenes';
 import EditorToolbar from '../editor/EditorToolbar';
 
@@ -19,11 +20,6 @@ const AUTOSAVE_DELAY_MS = 1500;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * Build the combined HTML that the editor will display for a whole chapter.
- * Scenes are joined by <hr data-scene-after="nextSceneId"> markers.
- * The first scene's content has no preceding HR; the last has no trailing HR.
- */
 function buildCombinedHTML(scenes) {
 	if (!scenes?.length) return '';
 	return scenes.map((scene, i) => {
@@ -35,11 +31,6 @@ function buildCombinedHTML(scenes) {
 	}).join('');
 }
 
-/**
- * Split editor HTML into per-scene chunks using <hr data-scene-after="id">
- * as delimiters.  The first chunk always belongs to firstSceneId.
- * Returns [{ sceneId, content }, ...] in document order.
- */
 function parseSceneChunks(html, firstSceneId) {
 	const chunks = [];
 	const re = /<hr[^>]+data-scene-after="([^"]+)"[^>]*\/?>/gi;
@@ -63,10 +54,6 @@ function parseSceneChunks(html, firstSceneId) {
 	return chunks;
 }
 
-/**
- * Collect the sceneId values of every SceneBreak node currently in the doc.
- * Used to detect deleted scene boundaries between onUpdate calls.
- */
 function getDocSceneBreakIds(editor) {
 	const ids = [];
 	editor.state.doc.descendants((node) => {
@@ -83,44 +70,47 @@ function getDocSceneBreakIds(editor) {
  * EditorPanel
  *
  * Props:
- *   chapterId  — ID of the currently selected chapter.  The panel loads and
- *                edits ALL scenes for this chapter as a single concatenated
- *                document, using SceneBreak nodes as boundaries.
+ *   chapterId  — ID of the currently selected chapter.
  *   projectId  — ID of the current project (drives useProjectSettings).
  *
- * Scene break lifecycle
- *   Insert: user clicks the toolbar button → DB scene is created first →
- *           SceneBreak node inserted with new scene's ID → onUpdate saves →
- *           scenes query invalidated → nav tree shows new scene.
+ * Reload policy
+ *   The editor reloads its content when either:
+ *     (a) chapterId changes (chapter switch), or
+ *     (b) the ordered list of scene IDs changes within the same chapter
+ *         (external reorder via the nav tree ↑/↓ buttons).
  *
- *   Delete: user deletes the HR node → onUpdate detects the missing sceneId →
- *           DB scene deleted → nav tree pruned → merged content saved to the
- *           absorbing scene.
+ *   Routine refetches caused by autosave or other invalidations do NOT
+ *   trigger a reload, because the scene IDs and their order are unchanged.
+ *
+ *   When EditorPanel itself drives a scene order change (scene break insert
+ *   or scene break delete), it pre-updates loadedSceneOrderRef before the
+ *   invalidation fires, so the subsequent refetch is treated as expected.
  */
 export default function EditorPanel({ chapterId, projectId }) {
 	const { settings, updateSettings } = useProjectSettings(projectId);
 
+	const queryClient = useQueryClient();
+
 	const { data: scenes, isLoading: scenesLoading } = useScenes(chapterId);
-	const { mutateAsync: createScene } = useCreateScene();
 	const { mutate: deleteScene } = useDeleteScene();
 
-	// Local saving state (we call scenesApi directly for parallel multi-scene saves)
 	const [isSaving, setIsSaving] = useState(false);
 
 	// ── refs ─────────────────────────────────────────────────────────────────
 	const saveTimer = useRef(null);
-	const firstSceneIdRef = useRef(null);   // ID of scene[0] in the current chapter
-	const prevSceneBreakIdsRef = useRef([]);      // SceneBreak IDs from the last onUpdate tick
-	const loadedChapterIdRef = useRef(null);    // Guard: only reload editor on chapter switch
-	// Stable refs used inside useEditor callbacks to avoid stale closures
+	const firstSceneIdRef = useRef(null);
+	const prevSceneBreakIdsRef = useRef([]);
+	const loadedChapterIdRef = useRef(null);
+	// Tracks the scene ID order the editor last loaded, as a comma-joined string.
+	// Used to detect externally-driven reorders that should reload the editor.
+	const loadedSceneOrderRef = useRef('');
 	const scheduleSaveRef = useRef(null);
 	const chapterIdRef = useRef(chapterId);
 	const editorRef = useRef(null);
 
-	// Keep mutable refs current on every render
 	useEffect(() => { chapterIdRef.current = chapterId; }, [chapterId]);
 	useEffect(() => { if (scenes?.length) firstSceneIdRef.current = scenes[0].id; }, [scenes]);
-	
+
 	// ── save ──────────────────────────────────────────────────────────────────
 
 	const scheduleSave = useCallback((html) => {
@@ -141,7 +131,7 @@ export default function EditorPanel({ chapterId, projectId }) {
 				setIsSaving(false);
 			}
 		}, AUTOSAVE_DELAY_MS);
-	}, []); // No deps — reads everything via refs
+	}, []);
 
 	useEffect(() => { scheduleSaveRef.current = scheduleSave; }, [scheduleSave]);
 
@@ -150,9 +140,9 @@ export default function EditorPanel({ chapterId, projectId }) {
 	const editor = useEditor({
 		extensions: [
 			StarterKit.configure({
-				paragraph: false, // → StyledParagraph
-				underline: false, // → explicit Underline import
-				horizontalRule: false, // → SceneBreak
+				paragraph: false,
+				underline: false,
+				horizontalRule: false,
 			}),
 			StyledParagraph,
 			FontSize,
@@ -164,22 +154,25 @@ export default function EditorPanel({ chapterId, projectId }) {
 		],
 		content: '',
 		onUpdate: ({ editor }) => {
-			// 1. Detect removed SceneBreak nodes → delete their DB scenes
 			const currentIds = getDocSceneBreakIds(editor);
 			const prevIds = prevSceneBreakIdsRef.current;
 			const removedIds = prevIds.filter(id => !currentIds.includes(id));
 
 			if (removedIds.length > 0) {
 				const cid = chapterIdRef.current;
+				// Pre-update the known scene order BEFORE deleteScene triggers a
+				// refetch, so the load effect treats the refetch as expected and
+				// does not reload the editor (which already has the merged content).
+				loadedSceneOrderRef.current = loadedSceneOrderRef.current
+					.split(',')
+					.filter(id => !removedIds.includes(id))
+					.join(',');
 				removedIds.forEach(id => {
-					console.debug('[EditorPanel] Scene boundary removed → deleting scene', id);
 					deleteScene({ id, chapterId: cid });
 				});
 			}
 
 			prevSceneBreakIdsRef.current = currentIds;
-
-			// 2. Schedule multi-scene autosave
 			scheduleSaveRef.current?.(editor.getHTML());
 		},
 		editorProps: {
@@ -200,52 +193,68 @@ export default function EditorPanel({ chapterId, projectId }) {
 
 	useEffect(() => { editorRef.current = editor; }, [editor]);
 
-	// ── scene break insertion (async: DB first, then node) ────────────────────
+	// ── scene break insertion ─────────────────────────────────────────────────
 
 	const handleSceneBreak = useCallback(async () => {
 		const cid = chapterIdRef.current;
-		if (!cid || !editorRef.current) return;
+		const firstId = firstSceneIdRef.current;
+		if (!cid || !firstId || !editorRef.current) return;
 
 		try {
-			const newScene = await createScene({ chapterId: cid, data: { title: '' } });
-			editorRef.current
-				.chain()
-				.focus()
-				.setSceneBreak({ sceneId: newScene.id })
-				.run();
-		} catch (err) {
-			console.error('[EditorPanel] Failed to create scene for break:', err);
-		}
-	}, [createScene]);
+			const newScene = await scenesApi.create(cid, { title: '' });
 
-	// ── load combined chapter content on chapter switch ───────────────────────
+			const ed = editorRef.current;
+			ed.chain().focus().setSceneBreak({ sceneId: newScene.id }).run();
+
+			const breakIds = getDocSceneBreakIds(ed);
+			const orderedIds = [firstId, ...breakIds];
+
+			await scenesApi.reorderInChapter(cid, orderedIds);
+
+			// Pre-update the known order before invalidation so the load effect
+			// does not treat the upcoming refetch as an external reorder.
+			loadedSceneOrderRef.current = orderedIds.join(',');
+			queryClient.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(cid) });
+
+		} catch (err) {
+			console.error('[EditorPanel] Failed to insert scene break:', err);
+		}
+	}, [queryClient]);
+
+	// ── load combined chapter content ─────────────────────────────────────────
 
 	useEffect(() => {
 		if (!editor || !scenes) return;
-		if (loadedChapterIdRef.current === chapterId) return; // Guard: don't reload on refetch
 
-		// Flush any pending save from the previous chapter
-		if (saveTimer.current) {
+		const newOrder = scenes.map(s => s.id).join(',');
+		const chapterChanged = loadedChapterIdRef.current !== chapterId;
+		const orderChanged = newOrder !== loadedSceneOrderRef.current;
+
+		// No reload needed: same chapter, same scene order.
+		// This handles routine refetches from autosave invalidation.
+		if (!chapterChanged && !orderChanged) return;
+
+		// On chapter switch, flush any pending save from the previous chapter.
+		if (chapterChanged && saveTimer.current) {
 			clearTimeout(saveTimer.current);
 			saveTimer.current = null;
 		}
 
 		if (scenes.length === 0) {
-			// Chapter exists but has no scenes yet — show empty editor
 			loadedChapterIdRef.current = chapterId;
+			loadedSceneOrderRef.current = '';
 			prevSceneBreakIdsRef.current = [];
 			editor.commands.setContent('', false);
 			return;
 		}
 
-		// Build combined HTML and prime the SceneBreak ID tracker
 		const html = buildCombinedHTML(scenes);
 		prevSceneBreakIdsRef.current = scenes.slice(1).map(s => s.id);
 		loadedChapterIdRef.current = chapterId;
+		loadedSceneOrderRef.current = newOrder;
 		editor.commands.setContent(html, false); // false = don't emit onUpdate
 	}, [editor, scenes, chapterId]);
 
-	// Flush pending save on unmount
 	useEffect(() => () => {
 		if (saveTimer.current) clearTimeout(saveTimer.current);
 	}, []);
@@ -286,21 +295,18 @@ export default function EditorPanel({ chapterId, projectId }) {
 					py: 5,
 					px: 2,
 
-					// ── Project-level defaults as CSS custom properties ──────
 					'--nkms-font-family': settings.fontFamily,
 					'--nkms-font-size': settings.fontSize,
 					'--nkms-line-height': settings.lineHeight,
 					'--nkms-text-indent': settings.firstLineIndent,
 					'--nkms-spacing-after': settings.spacingAfter,
 
-					// ── Paragraph defaults (per-paragraph inline styles override these)
 					'& .tiptap p': {
 						textIndent: 'var(--nkms-text-indent)',
 						marginBottom: 'var(--nkms-spacing-after)',
 						marginTop: 0,
 					},
 
-					// ── TipTap chrome ────────────────────────────────────────
 					'& .tiptap': { outline: 'none' },
 
 					'& .tiptap p.is-editor-empty:first-of-type::before': {
@@ -320,7 +326,6 @@ export default function EditorPanel({ chapterId, projectId }) {
 						fontStyle: 'italic',
 					},
 
-					// All <hr> elements are SceneBreak nodes — render as · · ·
 					'& .tiptap hr': {
 						border: 'none',
 						textAlign: 'center',

@@ -54,3 +54,18 @@ export const useDeleteChapter = () => {
 		},
 	})
 }
+
+/**
+ * Reorders chapters within a book.
+ * Call with: reorderChapters({ bookId, ids: [uuid, uuid, ...] })
+ * ids must be the complete ordered list of chapter IDs for the book.
+ */
+export const useReorderChapters = () => {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: ({ bookId, ids }) => chaptersApi.reorderInBook(bookId, ids),
+		onSuccess: (_, { bookId }) => {
+			queryClient.invalidateQueries({ queryKey: CHAPTER_KEYS.byBook(bookId) })
+		},
+	})
+}

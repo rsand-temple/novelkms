@@ -26,4 +26,11 @@ export const chaptersApi = {
 		await client.delete(`/chapters/${id}`)
 	},
 
+	/**
+	 * Reorders chapters within a book.
+	 * ids — complete ordered array of chapter UUIDs for this book.
+	 */
+	reorderInBook: async (bookId, ids) => {
+		await client.put(`/books/${bookId}/chapters/reorder`, { ids })
+	},
 }
