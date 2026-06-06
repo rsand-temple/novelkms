@@ -2,7 +2,9 @@ import { useState } from 'react'
 import {
 	Popover, Box, Typography, Divider, Select, MenuItem,
 	TextField, FormControl, InputLabel, Stack, Button,
+	ToggleButtonGroup, ToggleButton,
 } from '@mui/material'
+import HorizontalRuleIcon from '@mui/icons-material/HorizontalRule'
 
 const FONT_FAMILIES = [
 	{ label: 'Georgia',        value: 'Georgia, serif' },
@@ -39,10 +41,21 @@ const LINE_HEIGHTS = ['1.4', '1.5', '1.6', '1.7', '1.8', '1.9', '2.0', '2.2']
  *   onSave(patch)    — Called with the updated settings object on Apply
  */
 export default function DocSettingsPopover({ anchorEl, onClose, settings, onSave }) {
-	// Local copy — only committed on Apply
+	// Local copy for font/paragraph settings — committed on Apply.
 	const [local, setLocal] = useState(() => ({ ...settings }))
 
+	// Snapshot taken at open time so Cancel can fully revert, including any
+	// live scene-break changes already written to settings during this session.
+	const [original] = useState(() => ({ ...settings }))
+
+	// Update local display state only (font/paragraph; committed on Apply).
 	const set = (key, val) => setLocal(prev => ({ ...prev, [key]: val }))
+
+	// Update local state AND immediately persist (scene break; live preview).
+	const setLive = (key, val) => {
+		setLocal(prev => ({ ...prev, [key]: val }))
+		onSave({ [key]: val })
+	}
 
 	const handleApply = () => {
 		onSave(local)
@@ -50,7 +63,9 @@ export default function DocSettingsPopover({ anchorEl, onClose, settings, onSave
 	}
 
 	const handleCancel = () => {
-		// Discard local edits by resetting on next open (parent re-passes settings as prop)
+		// Revert everything — including any live scene-break changes — back to
+		// the state that existed when the popover was opened.
+		onSave(original)
 		onClose()
 	}
 
@@ -69,6 +84,9 @@ export default function DocSettingsPopover({ anchorEl, onClose, settings, onSave
 				</Typography>
 
 				<Stack spacing={2}>
+
+					{/* ── Font / paragraph ─────────────────────────────────────── */}
+
 					{/* Font family */}
 					<FormControl size="small" fullWidth>
 						<InputLabel>Font Family</InputLabel>
@@ -135,11 +153,67 @@ export default function DocSettingsPopover({ anchorEl, onClose, settings, onSave
 						helperText='CSS value, e.g. "0.9em" or "0"'
 					/>
 
-					{/* Buttons */}
+					{/* ── Scene break ───────────────────────────────────────────── */}
+
+					<Divider />
+
+					<Typography variant="caption" color="text.secondary"
+						sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}
+					>
+						Scene Break
+					</Typography>
+
+					{/* Style selector — live preview */}
+					<Box>
+						<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+							Style
+						</Typography>
+						<ToggleButtonGroup
+							value={local.sceneBreakStyle}
+							exclusive
+							size="small"
+							onChange={(_, val) => { if (val) setLive('sceneBreakStyle', val) }}
+							sx={{ width: '100%' }}
+						>
+							<ToggleButton value="* * *" sx={{ flex: 1, fontSize: '0.75rem', letterSpacing: '0.15em' }}>
+								* * *
+							</ToggleButton>
+							<ToggleButton value="#" sx={{ flex: 1, fontSize: '0.85rem' }}>
+								#
+							</ToggleButton>
+							<ToggleButton value="rule" sx={{ flex: 1 }}>
+								<HorizontalRuleIcon fontSize="small" />
+							</ToggleButton>
+						</ToggleButtonGroup>
+					</Box>
+
+					{/* Spacing above — live preview */}
+					<TextField
+						label="Spacing Above Break"
+						size="small"
+						fullWidth
+						value={local.sceneBreakSpacingAbove}
+						onChange={e => setLive('sceneBreakSpacingAbove', e.target.value)}
+						helperText='CSS value, e.g. "2em" or "24px"'
+					/>
+
+					{/* Spacing below — live preview */}
+					<TextField
+						label="Spacing Below Break"
+						size="small"
+						fullWidth
+						value={local.sceneBreakSpacingBelow}
+						onChange={e => setLive('sceneBreakSpacingBelow', e.target.value)}
+						helperText='CSS value, e.g. "2em" or "24px"'
+					/>
+
+					{/* ── Actions ───────────────────────────────────────────────── */}
+
 					<Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, pt: 0.5 }}>
 						<Button size="small" onClick={handleCancel}>Cancel</Button>
 						<Button size="small" variant="contained" onClick={handleApply}>Apply</Button>
 					</Box>
+
 				</Stack>
 			</Box>
 		</Popover>

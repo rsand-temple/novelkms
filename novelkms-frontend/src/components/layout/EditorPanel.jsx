@@ -326,14 +326,25 @@ export default function EditorPanel({ chapterId, projectId }) {
 						fontStyle: 'italic',
 					},
 
+					// ── Scene break (hr) ──────────────────────────────────────────
+					// Style is driven by settings.sceneBreakStyle:
+					//   '* * *' — centred asterism, letter-spaced
+					//   '#'     — centred hash
+					//   'rule'  — thin solid divider line
 					'& .tiptap hr': {
 						border: 'none',
+						borderTop: settings.sceneBreakStyle === 'rule' ? '1px solid' : 'none',
+						borderColor: settings.sceneBreakStyle === 'rule' ? 'divider' : undefined,
 						textAlign: 'center',
-						my: 3,
+						marginTop:    settings.sceneBreakSpacingAbove ?? '2em',
+						marginBottom: settings.sceneBreakSpacingBelow ?? '2em',
 						'&::after': {
-							content: '"· · ·"',
+							content:
+								settings.sceneBreakStyle === 'rule' ? '""' :
+								settings.sceneBreakStyle === '#'   ? '"#"' :
+								'"* * *"',
 							color: 'text.disabled',
-							letterSpacing: '0.5em',
+							letterSpacing: settings.sceneBreakStyle === '* * *' ? '0.5em' : '0',
 						},
 					},
 

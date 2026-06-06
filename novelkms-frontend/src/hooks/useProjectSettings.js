@@ -3,11 +3,14 @@ import { useState, useCallback } from 'react'
 // Project-level editor defaults.  Stored in localStorage keyed by projectId;
 // easy to migrate to a backend project_settings table later.
 export const PROJECT_SETTINGS_DEFAULTS = {
-	fontFamily:        'Georgia, serif',
-	fontSize:          '1.0625rem',
-	lineHeight:        '1.9',
-	firstLineIndent:   '1.5em',
-	spacingAfter:      '0.9em',
+	fontFamily:             'Georgia, serif',
+	fontSize:               '1.0625rem',
+	lineHeight:             '1.9',
+	firstLineIndent:        '1.5em',
+	spacingAfter:           '0.9em',
+	sceneBreakStyle:        '* * *',  // '* * *' | '#' | 'rule'
+	sceneBreakSpacingAbove: '2em',
+	sceneBreakSpacingBelow: '2em',
 }
 
 function storageKey(projectId) {
