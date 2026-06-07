@@ -22,8 +22,13 @@ export default function PartItem({ part, selection, setSelection }) {
 
     const isSelected = selection.partId === part.id && !selection.chapterId
 
-    const handleClick = () => {
+    const handleExpandToggle = (e) => {
+        e.stopPropagation()
         setOpen((prev) => !prev)
+    }
+
+    const handleClick = () => {
+        if (!open) setOpen(true)
         setSelection((prev) => ({ ...prev, partId: part.id, chapterId: null, sceneId: null }))
     }
 
@@ -34,7 +39,10 @@ export default function PartItem({ part, selection, setSelection }) {
                 onClick={handleClick}
                 sx={{ pl: 7 }}
             >
-                <ListItemIcon sx={{ minWidth: 28 }}>
+                <ListItemIcon
+                    sx={{ minWidth: 28, cursor: 'pointer' }}
+                    onClick={handleExpandToggle}
+                >
                     {open ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
                 </ListItemIcon>
                 <ListItemIcon sx={{ minWidth: 28 }}>

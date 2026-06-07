@@ -29,6 +29,10 @@ public class Chapter {
     @JsonProperty
     private String title;
 
+    /** Optional subtitle — may be null or blank. */
+    @JsonProperty
+    private String subtitle;
+
     @JsonProperty
     private int displayOrder;
 

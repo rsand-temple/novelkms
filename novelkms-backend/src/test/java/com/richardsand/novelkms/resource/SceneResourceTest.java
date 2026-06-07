@@ -42,8 +42,8 @@ class SceneResourceTest extends NovelKmsTestBase {
     void setUp() throws SQLException {
         truncateAll();
         testProject = projectDao.create("Test Project", null);
-        testBook    = bookDao.create(testProject.getId(), "Test Book", null, null);
-        testChapter = chapterDao.create(testBook.getId(), null, "Test Chapter", null);
+        testBook    = bookDao.create(testProject.getId(), "Test Book", null, null, null);
+        testChapter = chapterDao.create(testBook.getId(), null, "Test Chapter", null, null);
     }
 
     // -------------------------------------------------------------------------

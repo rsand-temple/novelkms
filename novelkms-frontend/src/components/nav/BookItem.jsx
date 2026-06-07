@@ -16,8 +16,13 @@ export default function BookItem({ book, selection, setSelection }) {
 	// Book is selected only when no part and no chapter are active
 	const isSelected = selection.bookId === book.id && !selection.partId && !selection.chapterId
 
-	const handleClick = () => {
+	const handleExpandToggle = (e) => {
+		e.stopPropagation()
 		setOpen((prev) => !prev)
+	}
+
+	const handleClick = () => {
+		if (!open) setOpen(true)
 		setSelection((prev) => ({ ...prev, bookId: book.id, partId: null, chapterId: null, sceneId: null }))
 	}
 
@@ -31,7 +36,10 @@ export default function BookItem({ book, selection, setSelection }) {
 				onClick={handleClick}
 				sx={{ pl: 4 }}
 			>
-				<ListItemIcon sx={{ minWidth: 28 }}>
+				<ListItemIcon
+					sx={{ minWidth: 28, cursor: 'pointer' }}
+					onClick={handleExpandToggle}
+				>
 					{open ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
 				</ListItemIcon>
 				<ListItemIcon sx={{ minWidth: 28 }}>

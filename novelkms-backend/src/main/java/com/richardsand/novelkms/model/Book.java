@@ -29,6 +29,9 @@ public class Book {
     private String subtitle;
 
     @JsonProperty
+    private String shortTitle;
+
+    @JsonProperty
     private int displayOrder;
 
     @JsonProperty

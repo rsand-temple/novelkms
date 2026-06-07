@@ -55,8 +55,8 @@ class BookResourceTest extends NovelKmsTestBase {
 
     @Test
     void listBooks_returnsBooksForProject() throws SQLException {
-        bookDao.create(testProject.getId(), "Book A", null, null);
-        bookDao.create(testProject.getId(), "Book B", null, null);
+        bookDao.create(testProject.getId(), "Book A", null, null, null);
+        bookDao.create(testProject.getId(), "Book B", null, null, null);
 
         Response r = RESOURCES.target("/api/projects/" + testProject.getId() + "/books")
                 .request().get();
@@ -72,7 +72,7 @@ class BookResourceTest extends NovelKmsTestBase {
 
     @Test
     void getBook_knownId_returns200() throws SQLException {
-        Book b = bookDao.create(testProject.getId(), "My Book", "Sub", null);
+        Book b = bookDao.create(testProject.getId(), "My Book", "Sub", null, null);
 
         Response r = RESOURCES.target("/api/books/" + b.getId()).request().get();
 
@@ -122,7 +122,7 @@ class BookResourceTest extends NovelKmsTestBase {
 
     @Test
     void updateBook_knownId_returns200() throws SQLException {
-        Book b = bookDao.create(testProject.getId(), "Old Title", null, null);
+        Book b = bookDao.create(testProject.getId(), "Old Title", null, null, null);
 
         Response r = RESOURCES.target("/api/books/" + b.getId())
                 .request(MediaType.APPLICATION_JSON)
@@ -149,7 +149,7 @@ class BookResourceTest extends NovelKmsTestBase {
 
     @Test
     void deleteBook_knownId_returns204() throws SQLException {
-        Book b = bookDao.create(testProject.getId(), "To Delete", null, null);
+        Book b = bookDao.create(testProject.getId(), "To Delete", null, null, null);
 
         Response r = RESOURCES.target("/api/books/" + b.getId()).request().delete();
 

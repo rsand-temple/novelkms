@@ -28,7 +28,7 @@ class ChapterDaoTest extends NovelKmsTestBase {
     void setUp() throws SQLException {
         truncateAll();
         project = projectDao.create("Test Project", null);
-        book = bookDao.create(project.getId(), "Test Book", null, null);
+        book = bookDao.create(project.getId(), "Test Book", null, null, null);
     }
 
     // -------------------------------------------------------------------------
@@ -37,7 +37,7 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void create_withoutPart_linksToBook() throws SQLException {
-        Chapter ch = chapterDao.create(book.getId(), null, "Chapter One", "notes");
+        Chapter ch = chapterDao.create(book.getId(), null, "Chapter One", null, "notes");
 
         assertNotNull(ch.getId());
         assertEquals(book.getId(), ch.getBookId());
@@ -48,9 +48,9 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void create_displayOrder_incrementsPerBook() throws SQLException {
-        Chapter c1 = chapterDao.create(book.getId(), null, "Ch 1", null);
-        Chapter c2 = chapterDao.create(book.getId(), null, "Ch 2", null);
-        Chapter c3 = chapterDao.create(book.getId(), null, "Ch 3", null);
+        Chapter c1 = chapterDao.create(book.getId(), null, "Ch 1", null, null);
+        Chapter c2 = chapterDao.create(book.getId(), null, "Ch 2", null, null);
+        Chapter c3 = chapterDao.create(book.getId(), null, "Ch 3", null, null);
 
         assertEquals(0, c1.getDisplayOrder());
         assertEquals(1, c2.getDisplayOrder());
@@ -59,11 +59,11 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void create_displayOrder_isIndependentPerBook() throws SQLException {
-        Book other = bookDao.create(project.getId(), "Other Book", null, null);
+        Book other = bookDao.create(project.getId(), "Other Book", null, null, null);
 
-        chapterDao.create(book.getId(), null, "Book1 Ch1", null);
-        chapterDao.create(book.getId(), null, "Book1 Ch2", null);
-        Chapter ch = chapterDao.create(other.getId(), null, "Book2 Ch1", null);
+        chapterDao.create(book.getId(), null, "Book1 Ch1", null, null);
+        chapterDao.create(book.getId(), null, "Book1 Ch2", null, null);
+        Chapter ch = chapterDao.create(other.getId(), null, "Book2 Ch1", null, null);
 
         assertEquals(0, ch.getDisplayOrder());
     }
@@ -74,7 +74,7 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void findById_returnsChapter() throws SQLException {
-        Chapter created = chapterDao.create(book.getId(), null, "Persisted", null);
+        Chapter created = chapterDao.create(book.getId(), null, "Persisted", null, null);
 
         Optional<Chapter> found = chapterDao.findById(created.getId());
 
@@ -102,9 +102,9 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void findByBookId_returnsChaptersInOrder() throws SQLException {
-        chapterDao.create(book.getId(), null, "Ch A", null);
-        chapterDao.create(book.getId(), null, "Ch B", null);
-        chapterDao.create(book.getId(), null, "Ch C", null);
+        chapterDao.create(book.getId(), null, "Ch A", null, null);
+        chapterDao.create(book.getId(), null, "Ch B", null, null);
+        chapterDao.create(book.getId(), null, "Ch C", null, null);
 
         List<Chapter> chapters = chapterDao.findByBookId(book.getId());
 
@@ -116,9 +116,9 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void findByBookId_doesNotReturnChaptersFromOtherBooks() throws SQLException {
-        Book other = bookDao.create(project.getId(), "Other Book", null, null);
-        chapterDao.create(book.getId(), null, "My Chapter", null);
-        chapterDao.create(other.getId(), null, "Other Chapter", null);
+        Book other = bookDao.create(project.getId(), "Other Book", null, null, null);
+        chapterDao.create(book.getId(), null, "My Chapter", null, null);
+        chapterDao.create(other.getId(), null, "Other Chapter", null, null);
 
         List<Chapter> chapters = chapterDao.findByBookId(book.getId());
 
@@ -132,9 +132,9 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void update_changesTitleAndNotes() throws SQLException {
-        Chapter original = chapterDao.create(book.getId(), null, "Old Title", "Old Notes");
+        Chapter original = chapterDao.create(book.getId(), null, "Old Title", null, "Old Notes");
 
-        Optional<Chapter> updated = chapterDao.update(original.getId(), "New Title", "New Notes");
+        Optional<Chapter> updated = chapterDao.update(original.getId(), "New Title", null, "New Notes");
 
         assertTrue(updated.isPresent());
         assertEquals("New Title", updated.get().getTitle());
@@ -143,7 +143,7 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void update_unknownId_returnsEmpty() throws SQLException {
-        Optional<Chapter> updated = chapterDao.update(UUID.randomUUID(), "Ghost", null);
+        Optional<Chapter> updated = chapterDao.update(UUID.randomUUID(), "Ghost", null, null);
 
         assertFalse(updated.isPresent());
     }
@@ -154,7 +154,7 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void delete_removesChapter() throws SQLException {
-        Chapter ch = chapterDao.create(book.getId(), null, "To Delete", null);
+        Chapter ch = chapterDao.create(book.getId(), null, "To Delete", null, null);
 
         boolean deleted = chapterDao.delete(ch.getId());
 
@@ -164,7 +164,7 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void delete_book_cascadesToChapters() throws SQLException {
-        Chapter ch = chapterDao.create(book.getId(), null, "Cascaded", null);
+        Chapter ch = chapterDao.create(book.getId(), null, "Cascaded", null, null);
 
         bookDao.delete(book.getId());
 

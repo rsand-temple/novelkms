@@ -343,9 +343,12 @@ export default function EditorToolbar({ editor, settings, onSettingsChange, onSc
 
 				<VDivider />
 
-				{/* Scene break — async: creates DB scene first, then inserts node */}
-				<TBtn title="Scene break (· · ·)"
-					onClick={onSceneBreak}
+				{/* Scene break — disabled in single-scene view; only meaningful when the
+			    full chapter is loaded and scenes can be split. */}
+				<TBtn
+					title={onSceneBreak ? 'Scene break' : 'Not available in single-scene view'}
+					onClick={onSceneBreak ?? undefined}
+					disabled={!onSceneBreak}
 				>
 					<HorizontalRuleIcon fontSize="small" />
 				</TBtn>

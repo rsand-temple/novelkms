@@ -33,6 +33,7 @@ public class BookDao {
                 .projectId(rs.getObject("project_id", UUID.class))
                 .title(rs.getString("title"))
                 .subtitle(rs.getString("subtitle"))
+                .shortTitle(rs.getString("short_title"))
                 .displayOrder(rs.getInt("display_order"))
                 .notes(rs.getString("notes"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
@@ -74,13 +75,13 @@ public class BookDao {
     // Mutations
     // -------------------------------------------------------------------------
 
-    public Book create(UUID projectId, String title, String subtitle, String notes) throws SQLException {
+    public Book create(UUID projectId, String title, String subtitle, String shortTitle, String notes) throws SQLException {
         UUID    id           = UUID.randomUUID();
         Instant now          = Instant.now();
         int     displayOrder = nextDisplayOrder(projectId);
         String  sql          = """
-                INSERT INTO book (id, project_id, title, subtitle, display_order, notes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO book (id, project_id, title, subtitle, short_title, display_order, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
@@ -88,32 +89,34 @@ public class BookDao {
             ps.setObject(2, projectId);
             ps.setString(3, title);
             ps.setString(4, subtitle);
-            ps.setInt(5, displayOrder);
-            ps.setString(6, notes);
-            ps.setTimestamp(7, Timestamp.from(now));
+            ps.setString(5, shortTitle);
+            ps.setInt(6, displayOrder);
+            ps.setString(7, notes);
             ps.setTimestamp(8, Timestamp.from(now));
+            ps.setTimestamp(9, Timestamp.from(now));
             ps.executeUpdate();
         }
         return Book.builder()
-                .id(id).projectId(projectId).title(title).subtitle(subtitle)
+                .id(id).projectId(projectId).title(title).subtitle(subtitle).shortTitle(shortTitle)
                 .displayOrder(displayOrder).notes(notes)
                 .createdAt(now).updatedAt(now)
                 .build();
     }
 
-    public Optional<Book> update(UUID id, String title, String subtitle, String notes) throws SQLException {
+    public Optional<Book> update(UUID id, String title, String subtitle, String shortTitle, String notes) throws SQLException {
         Instant now = Instant.now();
         String  sql = """
-                UPDATE book SET title = ?, subtitle = ?, notes = ?, updated_at = ?
+                UPDATE book SET title = ?, subtitle = ?, short_title = ?, notes = ?, updated_at = ?
                 WHERE id = ?
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, title);
             ps.setString(2, subtitle);
-            ps.setString(3, notes);
-            ps.setTimestamp(4, Timestamp.from(now));
-            ps.setObject(5, id);
+            ps.setString(3, shortTitle);
+            ps.setString(4, notes);
+            ps.setTimestamp(5, Timestamp.from(now));
+            ps.setObject(6, id);
             int rows = ps.executeUpdate();
             if (rows == 0) {
                 return Optional.empty();

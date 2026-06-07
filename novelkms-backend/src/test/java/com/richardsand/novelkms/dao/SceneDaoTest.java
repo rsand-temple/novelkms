@@ -30,8 +30,8 @@ class SceneDaoTest extends NovelKmsTestBase {
     void setUp() throws SQLException {
         truncateAll();
         project = projectDao.create("Test Project", null);
-        book = bookDao.create(project.getId(), "Test Book", null, null);
-        chapter = chapterDao.create(book.getId(), null, "Test Chapter", null);
+        book = bookDao.create(project.getId(), "Test Book", null, null, null);
+        chapter = chapterDao.create(book.getId(), null, "Test Chapter", null, null);
     }
 
     // -------------------------------------------------------------------------
@@ -63,7 +63,7 @@ class SceneDaoTest extends NovelKmsTestBase {
 
     @Test
     void create_displayOrder_isIndependentPerChapter() throws SQLException {
-        Chapter other = chapterDao.create(book.getId(), null, "Other Chapter", null);
+        Chapter other = chapterDao.create(book.getId(), null, "Other Chapter", null, null);
 
         sceneDao.create(chapter.getId(), "Ch1 Scene 1", null);
         sceneDao.create(chapter.getId(), "Ch1 Scene 2", null);
@@ -120,7 +120,7 @@ class SceneDaoTest extends NovelKmsTestBase {
 
     @Test
     void findByChapterId_doesNotReturnScenesFromOtherChapters() throws SQLException {
-        Chapter other = chapterDao.create(book.getId(), null, "Other Chapter", null);
+        Chapter other = chapterDao.create(book.getId(), null, "Other Chapter", null, null);
         sceneDao.create(chapter.getId(), "My Scene", null);
         sceneDao.create(other.getId(), "Other Scene", null);
 

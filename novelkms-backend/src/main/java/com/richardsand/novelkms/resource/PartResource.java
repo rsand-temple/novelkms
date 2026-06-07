@@ -46,11 +46,13 @@ public class PartResource {
 
     public static class CreatePartRequest {
         @JsonProperty public String title;
+        @JsonProperty public String subtitle;
         @JsonProperty public String notes;
     }
 
     public static class UpdatePartRequest {
         @JsonProperty public String title;
+        @JsonProperty public String subtitle;
         @JsonProperty public String notes;
     }
 
@@ -87,7 +89,7 @@ public class PartResource {
                     .entity("title is required").build();
         }
         try {
-            Part part = partDao.create(bookId, req.title, req.notes);
+            Part part = partDao.create(bookId, req.title, req.subtitle, req.notes);
             return Response.status(Response.Status.CREATED).entity(part).build();
         } catch (SQLException e) {
             return serverError(e);
@@ -114,7 +116,7 @@ public class PartResource {
                     .entity("title is required").build();
         }
         try {
-            return partDao.update(id, req.title, req.notes)
+            return partDao.update(id, req.title, req.subtitle, req.notes)
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {
@@ -186,7 +188,7 @@ public class PartResource {
                 return Response.status(Response.Status.NOT_FOUND)
                         .entity("Part not found").build();
             }
-            Chapter chapter = chapterDao.create(part.get().getBookId(), partId, req.title, req.notes);
+            Chapter chapter = chapterDao.create(part.get().getBookId(), partId, req.title, null, req.notes);
             return Response.status(Response.Status.CREATED).entity(chapter).build();
         } catch (SQLException e) {
             return serverError(e);

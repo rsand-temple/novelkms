@@ -236,7 +236,7 @@ export default function NavToolbar({ selection, setSelection }) {
 							onClick={() => setDeleteDialogOpen(true)}
 							disabled={!deleteCtx}
 							aria-label={deleteCtx?.label ?? 'Delete'}
-							color={deleteCtx ? 'error' : 'default'}
+							color={deleteCtx ? 'primary' : 'default'}
 						>
 							<DeleteIcon fontSize="small" />
 						</IconButton>

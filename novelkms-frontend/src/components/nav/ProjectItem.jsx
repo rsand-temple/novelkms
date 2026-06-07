@@ -12,8 +12,13 @@ export default function ProjectItem({ project, selection, setSelection }) {
 
 	const isSelected = selection.projectId === project.id && !selection.bookId
 
-	const handleClick = () => {
+	const handleExpandToggle = (e) => {
+		e.stopPropagation()
 		setOpen((prev) => !prev)
+	}
+
+	const handleClick = () => {
+		if (!open) setOpen(true)
 		setSelection({ projectId: project.id, bookId: null, partId: null, chapterId: null, sceneId: null })
 	}
 
@@ -24,7 +29,10 @@ export default function ProjectItem({ project, selection, setSelection }) {
 				onClick={handleClick}
 				sx={{ pl: 1 }}
 			>
-				<ListItemIcon sx={{ minWidth: 28 }}>
+				<ListItemIcon
+					sx={{ minWidth: 28, cursor: 'pointer' }}
+					onClick={handleExpandToggle}
+				>
 					{open ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
 				</ListItemIcon>
 				<ListItemIcon sx={{ minWidth: 28 }}>

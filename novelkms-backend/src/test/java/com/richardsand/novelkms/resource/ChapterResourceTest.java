@@ -40,7 +40,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
     void setUp() throws SQLException {
         truncateAll();
         testProject = projectDao.create("Test Project", null);
-        testBook    = bookDao.create(testProject.getId(), "Test Book", null, null);
+        testBook    = bookDao.create(testProject.getId(), "Test Book", null, null, null);
     }
 
     // -------------------------------------------------------------------------
@@ -59,8 +59,8 @@ class ChapterResourceTest extends NovelKmsTestBase {
 
     @Test
     void listChapters_returnsChaptersForBook() throws SQLException {
-        chapterDao.create(testBook.getId(), null, "Chapter A", null);
-        chapterDao.create(testBook.getId(), null, "Chapter B", null);
+        chapterDao.create(testBook.getId(), null, "Chapter A", null, null);
+        chapterDao.create(testBook.getId(), null, "Chapter B", null, null);
 
         Response r = RESOURCES.target("/api/books/" + testBook.getId() + "/chapters")
                 .request().get();
@@ -76,7 +76,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
 
     @Test
     void getChapter_knownId_returns200() throws SQLException {
-        Chapter ch = chapterDao.create(testBook.getId(), null, "My Chapter", "notes");
+        Chapter ch = chapterDao.create(testBook.getId(), null, "My Chapter", null, "notes");
 
         Response r = RESOURCES.target("/api/chapters/" + ch.getId()).request().get();
 
@@ -127,7 +127,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
 
     @Test
     void updateChapter_knownId_returns200() throws SQLException {
-        Chapter ch = chapterDao.create(testBook.getId(), null, "Old Title", null);
+        Chapter ch = chapterDao.create(testBook.getId(), null, "Old Title", null, null);
 
         Response r = RESOURCES.target("/api/chapters/" + ch.getId())
                 .request(MediaType.APPLICATION_JSON)
@@ -154,7 +154,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
 
     @Test
     void deleteChapter_knownId_returns204() throws SQLException {
-        Chapter ch = chapterDao.create(testBook.getId(), null, "To Delete", null);
+        Chapter ch = chapterDao.create(testBook.getId(), null, "To Delete", null, null);
 
         Response r = RESOURCES.target("/api/chapters/" + ch.getId()).request().delete();
 

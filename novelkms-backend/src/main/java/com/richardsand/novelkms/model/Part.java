@@ -26,6 +26,9 @@ public class Part {
     private String title;
 
     @JsonProperty
+    private String subtitle;
+
+    @JsonProperty
     private int displayOrder;
 
     @JsonProperty

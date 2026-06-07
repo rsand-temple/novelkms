@@ -46,6 +46,8 @@ public class ChapterResource {
         @JsonProperty
         public String title;
         @JsonProperty
+        public String subtitle;
+        @JsonProperty
         public String notes;
         /** Optional — omit to place chapter directly under the book. */
         @JsonProperty
@@ -55,6 +57,8 @@ public class ChapterResource {
     public static class UpdateRequest {
         @JsonProperty
         public String title;
+        @JsonProperty
+        public String subtitle;
         @JsonProperty
         public String notes;
     }
@@ -103,7 +107,7 @@ public class ChapterResource {
                     .entity("title is required").build();
         }
         try {
-            Chapter chapter = chapterDao.create(bookId, req.partId, req.title, req.notes);
+            Chapter chapter = chapterDao.create(bookId, req.partId, req.title, req.subtitle, req.notes);
             return Response.status(Response.Status.CREATED).entity(chapter).build();
         } catch (SQLException e) {
             return serverError(e);
@@ -118,7 +122,7 @@ public class ChapterResource {
                     .entity("title is required").build();
         }
         try {
-            return chapterDao.update(id, req.title, req.notes)
+            return chapterDao.update(id, req.title, req.subtitle, req.notes)
                     .map(ch -> Response.ok(ch).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {

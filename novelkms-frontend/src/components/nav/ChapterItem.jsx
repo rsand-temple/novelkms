@@ -12,12 +12,13 @@ export default function ChapterItem({ chapter, selection, setSelection, depth = 
 
 	const isSelected = selection.chapterId === chapter.id && !selection.sceneId
 
-	const handleClick = () => {
+	const handleExpandToggle = (e) => {
+		e.stopPropagation()
 		setOpen((prev) => !prev)
-		// Carry the chapter's own partId into selection so the toolbar and
-		// PropertiesPanel know whether this chapter lives inside a part.
-		// chapter.partId is null for direct-book chapters, which clears any
-		// stale partId left from a previous part selection.
+	}
+
+	const handleClick = () => {
+		if (!open) setOpen(true)
 		setSelection((prev) => ({
 			...prev,
 			partId: chapter.partId ?? null,
@@ -33,7 +34,10 @@ export default function ChapterItem({ chapter, selection, setSelection, depth = 
 				onClick={handleClick}
 				sx={{ pl: 7 + depth * 3 }}
 			>
-				<ListItemIcon sx={{ minWidth: 28 }}>
+				<ListItemIcon
+					sx={{ minWidth: 28, cursor: 'pointer' }}
+					onClick={handleExpandToggle}
+				>
 					{open ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
 				</ListItemIcon>
 				<ListItemIcon sx={{ minWidth: 28 }}>

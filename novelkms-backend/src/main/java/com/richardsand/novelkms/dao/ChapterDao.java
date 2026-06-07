@@ -35,6 +35,7 @@ public class ChapterDao {
                 .bookId(rs.getObject("book_id", UUID.class))
                 .partId(partId)
                 .title(rs.getString("title"))
+                .subtitle(rs.getString("subtitle"))
                 .displayOrder(rs.getInt("display_order"))
                 .notes(rs.getString("notes"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
@@ -93,7 +94,7 @@ public class ChapterDao {
     // Mutations
     // -------------------------------------------------------------------------
 
-    public Chapter create(UUID bookId, UUID partId, String title, String notes) throws SQLException {
+    public Chapter create(UUID bookId, UUID partId, String title, String subtitle, String notes) throws SQLException {
         UUID    id           = UUID.randomUUID();
         Instant now          = Instant.now();
         // Scope display_order to the immediate parent: part (if set) or book (direct).
@@ -101,40 +102,42 @@ public class ChapterDao {
                 ? nextDisplayOrderInPart(partId)
                 : nextDisplayOrderInBook(bookId);
         String  sql          = """
-                INSERT INTO chapter (id, book_id, part_id, title, display_order, notes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO chapter (id, book_id, part_id, title, subtitle, display_order, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
             ps.setObject(2, bookId);
-            ps.setObject(3, partId); // null-safe: setObject handles null correctly
+            ps.setObject(3, partId);
             ps.setString(4, title);
-            ps.setInt(5, displayOrder);
-            ps.setString(6, notes);
-            ps.setTimestamp(7, Timestamp.from(now));
+            ps.setString(5, subtitle);
+            ps.setInt(6, displayOrder);
+            ps.setString(7, notes);
             ps.setTimestamp(8, Timestamp.from(now));
+            ps.setTimestamp(9, Timestamp.from(now));
             ps.executeUpdate();
         }
         return Chapter.builder()
-                .id(id).bookId(bookId).partId(partId).title(title)
+                .id(id).bookId(bookId).partId(partId).title(title).subtitle(subtitle)
                 .displayOrder(displayOrder).notes(notes)
                 .createdAt(now).updatedAt(now)
                 .build();
     }
 
-    public Optional<Chapter> update(UUID id, String title, String notes) throws SQLException {
+    public Optional<Chapter> update(UUID id, String title, String subtitle, String notes) throws SQLException {
         Instant now = Instant.now();
         String  sql = """
-                UPDATE chapter SET title = ?, notes = ?, updated_at = ?
+                UPDATE chapter SET title = ?, subtitle = ?, notes = ?, updated_at = ?
                 WHERE id = ?
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, title);
-            ps.setString(2, notes);
-            ps.setTimestamp(3, Timestamp.from(now));
-            ps.setObject(4, id);
+            ps.setString(2, subtitle);
+            ps.setString(3, notes);
+            ps.setTimestamp(4, Timestamp.from(now));
+            ps.setObject(5, id);
             int rows = ps.executeUpdate();
             if (rows == 0) {
                 return Optional.empty();

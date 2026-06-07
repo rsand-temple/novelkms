@@ -45,6 +45,8 @@ public class BookResource {
         @JsonProperty
         public String subtitle;
         @JsonProperty
+        public String shortTitle;
+        @JsonProperty
         public String notes;
     }
 
@@ -53,6 +55,8 @@ public class BookResource {
         public String title;
         @JsonProperty
         public String subtitle;
+        @JsonProperty
+        public String shortTitle;
         @JsonProperty
         public String notes;
     }
@@ -92,7 +96,7 @@ public class BookResource {
                     .entity("title is required").build();
         }
         try {
-            Book book = bookDao.create(projectId, req.title, req.subtitle, req.notes);
+            Book book = bookDao.create(projectId, req.title, req.subtitle, req.shortTitle, req.notes);
             return Response.status(Response.Status.CREATED).entity(book).build();
         } catch (SQLException e) {
             return serverError(e);
@@ -107,7 +111,7 @@ public class BookResource {
                     .entity("title is required").build();
         }
         try {
-            return bookDao.update(id, req.title, req.subtitle, req.notes)
+            return bookDao.update(id, req.title, req.subtitle, req.shortTitle, req.notes)
                     .map(b -> Response.ok(b).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {

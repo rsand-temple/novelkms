@@ -32,6 +32,7 @@ public class PartDao {
                 .id(rs.getObject("id", UUID.class))
                 .bookId(rs.getObject("book_id", UUID.class))
                 .title(rs.getString("title"))
+                .subtitle(rs.getString("subtitle"))
                 .displayOrder(rs.getInt("display_order"))
                 .notes(rs.getString("notes"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
@@ -73,44 +74,46 @@ public class PartDao {
     // Mutations
     // -------------------------------------------------------------------------
 
-    public Part create(UUID bookId, String title, String notes) throws SQLException {
+    public Part create(UUID bookId, String title, String subtitle, String notes) throws SQLException {
         UUID    id           = UUID.randomUUID();
         Instant now          = Instant.now();
         int     displayOrder = nextDisplayOrder(bookId);
         String  sql          = """
-                INSERT INTO part (id, book_id, title, display_order, notes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO part (id, book_id, title, subtitle, display_order, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
             ps.setObject(2, bookId);
             ps.setString(3, title);
-            ps.setInt(4, displayOrder);
-            ps.setString(5, notes);
-            ps.setTimestamp(6, Timestamp.from(now));
+            ps.setString(4, subtitle);
+            ps.setInt(5, displayOrder);
+            ps.setString(6, notes);
             ps.setTimestamp(7, Timestamp.from(now));
+            ps.setTimestamp(8, Timestamp.from(now));
             ps.executeUpdate();
         }
         return Part.builder()
-                .id(id).bookId(bookId).title(title)
+                .id(id).bookId(bookId).title(title).subtitle(subtitle)
                 .displayOrder(displayOrder).notes(notes)
                 .createdAt(now).updatedAt(now)
                 .build();
     }
 
-    public Optional<Part> update(UUID id, String title, String notes) throws SQLException {
+    public Optional<Part> update(UUID id, String title, String subtitle, String notes) throws SQLException {
         Instant now = Instant.now();
         String  sql = """
-                UPDATE part SET title = ?, notes = ?, updated_at = ?
+                UPDATE part SET title = ?, subtitle = ?, notes = ?, updated_at = ?
                 WHERE id = ?
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, title);
-            ps.setString(2, notes);
-            ps.setTimestamp(3, Timestamp.from(now));
-            ps.setObject(4, id);
+            ps.setString(2, subtitle);
+            ps.setString(3, notes);
+            ps.setTimestamp(4, Timestamp.from(now));
+            ps.setObject(5, id);
             int rows = ps.executeUpdate();
             if (rows == 0) return Optional.empty();
         }
