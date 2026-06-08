@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Collapse, ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
+import { Collapse, ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
 import ExpandMoreIcon   from '@mui/icons-material/ExpandMore'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ArticleIcon      from '@mui/icons-material/Article'
@@ -42,7 +42,7 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 		id: String(chapter.id),
 		data: {
 			type:        'chapter',
-			title:       chapter.title || 'Untitled Chapter',
+			title:	chapter.title?.trim() ? chapter.title : `Chapter ${chapter.chapterNumber}`,
 			containerId: partId
 				? containerIds.chaptersPart(String(partId))
 				: containerIds.chaptersBook(String(bookId)),

@@ -40,6 +40,7 @@ public class ChapterDao {
                 .notes(rs.getString("notes"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .updatedAt(rs.getTimestamp("updated_at").toInstant())
+                .chapterNumber(rs.getInt("chapter_number"))
                 .build();
     }
 
@@ -48,42 +49,98 @@ public class ChapterDao {
     // -------------------------------------------------------------------------
 
     public List<Chapter> findByBookId(UUID bookId) throws SQLException {
-        // Returns only chapters that sit directly under the book (part_id IS NULL).
-        // Chapters inside a part are fetched via findByPartId.
-        String        sql    = "SELECT * FROM chapter WHERE book_id = ? AND part_id IS NULL ORDER BY display_order, title";
-        List<Chapter> result = new ArrayList<>();
-        try (Connection c = ds.getConnection();
-                PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setObject(1, bookId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    result.add(map(rs));
-                }
+        String sql = "WITH ordered AS ( " +
+                "  SELECT c.id, " +
+                "    ROW_NUMBER() OVER ( " +
+                "      ORDER BY " +
+                "        CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END, " +
+                "        p.display_order, " +
+                "        c.display_order " +
+                "    ) AS chapter_number " +
+                "  FROM chapter c " +
+                "  LEFT JOIN part p ON c.part_id = p.id " +
+                "  WHERE c.book_id = ? " +
+                ") " +
+                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, " +
+                "       c.display_order, c.created_at, c.updated_at, " +
+                "       o.chapter_number " +
+                "FROM chapter c " +
+                "JOIN ordered o ON c.id = o.id " +
+                "LEFT JOIN part p ON c.part_id = p.id " +
+                "WHERE c.book_id = ? AND c.part_id IS NULL " +
+                "ORDER BY o.chapter_number";
+
+        List<Chapter>     result = new ArrayList<>();
+        Connection        conn   = ds.getConnection();
+        PreparedStatement ps     = conn.prepareStatement(sql);
+        ps.setObject(1, bookId); // CTE
+        ps.setObject(2, bookId); // outer WHERE
+        try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                result.add(map(rs));
             }
         }
         return result;
     }
 
     public List<Chapter> findByPartId(UUID partId) throws SQLException {
-        String        sql    = "SELECT * FROM chapter WHERE part_id = ? ORDER BY display_order, title";
-        List<Chapter> result = new ArrayList<>();
-        try (Connection c = ds.getConnection();
-                PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setObject(1, partId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    result.add(map(rs));
-                }
+        String sql = "WITH ordered AS ( " +
+                "  SELECT c.id, " +
+                "    ROW_NUMBER() OVER ( " +
+                "      ORDER BY " +
+                "        CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END, " +
+                "        p.display_order, " +
+                "        c.display_order " +
+                "    ) AS chapter_number " +
+                "  FROM chapter c " +
+                "  LEFT JOIN part p ON c.part_id = p.id " +
+                "  WHERE c.book_id = (SELECT book_id FROM part WHERE id = ?) " +
+                ") " +
+                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, " +
+                "       c.display_order, c.created_at, c.updated_at, " +
+                "       o.chapter_number " +
+                "FROM chapter c " +
+                "JOIN ordered o ON c.id = o.id " +
+                "WHERE c.part_id = ? " +
+                "ORDER BY o.chapter_number";
+
+        List<Chapter>     result = new ArrayList<>();
+        Connection        conn   = ds.getConnection();
+        PreparedStatement ps     = conn.prepareStatement(sql);
+        ps.setObject(1, partId); // CTE subquery
+        ps.setObject(2, partId); // outer WHERE
+        try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                result.add(map(rs));
             }
         }
         return result;
     }
 
     public Optional<Chapter> findById(UUID id) throws SQLException {
-        String sql = "SELECT * FROM chapter WHERE id = ?";
-        try (Connection c = ds.getConnection();
-                PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setObject(1, id);
+        String sql = "WITH ordered AS ( " +
+                "  SELECT c.id, " +
+                "    ROW_NUMBER() OVER ( " +
+                "      ORDER BY " +
+                "        CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END, " +
+                "        p.display_order, " +
+                "        c.display_order " +
+                "    ) AS chapter_number " +
+                "  FROM chapter c " +
+                "  LEFT JOIN part p ON c.part_id = p.id " +
+                "  WHERE c.book_id = (SELECT book_id FROM chapter WHERE id = ?) " +
+                ") " +
+                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, " +
+                "       c.display_order, c.created_at, c.updated_at, " +
+                "       o.chapter_number " +
+                "FROM chapter c " +
+                "JOIN ordered o ON c.id = o.id " +
+                "WHERE c.id = ?";
+
+        try (Connection conn = ds.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setObject(1, id); // CTE subquery
+            ps.setObject(2, id); // outer WHERE
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? Optional.of(map(rs)) : Optional.empty();
             }

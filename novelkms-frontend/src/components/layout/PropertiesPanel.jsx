@@ -4,14 +4,14 @@ import {
 	Box, Typography, TextField, Divider, CircularProgress,
 	Stack, Chip, Button,
 } from '@mui/material';
-import { useScene, SCENE_KEYS }     from '../../hooks/useScenes';
+import { useScene, SCENE_KEYS } from '../../hooks/useScenes';
 import { useChapter, CHAPTER_KEYS } from '../../hooks/useChapters';
-import { usePart, PART_KEYS }       from '../../hooks/useParts';
-import { useBook, BOOK_KEYS }       from '../../hooks/useBooks';
-import { scenesApi }   from '../../api/scenes';
+import { usePart, PART_KEYS } from '../../hooks/useParts';
+import { useBook, BOOK_KEYS } from '../../hooks/useBooks';
+import { scenesApi } from '../../api/scenes';
 import { chaptersApi } from '../../api/chapters';
-import { partsApi }    from '../../api/parts';
-import { booksApi }    from '../../api/books';
+import { partsApi } from '../../api/parts';
+import { booksApi } from '../../api/books';
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
@@ -78,9 +78,9 @@ function SceneProperties({ sceneId, chapterId }) {
 
 function ChapterForm({ chapter, chapterId, bookId }) {
 	const qc = useQueryClient();
-	const [title,    setTitle]    = useState(chapter.title    ?? '');
+	const [title, setTitle] = useState(chapter.title ?? '');
 	const [subtitle, setSubtitle] = useState(chapter.subtitle ?? '');
-	const [notes,    setNotes]    = useState(chapter.notes    ?? '');
+	const [notes, setNotes] = useState(chapter.notes ?? '');
 
 	const { mutate: save, isPending } = useMutation({
 		mutationFn: (patch) => chaptersApi.update(chapterId, patch),
@@ -92,7 +92,15 @@ function ChapterForm({ chapter, chapterId, bookId }) {
 
 	return (
 		<Stack spacing={2} sx={{ p: 2 }}>
-			<Typography variant="overline" color="text.secondary">Chapter</Typography>
+			<Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+				<Chip
+					label={`Chapter ${chapter.chapterNumber}`}
+					size="small"
+					variant="outlined"
+					sx={{ fontWeight: 500, color: 'text.secondary', borderColor: 'divider' }}
+				/>
+			</Stack>
+
 			<TextField
 				label="Title"
 				size="small"
@@ -143,9 +151,9 @@ function ChapterProperties({ chapterId, bookId }) {
 
 function PartForm({ part, partId, bookId }) {
 	const qc = useQueryClient();
-	const [title,    setTitle]    = useState(part.title    ?? '');
+	const [title, setTitle] = useState(part.title ?? '');
 	const [subtitle, setSubtitle] = useState(part.subtitle ?? '');
-	const [notes,    setNotes]    = useState(part.notes    ?? '');
+	const [notes, setNotes] = useState(part.notes ?? '');
 
 	const { mutate: save, isPending } = useMutation({
 		mutationFn: (patch) => partsApi.update(partId, patch),
@@ -208,10 +216,10 @@ function PartProperties({ partId, bookId }) {
 
 function BookForm({ book, bookId, projectId }) {
 	const qc = useQueryClient();
-	const [title,      setTitle]      = useState(book.title      ?? '');
-	const [subtitle,   setSubtitle]   = useState(book.subtitle   ?? '');
+	const [title, setTitle] = useState(book.title ?? '');
+	const [subtitle, setSubtitle] = useState(book.subtitle ?? '');
 	const [shortTitle, setShortTitle] = useState(book.shortTitle ?? '');
-	const [notes,      setNotes]      = useState(book.notes      ?? '');
+	const [notes, setNotes] = useState(book.notes ?? '');
 
 	const { mutate: save, isPending } = useMutation({
 		mutationFn: (patch) => booksApi.update(bookId, patch),

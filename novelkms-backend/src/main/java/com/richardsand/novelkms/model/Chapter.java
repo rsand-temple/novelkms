@@ -44,4 +44,12 @@ public class Chapter {
 
     @JsonProperty
     private Instant updatedAt;
+
+    /** computed, not stored */
+    @JsonProperty
+    private int chapterNumber;
+
+    public void setChapterNumber(int chapterNumber) {
+        this.chapterNumber = chapterNumber;
+    }
 }
