@@ -69,3 +69,16 @@ export const useReorderChapters = () => {
 		},
 	})
 }
+
+export function useMoveChapter() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({ id, partId, sourceIds, targetIds }) =>
+			chaptersApi.moveChapter(id, { partId, sourceIds, targetIds }),
+		onSuccess: () => {
+			// Broad invalidation — chapter moved across unknown containers
+			queryClient.invalidateQueries({ queryKey: ['chapters'] });
+			queryClient.invalidateQueries({ queryKey: ['parts'] });
+		},
+	});
+}

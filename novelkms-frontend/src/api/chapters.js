@@ -33,4 +33,6 @@ export const chaptersApi = {
 	reorderInBook: async (bookId, ids) => {
 		await client.put(`/books/${bookId}/chapters/reorder`, { ids })
 	},
+	
+	moveChapter: (id, body) => client.put(`/chapters/${id}/move`, body),
 }

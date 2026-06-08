@@ -95,13 +95,13 @@ public class ChapterDao {
     // -------------------------------------------------------------------------
 
     public Chapter create(UUID bookId, UUID partId, String title, String subtitle, String notes) throws SQLException {
-        UUID    id           = UUID.randomUUID();
-        Instant now          = Instant.now();
+        UUID    id  = UUID.randomUUID();
+        Instant now = Instant.now();
         // Scope display_order to the immediate parent: part (if set) or book (direct).
-        int     displayOrder = (partId != null)
+        int    displayOrder = (partId != null)
                 ? nextDisplayOrderInPart(partId)
                 : nextDisplayOrderInBook(bookId);
-        String  sql          = """
+        String sql          = """
                 INSERT INTO chapter (id, book_id, part_id, title, subtitle, display_order, notes, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
@@ -171,7 +171,7 @@ public class ChapterDao {
                 WHERE id = ? AND book_id = ?
                 """;
         try (Connection c = ds.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             c.setAutoCommit(false);
             try {
                 Instant now = Instant.now();
@@ -203,7 +203,7 @@ public class ChapterDao {
                 WHERE id = ? AND part_id = ?
                 """;
         try (Connection c = ds.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             c.setAutoCommit(false);
             try {
                 Instant now = Instant.now();
@@ -221,6 +221,68 @@ public class ChapterDao {
                 throw e;
             } finally {
                 c.setAutoCommit(true);
+            }
+        }
+    }
+
+    /**
+     * Moves a chapter to a new parent container and renumbers both the source
+     * and target sibling lists in a single transaction.
+     *
+     * @param chapterId the chapter being moved
+     * @param newPartId null = book-direct, non-null = inside this part
+     * @param sourceIds ordered IDs of the source container AFTER removal
+     * @param targetIds ordered IDs of the target container AFTER insertion (includes chapterId)
+     */
+    public void moveChapter(UUID chapterId, UUID newPartId,
+            List<UUID> sourceIds, List<UUID> targetIds) throws SQLException {
+        Instant now = Instant.now();
+        try (Connection conn = ds.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                // 1. Update part_id on the moved chapter (null = promote to book-direct)
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "UPDATE chapter SET part_id = ?, updated_at = ? WHERE id = ?")) {
+                    ps.setObject(1, newPartId); // setObject handles null UUID correctly
+                    ps.setTimestamp(2, Timestamp.from(now));
+                    ps.setObject(3, chapterId);
+                    ps.executeUpdate();
+                }
+
+                // 2. Renumber source container (closes the gap left by removal)
+                if (!sourceIds.isEmpty()) {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "UPDATE chapter SET display_order = ?, updated_at = ? WHERE id = ?")) {
+                        for (int i = 0; i < sourceIds.size(); i++) {
+                            ps.setInt(1, i);
+                            ps.setTimestamp(2, Timestamp.from(now));
+                            ps.setObject(3, sourceIds.get(i));
+                            ps.addBatch();
+                        }
+                        ps.executeBatch();
+                    }
+                }
+
+                // 3. Renumber target container (includes the moved chapter)
+                if (!targetIds.isEmpty()) {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "UPDATE chapter SET display_order = ?, updated_at = ? WHERE id = ?")) {
+                        for (int i = 0; i < targetIds.size(); i++) {
+                            ps.setInt(1, i);
+                            ps.setTimestamp(2, Timestamp.from(now));
+                            ps.setObject(3, targetIds.get(i));
+                            ps.addBatch();
+                        }
+                        ps.executeBatch();
+                    }
+                }
+
+                conn.commit();
+            } catch (Exception e) {
+                conn.rollback();
+                throw new RuntimeException("moveChapter transaction failed", e);
+            } finally {
+                conn.setAutoCommit(true);
             }
         }
     }

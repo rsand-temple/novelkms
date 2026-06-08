@@ -29,13 +29,13 @@ import jakarta.ws.rs.core.Response;
 @Consumes(MediaType.APPLICATION_JSON)
 public class ChapterResource {
     private static final Logger logger = LoggerFactory.getLogger(ChapterResource.class);
-    private final ChapterDao chapterDao;
-    private final SceneDao   sceneDao;
+    private final ChapterDao    chapterDao;
+    private final SceneDao      sceneDao;
 
     @Inject
     public ChapterResource(ChapterDao chapterDao, SceneDao sceneDao) {
         this.chapterDao = chapterDao;
-        this.sceneDao   = sceneDao;
+        this.sceneDao = sceneDao;
     }
 
     // -------------------------------------------------------------------------
@@ -70,6 +70,15 @@ public class ChapterResource {
     public static class ReorderRequest {
         @JsonProperty
         public List<UUID> ids;
+    }
+
+    public static class MoveChapterRequest {
+        @JsonProperty("partId")
+        public UUID       partId;
+        @JsonProperty("sourceIds")
+        public List<UUID> sourceIds = List.of();
+        @JsonProperty("targetIds")
+        public List<UUID> targetIds = List.of();
     }
 
     // -------------------------------------------------------------------------
@@ -129,6 +138,18 @@ public class ChapterResource {
             return serverError(e);
         }
     }
+    
+    @PUT
+    @Path("/chapters/{id}/move")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response moveChapter(@PathParam("id") UUID id, MoveChapterRequest req) {
+        try {
+            chapterDao.moveChapter(id, req.partId, req.sourceIds, req.targetIds);
+            return Response.ok().build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
 
     @DELETE
     @Path("/chapters/{id}")
@@ -145,8 +166,8 @@ public class ChapterResource {
     /**
      * PUT /api/books/{bookId}/chapters/reorder
      *
-     * Reorders all chapters within a book.  The request body must contain the
-     * complete ordered list of chapter IDs for this book.  Chapters not present
+     * Reorders all chapters within a book. The request body must contain the
+     * complete ordered list of chapter IDs for this book. Chapters not present
      * in the list are unaffected (their display_order is not touched), which
      * means the caller should always send the full sibling list.
      */
@@ -173,7 +194,7 @@ public class ChapterResource {
     /**
      * PUT /api/chapters/{chapterId}/scenes/reorder
      *
-     * Reorders all scenes within a chapter.  The request body must contain the
+     * Reorders all scenes within a chapter. The request body must contain the
      * complete ordered list of scene IDs for this chapter.
      */
     @PUT
