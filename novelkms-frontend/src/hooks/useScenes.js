@@ -80,3 +80,15 @@ export const useReorderScenes = () => {
 		},
 	})
 }
+
+export function useMoveScene() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, chapterId, sourceIds, targetIds }) =>
+      scenesApi.moveScene(id, { chapterId, sourceIds, targetIds }),
+    onSuccess: () => {
+      // Invalidates all scene lists — covers both source and target chapters
+      queryClient.invalidateQueries({ queryKey: ['scenes'] })
+    },
+  })
+}

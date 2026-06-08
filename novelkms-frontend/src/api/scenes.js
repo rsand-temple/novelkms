@@ -38,4 +38,6 @@ export const scenesApi = {
 	reorderInChapter: async (chapterId, ids) => {
 		await client.put(`/chapters/${chapterId}/scenes/reorder`, { ids })
 	},
+	
+	moveScene: (id, body) => client.put(`/scenes/${id}/move`, body),
 }

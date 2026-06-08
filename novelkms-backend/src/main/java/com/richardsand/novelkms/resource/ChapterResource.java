@@ -81,6 +81,15 @@ public class ChapterResource {
         public List<UUID> targetIds = List.of();
     }
 
+    public static class MoveSceneRequest {
+        @JsonProperty("chapterId")
+        public UUID       chapterId;
+        @JsonProperty("sourceIds")
+        public List<UUID> sourceIds = List.of();
+        @JsonProperty("targetIds")
+        public List<UUID> targetIds = List.of();
+    }
+
     // -------------------------------------------------------------------------
     // Endpoints — chapters
     // -------------------------------------------------------------------------
@@ -138,13 +147,25 @@ public class ChapterResource {
             return serverError(e);
         }
     }
-    
+
     @PUT
     @Path("/chapters/{id}/move")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response moveChapter(@PathParam("id") UUID id, MoveChapterRequest req) {
         try {
             chapterDao.moveChapter(id, req.partId, req.sourceIds, req.targetIds);
+            return Response.ok().build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+    
+    @PUT
+    @Path("/scenes/{id}/move")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response moveScene(@PathParam("id") UUID id, MoveSceneRequest req) {
+        try {
+            sceneDao.moveScene(id, req.chapterId, req.sourceIds, req.targetIds);
             return Response.ok().build();
         } catch (SQLException e) {
             return serverError(e);

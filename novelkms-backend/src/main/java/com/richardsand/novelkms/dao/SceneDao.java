@@ -83,7 +83,7 @@ public class SceneDao {
         if (title == null || title.isBlank()) {
             title = "New Scene [" + id.toString().substring(0, 4) + "]";
         }
-        String  sql          = """
+        String sql = """
                 INSERT INTO scene (id, chapter_id, title, display_order, content, word_count, notes, created_at, updated_at)
                 VALUES (?, ?, ?, ?, NULL, 0, ?, ?, ?)
                 """;
@@ -150,6 +150,56 @@ public class SceneDao {
         return findById(id);
     }
 
+    public void moveScene(UUID sceneId, UUID newChapterId,
+            List<UUID> sourceIds, List<UUID> targetIds) throws SQLException {
+        Instant now = Instant.now();
+        try (Connection conn = ds.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                // 1. Re-parent the scene
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "UPDATE scene SET chapter_id = ?, updated_at = ? WHERE id = ?")) {
+                    ps.setObject(1, newChapterId);
+                    ps.setTimestamp(2, Timestamp.from(now));
+                    ps.setObject(3, sceneId);
+                    ps.executeUpdate();
+                }
+                // 2. Renumber source chapter
+                if (!sourceIds.isEmpty()) {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "UPDATE scene SET display_order = ?, updated_at = ? WHERE id = ?")) {
+                        for (int i = 0; i < sourceIds.size(); i++) {
+                            ps.setInt(1, i);
+                            ps.setTimestamp(2, Timestamp.from(now));
+                            ps.setObject(3, sourceIds.get(i));
+                            ps.addBatch();
+                        }
+                        ps.executeBatch();
+                    }
+                }
+                // 3. Renumber target chapter (includes moved scene)
+                if (!targetIds.isEmpty()) {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "UPDATE scene SET display_order = ?, updated_at = ? WHERE id = ?")) {
+                        for (int i = 0; i < targetIds.size(); i++) {
+                            ps.setInt(1, i);
+                            ps.setTimestamp(2, Timestamp.from(now));
+                            ps.setObject(3, targetIds.get(i));
+                            ps.addBatch();
+                        }
+                        ps.executeBatch();
+                    }
+                }
+                conn.commit();
+            } catch (Exception e) {
+                conn.rollback();
+                throw new RuntimeException("moveScene transaction failed", e);
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        }
+    }
+
     public boolean delete(UUID id) throws SQLException {
         String sql = "DELETE FROM scene WHERE id = ?";
         try (Connection c = ds.getConnection();
@@ -175,7 +225,7 @@ public class SceneDao {
                 WHERE id = ? AND chapter_id = ?
                 """;
         try (Connection c = ds.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             c.setAutoCommit(false);
             try {
                 Instant now = Instant.now();
