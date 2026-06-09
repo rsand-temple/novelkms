@@ -26,12 +26,6 @@ public class Project {
     private String description;
 
     @JsonProperty
-    private String authorFirstName;
-
-    @JsonProperty
-    private String authorLastName;
-
-    @JsonProperty
     private Instant createdAt;
 
     @JsonProperty

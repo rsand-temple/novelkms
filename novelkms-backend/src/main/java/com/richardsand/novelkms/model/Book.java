@@ -42,29 +42,4 @@ public class Book {
 
     @JsonProperty
     private Instant updatedAt;
-    
-    @JsonProperty
-    private boolean pageLayoutEnabled;
-
-    @JsonProperty
-    private String pageSizePreset;     // "LETTER" | "A4" | "TRADE_PAPERBACK" |
-                                       // "MASS_MARKET" | "HARDBACK" | "CUSTOM"
-
-    @JsonProperty
-    private Double pageWidthIn;        // null for all presets except CUSTOM
-
-    @JsonProperty
-    private Double pageHeightIn;       // null for all presets except CUSTOM
-
-    @JsonProperty
-    private double pageMarginTopIn;
-
-    @JsonProperty
-    private double pageMarginBottomIn;
-
-    @JsonProperty
-    private double pageMarginInnerIn;  // spine side
-
-    @JsonProperty
-    private double pageMarginOuterIn;  // edge side
 }

@@ -32,8 +32,6 @@ public class ProjectDao {
                 .id(rs.getObject("id", UUID.class))
                 .title(rs.getString("title"))
                 .description(rs.getString("description"))
-                .authorFirstName(rs.getString("author_first_name"))
-                .authorLastName(rs.getString("author_last_name"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .updatedAt(rs.getTimestamp("updated_at").toInstant())
                 .build();
@@ -71,10 +69,6 @@ public class ProjectDao {
     // Mutations
     // -------------------------------------------------------------------------
 
-    /**
-     * Creates a new project. Author name fields default to null and can be
-     * populated later via update().
-     */
     public Project create(String title, String description) throws SQLException {
         UUID    id  = UUID.randomUUID();
         Instant now = Instant.now();
@@ -97,28 +91,18 @@ public class ProjectDao {
                 .build();
     }
 
-    /**
-     * Updates all mutable fields on a project, including author name.
-     * NOTE: ProjectResource must be updated to extract and pass the two new
-     * author parameters from the request body.
-     */
-    public Optional<Project> update(UUID id, String title, String description,
-            String authorFirstName, String authorLastName) throws SQLException {
+    public Optional<Project> update(UUID id, String title, String description) throws SQLException {
         Instant now = Instant.now();
         String  sql = """
-                UPDATE project
-                SET title = ?, description = ?, author_first_name = ?, author_last_name = ?,
-                    updated_at = ?
+                UPDATE project SET title = ?, description = ?, updated_at = ?
                 WHERE id = ?
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, title);
             ps.setString(2, description);
-            ps.setString(3, authorFirstName);
-            ps.setString(4, authorLastName);
-            ps.setTimestamp(5, Timestamp.from(now));
-            ps.setObject(6, id);
+            ps.setTimestamp(3, Timestamp.from(now));
+            ps.setObject(4, id);
             int rows = ps.executeUpdate();
             if (rows == 0) {
                 return Optional.empty();
