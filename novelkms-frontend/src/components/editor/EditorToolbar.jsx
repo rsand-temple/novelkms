@@ -307,16 +307,18 @@ export default function EditorToolbar({ editor, settings, onSettingsChange, onSc
 
 				{/* First-line indent toggle: ¶ icon styled like a toolbar button */}
 				<Tooltip title={firstLineOverriddenOff ? 'Restore first-line indent' : 'Remove first-line indent'} disableInteractive>
-					<IconButton
-						size="small"
-						onClick={handleFirstLineIndentToggle}
-						color={firstLineOverriddenOff ? 'primary' : 'default'}
-						disabled={!isPara}
-						onMouseDown={e => e.preventDefault()}
-						sx={{ fontSize: '0.85rem', fontWeight: 700, px: 0.75 }}
-					>
-						¶
-					</IconButton>
+					<span>
+						<IconButton
+							size="small"
+							onClick={handleFirstLineIndentToggle}
+							color={firstLineOverriddenOff ? 'primary' : 'default'}
+							disabled={!isPara}
+							onMouseDown={e => e.preventDefault()}
+							sx={{ fontSize: '0.85rem', fontWeight: 700, px: 0.75 }}
+						>
+							¶
+						</IconButton>
+					</span>
 				</Tooltip>
 
 				<VDivider />

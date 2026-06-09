@@ -29,7 +29,7 @@ import lombok.ToString;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class ProjectResource {
-    private static Logger logger = LoggerFactory.getLogger(ProjectResource.class);
+    private static Logger    logger = LoggerFactory.getLogger(ProjectResource.class);
     private final ProjectDao projectDao;
 
     @Inject
@@ -55,6 +55,10 @@ public class ProjectResource {
         public String title;
         @JsonProperty
         public String description;
+        @JsonProperty
+        public String authorFirstName;
+        @JsonProperty
+        public String authorLastName;
     }
 
     // -------------------------------------------------------------------------
@@ -108,7 +112,8 @@ public class ProjectResource {
                     .entity("title is required").build();
         }
         try {
-            return projectDao.update(id, req.title, req.description)
+            return projectDao.update(id, req.title, req.description,
+                    req.authorFirstName, req.authorLastName)
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException sqle) {

@@ -42,7 +42,12 @@ export default function App() {
 				</Box>
 
 				<Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-					<EditorPanel chapterId={selection.chapterId} sceneId={selection.sceneId} projectId={selection.projectId} />
+					<EditorPanel 
+						chapterId={selection.chapterId} 
+						sceneId={selection.sceneId} 
+						projectId={selection.projectId} 
+						bookId={selection.bookId}
+					/>
 				</Box>
 
 				<Box sx={{

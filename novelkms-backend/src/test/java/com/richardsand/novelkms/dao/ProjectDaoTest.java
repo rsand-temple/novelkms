@@ -105,7 +105,7 @@ class ProjectDaoTest extends NovelKmsTestBase {
 
         Instant createdAt = projectDao.findById(original.getId()).get().getCreatedAt();
         
-        Optional<Project> updated = projectDao.update(original.getId(), "New Title", "New description");
+        Optional<Project> updated = projectDao.update(original.getId(), "New Title", "New description", null, null);
  
         assertTrue(updated.isPresent());
         assertEquals("New Title",        updated.get().getTitle());
@@ -114,7 +114,7 @@ class ProjectDaoTest extends NovelKmsTestBase {
 
     @Test
     void update_unknownId_returnsEmpty() throws SQLException {
-        Optional<Project> updated = projectDao.update(UUID.randomUUID(), "Ghost", null);
+        Optional<Project> updated = projectDao.update(UUID.randomUUID(), "Ghost", null, null, null);
 
         assertFalse(updated.isPresent());
     }

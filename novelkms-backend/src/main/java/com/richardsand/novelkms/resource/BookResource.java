@@ -28,7 +28,7 @@ import jakarta.ws.rs.core.Response;
 @Consumes(MediaType.APPLICATION_JSON)
 public class BookResource {
     private static final Logger logger = LoggerFactory.getLogger(BookResource.class);
-    private final BookDao bookDao;
+    private final BookDao       bookDao;
 
     @Inject
     public BookResource(BookDao bookDao) {
@@ -52,13 +52,29 @@ public class BookResource {
 
     public static class UpdateRequest {
         @JsonProperty
-        public String title;
+        public String  title;
         @JsonProperty
-        public String subtitle;
+        public String  subtitle;
         @JsonProperty
-        public String shortTitle;
+        public String  shortTitle;
         @JsonProperty
-        public String notes;
+        public String  notes;
+        @JsonProperty
+        public boolean pageLayoutEnabled;
+        @JsonProperty
+        public String  pageSizePreset;
+        @JsonProperty
+        public Double  pageWidthIn;
+        @JsonProperty
+        public Double  pageHeightIn;
+        @JsonProperty
+        public double  pageMarginTopIn;
+        @JsonProperty
+        public double  pageMarginBottomIn;
+        @JsonProperty
+        public double  pageMarginInnerIn;
+        @JsonProperty
+        public double  pageMarginOuterIn;
     }
 
     // -------------------------------------------------------------------------
@@ -111,7 +127,12 @@ public class BookResource {
                     .entity("title is required").build();
         }
         try {
-            return bookDao.update(id, req.title, req.subtitle, req.shortTitle, req.notes)
+            return bookDao.update(id,
+                    req.title, req.subtitle, req.shortTitle, req.notes,
+                    req.pageLayoutEnabled, req.pageSizePreset,
+                    req.pageWidthIn, req.pageHeightIn,
+                    req.pageMarginTopIn, req.pageMarginBottomIn,
+                    req.pageMarginInnerIn, req.pageMarginOuterIn)
                     .map(b -> Response.ok(b).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {
