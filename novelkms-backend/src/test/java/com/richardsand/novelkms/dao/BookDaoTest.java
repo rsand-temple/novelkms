@@ -132,7 +132,7 @@ class BookDaoTest extends NovelKmsTestBase {
     void update_changesMetadata() throws SQLException {
         Book original = bookDao.create(project.getId(), "Old Title", null, null, null);
 
-        Optional<Book> updated = bookDao.update(original.getId(), "New Title", "New Sub", null, "New Notes");
+        Optional<Book> updated = bookDao.update(original.getId(), "New Title", "New Sub", null, "New Notes", false, null, null, null, null, null, null, null);
 
         assertTrue(updated.isPresent());
         assertEquals("New Title", updated.get().getTitle());
@@ -142,7 +142,7 @@ class BookDaoTest extends NovelKmsTestBase {
 
     @Test
     void update_unknownId_returnsEmpty() throws SQLException {
-        Optional<Book> updated = bookDao.update(UUID.randomUUID(), "Ghost", null, null, null);
+        Optional<Book> updated = bookDao.update(UUID.randomUUID(), "Ghost", null, null, null, false, null, null, null, null, null, null, null);
 
         assertFalse(updated.isPresent());
     }

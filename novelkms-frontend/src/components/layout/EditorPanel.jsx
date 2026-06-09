@@ -71,20 +71,12 @@ function getDocSceneBreakIds(editor) {
  *
  * Props:
  *   chapterId  — ID of the currently selected chapter.
+ *   sceneId    — ID of the currently selected scene (single-scene mode).
  *   projectId  — ID of the current project (drives useProjectSettings).
  *
- * Reload policy
- *   The editor reloads its content when either:
- *     (a) chapterId changes (chapter switch), or
- *     (b) the ordered list of scene IDs changes within the same chapter
- *         (external reorder via the nav tree ↑/↓ buttons).
- *
- *   Routine refetches caused by autosave or other invalidations do NOT
- *   trigger a reload, because the scene IDs and their order are unchanged.
- *
- *   When EditorPanel itself drives a scene order change (scene break insert
- *   or scene break delete), it pre-updates loadedSceneOrderRef before the
- *   invalidation fires, so the subsequent refetch is treated as expected.
+ * The toolbar is always rendered regardless of selection so that the document
+ * settings gear icon remains accessible when a book, part, or project node is
+ * selected in the nav tree. Only the content area varies by selection state.
  */
 export default function EditorPanel({ chapterId, sceneId, projectId }) {
 	const { settings, updateSettings } = useProjectSettings(projectId);
@@ -92,8 +84,6 @@ export default function EditorPanel({ chapterId, sceneId, projectId }) {
 	const queryClient = useQueryClient();
 
 	// ── Mode ──────────────────────────────────────────────────────────────────
-	// singleSceneMode: a specific scene node is selected — show only that scene.
-	// Multi-scene mode: a chapter node is selected — show all scenes combined.
 	const singleSceneMode = !!sceneId;
 
 	const { data: scenes,      isLoading: scenesLoading      } = useScenes(!singleSceneMode ? chapterId : null);
@@ -105,26 +95,23 @@ export default function EditorPanel({ chapterId, sceneId, projectId }) {
 	const [isSaving, setIsSaving] = useState(false);
 
 	// ── refs ─────────────────────────────────────────────────────────────────
-	const saveTimer = useRef(null);
-	const firstSceneIdRef = useRef(null);
-	const prevSceneBreakIdsRef = useRef([]);
-	const loadedChapterIdRef = useRef(null);
-	const loadedSceneOrderRef = useRef('');
-	// Single-scene mode tracking
-	const loadedSceneIdRef   = useRef(null);
-	const singleSceneModeRef = useRef(singleSceneMode);
-	const sceneIdRef         = useRef(sceneId);
-	const scheduleSaveRef = useRef(null);
-	const chapterIdRef = useRef(chapterId);
-	const editorRef = useRef(null);
+	const saveTimer             = useRef(null);
+	const firstSceneIdRef       = useRef(null);
+	const prevSceneBreakIdsRef  = useRef([]);
+	const loadedChapterIdRef    = useRef(null);
+	const loadedSceneOrderRef   = useRef('');
+	const loadedSceneIdRef      = useRef(null);
+	const singleSceneModeRef    = useRef(singleSceneMode);
+	const sceneIdRef            = useRef(sceneId);
+	const scheduleSaveRef       = useRef(null);
+	const chapterIdRef          = useRef(chapterId);
+	const editorRef             = useRef(null);
 
-	useEffect(() => { chapterIdRef.current    = chapterId;       }, [chapterId]);
+	useEffect(() => { chapterIdRef.current      = chapterId;       }, [chapterId]);
 	useEffect(() => { singleSceneModeRef.current = singleSceneMode; }, [singleSceneMode]);
-	useEffect(() => { sceneIdRef.current      = sceneId;         }, [sceneId]);
+	useEffect(() => { sceneIdRef.current         = sceneId;         }, [sceneId]);
 	useEffect(() => { if (scenes?.length) firstSceneIdRef.current = scenes[0].id; }, [scenes]);
 
-	// When switching modes, clear stale tracking refs on the outgoing side so
-	// returning to either mode always triggers a clean reload.
 	useEffect(() => {
 		if (singleSceneMode) {
 			loadedChapterIdRef.current  = null;
@@ -142,13 +129,11 @@ export default function EditorPanel({ chapterId, sceneId, projectId }) {
 			setIsSaving(true);
 			try {
 				if (singleSceneModeRef.current) {
-					// Single-scene mode: save the entire editor content to the one scene.
 					const sid = sceneIdRef.current;
 					if (!sid) return;
 					await scenesApi.updateContent(sid, html);
 					queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(sid) });
 				} else {
-					// Multi-scene mode: split by scene breaks and save each chunk.
 					const firstId = firstSceneIdRef.current;
 					if (!firstId) return;
 					const chunks = parseSceneChunks(html, firstId);
@@ -189,9 +174,6 @@ export default function EditorPanel({ chapterId, sceneId, projectId }) {
 		],
 		content: '',
 		onUpdate: ({ editor }) => {
-			// Scene break detection only applies in multi-scene mode.
-			// In single-scene mode the editor contains exactly one scene's content
-			// with no HR separators, so there is nothing to detect or merge.
 			if (!singleSceneModeRef.current) {
 				const currentIds = getDocSceneBreakIds(editor);
 				const prevIds = prevSceneBreakIdsRef.current;
@@ -248,8 +230,6 @@ export default function EditorPanel({ chapterId, sceneId, projectId }) {
 
 			await scenesApi.reorderInChapter(cid, orderedIds);
 
-			// Pre-update the known order before invalidation so the load effect
-			// does not treat the upcoming refetch as an external reorder.
 			loadedSceneOrderRef.current = orderedIds.join(',');
 			queryClient.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(cid) });
 
@@ -259,20 +239,12 @@ export default function EditorPanel({ chapterId, sceneId, projectId }) {
 	}, [queryClient]);
 
 	// ── load content ─────────────────────────────────────────────────────────
-	//
-	// Single-scene mode: load only the selected scene's content.
-	// Multi-scene mode:  combine all chapter scenes separated by scene break HRs.
-	// The two branches share the same effect so that switching modes — which
-	// changes all three of singleSceneMode, sceneId, and singleScene — fires a
-	// single coherent reload rather than a race between two separate effects.
 
 	useEffect(() => {
 		if (!editor) return;
 
 		if (singleSceneMode) {
 			if (!singleScene) return;
-			// Reload only when the scene identity changes, not on routine refetches
-			// triggered by autosave invalidation.
 			if (loadedSceneIdRef.current === sceneId) return;
 			editor.commands.setContent(singleScene.content || '<p></p>', false);
 			prevSceneBreakIdsRef.current = [];
@@ -280,17 +252,14 @@ export default function EditorPanel({ chapterId, sceneId, projectId }) {
 			return;
 		}
 
-		// Multi-scene mode
 		if (!scenes) return;
 
 		const newOrder = scenes.map(s => s.id).join(',');
 		const chapterChanged = loadedChapterIdRef.current !== chapterId;
 		const orderChanged   = newOrder !== loadedSceneOrderRef.current;
 
-		// No reload needed: same chapter, same scene order.
 		if (!chapterChanged && !orderChanged) return;
 
-		// Flush any pending save from the previous chapter on chapter switch.
 		if (chapterChanged && saveTimer.current) {
 			clearTimeout(saveTimer.current);
 			saveTimer.current = null;
@@ -308,7 +277,7 @@ export default function EditorPanel({ chapterId, sceneId, projectId }) {
 		prevSceneBreakIdsRef.current = scenes.slice(1).map(s => s.id);
 		loadedChapterIdRef.current   = chapterId;
 		loadedSceneOrderRef.current  = newOrder;
-		editor.commands.setContent(html, false); // false = don't emit onUpdate
+		editor.commands.setContent(html, false);
 	}, [editor, scenes, chapterId, singleScene, sceneId, singleSceneMode]);
 
 	useEffect(() => () => {
@@ -316,22 +285,10 @@ export default function EditorPanel({ chapterId, sceneId, projectId }) {
 	}, []);
 
 	// ── render ────────────────────────────────────────────────────────────────
-
-	if (!chapterId && !sceneId) {
-		return (
-			<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.disabled' }}>
-				<Typography variant="body1">Select a chapter or scene to begin editing.</Typography>
-			</Box>
-		);
-	}
-
-	if (isLoading) {
-		return (
-			<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-				<CircularProgress size={28} />
-			</Box>
-		);
-	}
+	//
+	// The toolbar is always rendered so the document settings gear icon remains
+	// accessible regardless of which nav tree node is selected. Only the content
+	// area below the toolbar is conditional on selection state.
 
 	return (
 		<Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -344,63 +301,75 @@ export default function EditorPanel({ chapterId, sceneId, projectId }) {
 				isSaving={isSaving}
 			/>
 
-			<Box
-				sx={{
-					flex: 1,
-					overflowY: 'auto',
-					py: 5,
-					px: 2,
+			{/* ── Content area ─────────────────────────────────────────────── */}
 
-					'--nkms-font-family': settings.fontFamily,
-					'--nkms-font-size': settings.fontSize,
-					'--nkms-line-height': settings.lineHeight,
-					'--nkms-text-indent': settings.firstLineIndent,
-					'--nkms-spacing-after': settings.spacingAfter,
+			{!chapterId && !sceneId ? (
+				<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.disabled' }}>
+					<Typography variant="body1">Select a chapter or scene to begin editing.</Typography>
+				</Box>
+			) : isLoading ? (
+				<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+					<CircularProgress size={28} />
+				</Box>
+			) : (
+				<Box
+					sx={{
+						flex: 1,
+						overflowY: 'auto',
+						py: 5,
+						px: 2,
 
-					'& .tiptap p': {
-						textIndent: 'var(--nkms-text-indent)',
-						marginBottom: 'var(--nkms-spacing-after)',
-						marginTop: 0,
-					},
+						'--nkms-font-family': settings.fontFamily,
+						'--nkms-font-size':   settings.fontSize,
+						'--nkms-line-height': settings.lineHeight,
+						'--nkms-text-indent': settings.firstLineIndent,
+						'--nkms-spacing-after': settings.spacingAfter,
 
-					'& .tiptap': { outline: 'none' },
-
-					'& .tiptap p.is-editor-empty:first-of-type::before': {
-						content: 'attr(data-placeholder)',
-						color: 'text.disabled',
-						pointerEvents: 'none',
-						float: 'left',
-						height: 0,
-					},
-
-					'& .tiptap blockquote': {
-						borderLeft: '3px solid',
-						borderColor: 'divider',
-						pl: 2,
-						ml: 0,
-						color: 'text.secondary',
-						fontStyle: 'italic',
-					},
-
-					'& .tiptap hr': {
-						border: 'none',
-						textAlign: 'center',
-						my: 3,
-						'&::after': {
-							content: '"· · ·"',
-							color: 'text.disabled',
-							letterSpacing: '0.5em',
+						'& .tiptap p': {
+							textIndent:   'var(--nkms-text-indent)',
+							marginBottom: 'var(--nkms-spacing-after)',
+							marginTop:    0,
 						},
-					},
 
-					'& .tiptap h1': { fontSize: '1.6rem', fontWeight: 700, mt: 2, mb: 0.5 },
-					'& .tiptap h2': { fontSize: '1.3rem', fontWeight: 700, mt: 2, mb: 0.5 },
-					'& .tiptap h3': { fontSize: '1.1rem', fontWeight: 600, mt: 1.5, mb: 0.5 },
-					'& .tiptap ul, & .tiptap ol': { pl: 3 },
-				}}
-			>
-				<EditorContent editor={editor} />
-			</Box>
+						'& .tiptap': { outline: 'none' },
+
+						'& .tiptap p.is-editor-empty:first-of-type::before': {
+							content:       'attr(data-placeholder)',
+							color:         'text.disabled',
+							pointerEvents: 'none',
+							float:         'left',
+							height:        0,
+						},
+
+						'& .tiptap blockquote': {
+							borderLeft:  '3px solid',
+							borderColor: 'divider',
+							pl:          2,
+							ml:          0,
+							color:       'text.secondary',
+							fontStyle:   'italic',
+						},
+
+						'& .tiptap hr': {
+							border:    'none',
+							textAlign: 'center',
+							my:        3,
+							'&::after': {
+								content:       '"· · ·"',
+								color:         'text.disabled',
+								letterSpacing: '0.5em',
+							},
+						},
+
+						'& .tiptap h1': { fontSize: '1.6rem', fontWeight: 700, mt: 2, mb: 0.5 },
+						'& .tiptap h2': { fontSize: '1.3rem', fontWeight: 700, mt: 2, mb: 0.5 },
+						'& .tiptap h3': { fontSize: '1.1rem', fontWeight: 600, mt: 1.5, mb: 0.5 },
+						'& .tiptap ul, & .tiptap ol': { pl: 3 },
+					}}
+				>
+					<EditorContent editor={editor} />
+				</Box>
+			)}
 		</Box>
 	);
 }

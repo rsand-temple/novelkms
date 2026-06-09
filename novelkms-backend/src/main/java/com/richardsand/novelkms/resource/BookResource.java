@@ -40,25 +40,25 @@ public class BookResource {
     // -------------------------------------------------------------------------
 
     public static class CreateRequest {
-        @JsonProperty
-        public String title;
-        @JsonProperty
-        public String subtitle;
-        @JsonProperty
-        public String shortTitle;
-        @JsonProperty
-        public String notes;
+        @JsonProperty public String title;
+        @JsonProperty public String subtitle;
+        @JsonProperty public String shortTitle;
+        @JsonProperty public String notes;
     }
 
     public static class UpdateRequest {
-        @JsonProperty
-        public String title;
-        @JsonProperty
-        public String subtitle;
-        @JsonProperty
-        public String shortTitle;
-        @JsonProperty
-        public String notes;
+        @JsonProperty public String  title;
+        @JsonProperty public String  subtitle;
+        @JsonProperty public String  shortTitle;
+        @JsonProperty public String  notes;
+        @JsonProperty public Boolean pageLayoutEnabled;
+        @JsonProperty public String  pageSizePreset;
+        @JsonProperty public Double  pageWidthIn;
+        @JsonProperty public Double  pageHeightIn;
+        @JsonProperty public Double  pageMarginTopIn;
+        @JsonProperty public Double  pageMarginBottomIn;
+        @JsonProperty public Double  pageMarginInnerIn;
+        @JsonProperty public Double  pageMarginOuterIn;
     }
 
     // -------------------------------------------------------------------------
@@ -111,7 +111,14 @@ public class BookResource {
                     .entity("title is required").build();
         }
         try {
-            return bookDao.update(id, req.title, req.subtitle, req.shortTitle, req.notes)
+            return bookDao.update(
+                            id,
+                            req.title, req.subtitle, req.shortTitle, req.notes,
+                            req.pageLayoutEnabled != null && req.pageLayoutEnabled,
+                            req.pageSizePreset,
+                            req.pageWidthIn, req.pageHeightIn,
+                            req.pageMarginTopIn, req.pageMarginBottomIn,
+                            req.pageMarginInnerIn, req.pageMarginOuterIn)
                     .map(b -> Response.ok(b).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {
