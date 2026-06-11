@@ -15,12 +15,16 @@ import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.PartDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
+import com.richardsand.novelkms.dao.StyleDao;
+import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterResource;
 import com.richardsand.novelkms.resource.PartResource;
 import com.richardsand.novelkms.resource.ProjectResource;
 import com.richardsand.novelkms.resource.SceneResource;
+import com.richardsand.novelkms.resource.StyleResource;
+import com.richardsand.novelkms.resource.TemplateResource;
 
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
@@ -81,18 +85,22 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         flyway.migrate();
 
         // DAOs
-        ProjectDao projectDao = new ProjectDao(ds);
-        BookDao    bookDao    = new BookDao(ds);
-        PartDao    partDao    = new PartDao(ds);
-        ChapterDao chapterDao = new ChapterDao(ds);
-        SceneDao   sceneDao   = new SceneDao(ds);
-        
+        ProjectDao  projectDao  = new ProjectDao(ds);
+        BookDao     bookDao     = new BookDao(ds);
+        PartDao     partDao     = new PartDao(ds);
+        ChapterDao  chapterDao  = new ChapterDao(ds);
+        SceneDao    sceneDao    = new SceneDao(ds);
+        TemplateDao templateDao = new TemplateDao(ds);
+        StyleDao    styleDao    = new StyleDao(ds);
+
         // Resources
         env.jersey().register(BookResource.class);
         env.jersey().register(ChapterResource.class);
         env.jersey().register(PartResource.class);
         env.jersey().register(ProjectResource.class);
         env.jersey().register(SceneResource.class);
+        env.jersey().register(TemplateResource.class);
+        env.jersey().register(StyleResource.class);
 
         // ObjectMapper
         ObjectMapper mapper = env.getObjectMapper();
@@ -109,7 +117,10 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(bookDao).to(BookDao.class);
                 bind(partDao).to(PartDao.class);
                 bind(chapterDao).to(ChapterDao.class);
-                bind(sceneDao).to(SceneDao.class);            }
+                bind(sceneDao).to(SceneDao.class);
+                bind(templateDao).to(TemplateDao.class);
+                bind(styleDao).to(StyleDao.class);
+            }
         });
 
         // Health checks

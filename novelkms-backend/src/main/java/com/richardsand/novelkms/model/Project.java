@@ -31,6 +31,14 @@ public class Project {
     @JsonProperty
     private String authorLastName;
 
+    /**
+     * Copyright line for the project / series (e.g. "© 2026 Richard Sand").
+     * Resolved by the COPYRIGHT template token; also intended for a future
+     * page template / about page.
+     */
+    @JsonProperty
+    private String copyright;
+
     @JsonProperty
     private Instant createdAt;
 

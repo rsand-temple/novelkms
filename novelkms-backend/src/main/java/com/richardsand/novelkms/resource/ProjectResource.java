@@ -59,6 +59,8 @@ public class ProjectResource {
         public String authorFirstName;
         @JsonProperty
         public String authorLastName;
+        @JsonProperty
+        public String copyright;
     }
 
     // -------------------------------------------------------------------------
@@ -113,7 +115,7 @@ public class ProjectResource {
         }
         try {
             return projectDao.update(id, req.title, req.description,
-                            req.authorFirstName, req.authorLastName)
+                            req.authorFirstName, req.authorLastName, req.copyright)
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException sqle) {

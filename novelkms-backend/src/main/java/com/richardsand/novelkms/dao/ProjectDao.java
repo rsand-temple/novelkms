@@ -34,6 +34,7 @@ public class ProjectDao {
                 .description(rs.getString("description"))
                 .authorFirstName(rs.getString("author_first_name"))
                 .authorLastName(rs.getString("author_last_name"))
+                .copyright(rs.getString("copyright"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .updatedAt(rs.getTimestamp("updated_at").toInstant())
                 .build();
@@ -94,11 +95,12 @@ public class ProjectDao {
     }
 
     public Optional<Project> update(UUID id, String title, String description,
-            String authorFirstName, String authorLastName) throws SQLException {
+            String authorFirstName, String authorLastName, String copyright) throws SQLException {
         Instant now = Instant.now();
         String  sql = """
                 UPDATE project
-                SET title = ?, description = ?, author_first_name = ?, author_last_name = ?, updated_at = ?
+                SET title = ?, description = ?, author_first_name = ?, author_last_name = ?,
+                    copyright = ?, updated_at = ?
                 WHERE id = ?
                 """;
         try (Connection c = ds.getConnection();
@@ -107,8 +109,9 @@ public class ProjectDao {
             ps.setString(2, description);
             ps.setString(3, authorFirstName);
             ps.setString(4, authorLastName);
-            ps.setTimestamp(5, Timestamp.from(now));
-            ps.setObject(6, id);
+            ps.setString(5, copyright);
+            ps.setTimestamp(6, Timestamp.from(now));
+            ps.setObject(7, id);
             int rows = ps.executeUpdate();
             if (rows == 0) {
                 return Optional.empty();

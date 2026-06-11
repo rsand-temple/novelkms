@@ -11,6 +11,10 @@ import { usePart, PART_KEYS }       from '../../hooks/useParts';
 import { useBook, BOOK_KEYS }       from '../../hooks/useBooks';
 import { useProject }               from '../../hooks/useProjects';
 import { useUpdateProject, PROJECT_KEYS } from '../../hooks/useProjects';
+import {
+	useGlobalTemplate, useBookTemplate,
+	useResetGlobalTemplate, useDeleteBookTemplate,
+} from '../../hooks/useTemplates';
 import { scenesApi }   from '../../api/scenes';
 import { chaptersApi } from '../../api/chapters';
 import { partsApi }    from '../../api/parts';
@@ -163,7 +167,7 @@ function PartProperties({ partId, bookId }) {
 
 // ── Book ──────────────────────────────────────────────────────────────────────
 
-function BookForm({ book, bookId, projectId }) {
+function BookForm({ book, bookId, projectId, selectTemplate }) {
 	const qc = useQueryClient();
 
 	// Metadata
@@ -310,15 +314,35 @@ function BookForm({ book, bookId, projectId }) {
 					Save
 				</Button>
 			</Box>
+
+			{/* ── Page Templates ────────────────────────────────────────────── */}
+			<Divider />
+			<Typography variant="caption" color="text.secondary"
+				sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+				Page Templates
+			</Typography>
+			<Typography variant="caption" color="text.secondary">
+				Cover and part pages for this book. Editing creates a per-book override of the global template.
+			</Typography>
+			<Stack direction="row" spacing={1}>
+				<Button size="small" variant="outlined"
+					onClick={() => selectTemplate?.({ type: 'cover', scope: 'book', bookId })}>
+					Cover Page
+				</Button>
+				<Button size="small" variant="outlined"
+					onClick={() => selectTemplate?.({ type: 'part', scope: 'book', bookId })}>
+					Part Page
+				</Button>
+			</Stack>
 		</Stack>
 	);
 }
 
-function BookProperties({ bookId, projectId }) {
+function BookProperties({ bookId, projectId, selectTemplate }) {
 	const { data: book, isLoading } = useBook(bookId);
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!book) return null;
-	return <BookForm key={book.id} book={book} bookId={bookId} projectId={projectId} />;
+	return <BookForm key={book.id} book={book} bookId={bookId} projectId={projectId} selectTemplate={selectTemplate} />;
 }
 
 // ── Project ───────────────────────────────────────────────────────────────────
@@ -328,6 +352,7 @@ function ProjectForm({ project, projectId }) {
 	const [description,     setDescription]     = useState(project.description     ?? '');
 	const [authorFirstName, setAuthorFirstName] = useState(project.authorFirstName ?? '');
 	const [authorLastName,  setAuthorLastName]  = useState(project.authorLastName  ?? '');
+	const [copyright,       setCopyright]       = useState(project.copyright       ?? '');
 
 	const { mutate: save, isPending } = useUpdateProject();
 
@@ -350,10 +375,13 @@ function ProjectForm({ project, projectId }) {
 				<TextField label="Last Name" size="small" fullWidth
 					value={authorLastName} onChange={(e) => setAuthorLastName(e.target.value)} />
 			</Stack>
+			<TextField label="Copyright" size="small" fullWidth
+				value={copyright} onChange={(e) => setCopyright(e.target.value)}
+				helperText="Resolves the Copyright field token (e.g. © 2026 Your Name)" />
 
 			<Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
 				<Button size="small" variant="contained" disabled={isPending}
-					onClick={() => save({ id: projectId, data: { title, description, authorFirstName, authorLastName } })}>
+					onClick={() => save({ id: projectId, data: { title, description, authorFirstName, authorLastName, copyright } })}>
 					Save
 				</Button>
 			</Box>
@@ -368,10 +396,92 @@ function ProjectProperties({ projectId }) {
 	return <ProjectForm key={project.id} project={project} projectId={projectId} />;
 }
 
+// ── Template ──────────────────────────────────────────────────────────────────
+
+function TemplateProperties({ selection, setSelection }) {
+	const { templateType, templateScope, bookId, projectId } = selection;
+	const isGlobal   = templateScope === 'global';
+	const typeLabel  = templateType === 'part' ? 'Part Page' : 'Cover Page';
+	const scopeLabel = isGlobal ? 'Global default' : 'This book';
+
+	// Both hooks are always called; only the relevant one is enabled.
+	const { data: globalTpl } = useGlobalTemplate(templateType, isGlobal);
+	const { data: bookTpl }   = useBookTemplate(bookId, templateType, !isGlobal);
+	const tpl = isGlobal ? globalTpl : bookTpl;
+	const isOverriding = !isGlobal && tpl?.scope === 'BOOK';
+
+	const resetGlobal    = useResetGlobalTemplate();
+	const deleteOverride = useDeleteBookTemplate();
+
+	function handleClose() {
+		setSelection({
+			projectId: projectId ?? null,
+			bookId:    isGlobal ? null : (bookId ?? null),
+			partId:    null,
+			chapterId: null,
+			sceneId:   null,
+		});
+	}
+
+	return (
+		<Stack spacing={2} sx={{ p: 2 }}>
+			<Typography variant="overline" color="text.secondary">Template</Typography>
+
+			<Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+				<Chip label={typeLabel} size="small" variant="outlined" />
+				<Chip label={scopeLabel} size="small" variant="outlined"
+					color={isGlobal ? 'default' : 'primary'} />
+			</Stack>
+
+			{isGlobal ? (
+				<>
+					<Typography variant="body2" color="text.secondary">
+						Edits here apply to every project unless a book overrides them. Use the preview button to see tokens with sample values.
+					</Typography>
+					<Button size="small" variant="outlined" color="warning"
+						disabled={resetGlobal.isPending}
+						onClick={() => resetGlobal.mutate({ type: templateType })}>
+						Reset to default
+					</Button>
+				</>
+			) : isOverriding ? (
+				<>
+					<Typography variant="body2" color="text.secondary">
+						This book overrides the global {typeLabel.toLowerCase()}. Tokens preview against this book; part tokens use sample values.
+					</Typography>
+					<Button size="small" variant="outlined" color="warning"
+						disabled={deleteOverride.isPending}
+						onClick={() => deleteOverride.mutate({ bookId, type: templateType })}>
+						Reset to global (remove override)
+					</Button>
+				</>
+			) : (
+				<Typography variant="body2" color="text.secondary">
+					Inherited from the global default. Editing will automatically create an override for this book.
+				</Typography>
+			)}
+
+			<Divider />
+			<Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+				<Button size="small" onClick={handleClose}>Done</Button>
+			</Box>
+		</Stack>
+	);
+}
+
 // ── Root panel ────────────────────────────────────────────────────────────────
 
-export default function PropertiesPanel({ selection }) {
-	const { sceneId, chapterId, partId, bookId, projectId } = selection ?? {};
+export default function PropertiesPanel({ selection, setSelection, selectTemplate }) {
+	const { sceneId, chapterId, partId, bookId, projectId, templateType } = selection ?? {};
+
+	// Template mode takes over the panel entirely.
+	if (templateType) {
+		return (
+			<Box sx={{ height: '100%', overflowY: 'auto' }}>
+				<TemplateProperties selection={selection} setSelection={setSelection} />
+			</Box>
+		);
+	}
 
 	if (!sceneId && !chapterId && !partId && !bookId && !projectId) {
 		return (
@@ -390,7 +500,7 @@ export default function PropertiesPanel({ selection }) {
 			{partId && !chapterId && <PartProperties partId={partId} bookId={bookId} />}
 			{/* Book properties: only when book is the deepest selection */}
 			{bookId && !partId && !chapterId && !sceneId && (
-				<BookProperties bookId={bookId} projectId={projectId} />
+				<BookProperties bookId={bookId} projectId={projectId} selectTemplate={selectTemplate} />
 			)}
 			{/* Project properties: only when project is the deepest selection */}
 			{projectId && !bookId && !partId && !chapterId && !sceneId && (

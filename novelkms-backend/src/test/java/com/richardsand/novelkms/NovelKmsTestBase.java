@@ -13,6 +13,8 @@ import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
+import com.richardsand.novelkms.dao.StyleDao;
+import com.richardsand.novelkms.dao.TemplateDao;
 
 /**
  * Abstract base for all NovelKMS tests.
@@ -36,6 +38,8 @@ public abstract class NovelKmsTestBase {
     protected static final BookDao         bookDao;
     protected static final ChapterDao      chapterDao;
     protected static final SceneDao        sceneDao;
+    protected static final TemplateDao     templateDao;
+    protected static final StyleDao        styleDao;
 
     static {
         try {
@@ -57,10 +61,12 @@ public abstract class NovelKmsTestBase {
                     .load()
                     .migrate();
 
-            projectDao = new ProjectDao(ds);
-            bookDao = new BookDao(ds);
-            chapterDao = new ChapterDao(ds);
-            sceneDao = new SceneDao(ds);
+            projectDao  = new ProjectDao(ds);
+            bookDao     = new BookDao(ds);
+            chapterDao  = new ChapterDao(ds);
+            sceneDao    = new SceneDao(ds);
+            templateDao = new TemplateDao(ds);
+            styleDao    = new StyleDao(ds);
 
         } catch (Exception e) {
             throw new ExceptionInInitializerError(e);
@@ -78,6 +84,8 @@ public abstract class NovelKmsTestBase {
     protected static void truncateAll() throws SQLException {
         try (Connection c = ds.getConnection();
                 Statement s = c.createStatement()) {
+            s.execute("DELETE FROM template");
+            s.execute("DELETE FROM style");
             s.execute("DELETE FROM scene");
             s.execute("DELETE FROM chapter");
             s.execute("DELETE FROM part");

@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useEditorState } from '@tiptap/react'
+import { NodeSelection } from '@tiptap/pm/state'
 import {
 	Box, Toolbar, IconButton, Tooltip, Divider,
-	Select, MenuItem, CircularProgress, Typography,
+	Select, MenuItem, Menu, CircularProgress, Typography,
 } from '@mui/material'
 import FormatBoldIcon           from '@mui/icons-material/FormatBold'
 import FormatItalicIcon         from '@mui/icons-material/FormatItalic'
@@ -17,7 +18,11 @@ import FormatAlignRightIcon     from '@mui/icons-material/FormatAlignRight'
 import HorizontalRuleIcon       from '@mui/icons-material/HorizontalRule'
 import SettingsIcon             from '@mui/icons-material/Settings'
 import FormatQuoteIcon          from '@mui/icons-material/FormatQuote'
+import DataObjectIcon           from '@mui/icons-material/DataObject'
+import VisibilityIcon           from '@mui/icons-material/Visibility'
+import VisibilityOffIcon        from '@mui/icons-material/VisibilityOff'
 import DocSettingsPopover       from './DocSettingsPopover'
+import { STYLE_ORDER, STYLE_LABELS, HEADING_KEYS } from '../../utils/styles'
 
 // ── font options ───────────────────────────────────────────────────────────────
 
@@ -50,6 +55,27 @@ function parseEm(val) {
 	if (!val) return 0
 	const m = String(val).match(/^([\d.]+)em$/)
 	return m ? parseFloat(m[1]) : 0
+}
+
+/**
+ * When a TemplateToken atom is clicked it becomes a NodeSelection, so
+ * getAttributes('paragraph') returns {} (the selection is *on* the token, not
+ * inside its parent block). Walk up from $from to the nearest ancestor
+ * paragraph and return its attrs so the toolbar still displays correctly.
+ */
+function resolveParaAttrs(editor) {
+	if (!editor) return {}
+	const { selection } = editor.state
+	const direct = editor.getAttributes('paragraph')
+	if (Object.keys(direct).length > 0 || !(selection instanceof NodeSelection)) {
+		return direct
+	}
+	const $pos = selection.$from
+	for (let d = $pos.depth; d >= 0; d--) {
+		const node = $pos.node(d)
+		if (node.type.name === 'paragraph') return node.attrs
+	}
+	return {}
 }
 
 // ── sub-components ─────────────────────────────────────────────────────────────
@@ -105,18 +131,27 @@ function VDivider() {
  *   onSettingsChange  — updateSettings(patch) from useProjectSettings
  *   onSceneBreak      — async callback: creates DB scene then inserts SceneBreak node
  *   isSaving          — boolean — shows saving spinner when true
+ *   templateMode      — boolean — true when editing a page template
+ *   tokenOptions      — [{ token, label }] for the Insert-field menu (template mode)
+ *   onInsertToken     — (token) => void — inserts a TemplateToken at the cursor
+ *   previewActive     — boolean — true when the resolved preview is showing
+ *   onTogglePreview   — () => void — toggles the preview
  */
-export default function EditorToolbar({ editor, settings, onSettingsChange, onSceneBreak, isSaving }) {
+export default function EditorToolbar({
+	editor, settings, onSettingsChange, onSceneBreak, isSaving,
+	templateMode = false, tokenOptions = [], onInsertToken,
+	previewActive = false, onTogglePreview,
+}) {
 	const [settingsAnchor, setSettingsAnchor] = useState(null)
+	const [fieldAnchor, setFieldAnchor]       = useState(null)
 
 	// useEditorState re-renders this component reactively when editor state changes.
-	// The selector runs on every transaction; keep it cheap.
 	const state = useEditorState({
 		editor,
 		selector: ctx => {
 			const e = ctx.editor
 			if (!e) return {}
-			const paraAttrs = e.getAttributes('paragraph')
+			const paraAttrs = resolveParaAttrs(e)
 			return {
 				isBold:         e.isActive('bold'),
 				isItalic:       e.isActive('italic'),
@@ -127,89 +162,165 @@ export default function EditorToolbar({ editor, settings, onSettingsChange, onSc
 				currentStyle:
 					e.isActive('heading', { level: 1 }) ? 'h1' :
 					e.isActive('heading', { level: 2 }) ? 'h2' :
-					e.isActive('heading', { level: 3 }) ? 'h3' : 'paragraph',
+					e.isActive('heading', { level: 3 }) ? 'h3' :
+					(paraAttrs.styleKey || 'normal'),
+				paraStyleKey:         paraAttrs.styleKey ?? null,
 				paraFontFamily:       paraAttrs.fontFamily ?? null,
 				paraFontSize:         paraAttrs.fontSize   ?? null,
 				paraIndent:           paraAttrs.indent     ?? null,
-				paraFirstLineIndent:  paraAttrs.firstLineIndent, // null = inherit
+				paraFirstLineIndent:  paraAttrs.firstLineIndent,
+				// Inline FontSize mark (used for field-level sizing)
+				markFontSize:         e.getAttributes('fontSize')?.size ?? null,
 				textAlign:            paraAttrs.textAlign  ?? 'left',
 				wordCount:            e.storage?.characterCount?.words?.() ?? 0,
 			}
 		},
 	}) ?? {}
 
-	const isPara = state.currentStyle === 'paragraph'
+	const isPara = !HEADING_KEYS.includes(state.currentStyle)
+
+	// Is a field (or any atom) currently selected?
+	const isNodeSelection = editor ? editor.state.selection instanceof NodeSelection : false
+
+	// ── paragraph-attribute helpers ──────────────────────────────────────────
+
+	/**
+	 * Set attributes on the paragraph that contains the current selection,
+	 * resolving the parent paragraph directly. Works under a NodeSelection
+	 * (e.g. a selected field) where updateAttributes('paragraph') finds nothing.
+	 * Returns false if there is no paragraph ancestor (e.g. a field in a heading).
+	 */
+	function setParagraphAttrs(patch) {
+		if (!editor) return false
+		const { state: s } = editor
+		const { $from } = s.selection
+		for (let d = $from.depth; d >= 1; d--) {
+			const node = $from.node(d)
+			if (node.type.name === 'paragraph') {
+				const pos = $from.before(d)
+				editor.view.dispatch(s.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...patch }))
+				editor.commands.focus()
+				return true
+			}
+		}
+		editor.commands.focus()
+		return false
+	}
+
+	/**
+	 * Apply a paragraph-attribute patch. For ordinary text selections this uses
+	 * the standard updateAttributes path (unchanged behavior, handles multi-
+	 * paragraph ranges). For a NodeSelection it resolves the parent paragraph.
+	 */
+	function applyParaPatch(patch) {
+		if (!editor) return
+		if (isNodeSelection) {
+			setParagraphAttrs(patch)
+		} else {
+			editor.chain().focus().updateAttributes('paragraph', patch).run()
+		}
+	}
 
 	// ── handlers ────────────────────────────────────────────────────────────
 
 	function handleStyleChange(val) {
 		const chain = editor?.chain().focus()
 		if (!chain) return
-		if (val === 'paragraph') {
-			chain.setParagraph().run()
-		} else {
+		if (HEADING_KEYS.includes(val)) {
 			const level = parseInt(val[1], 10)
-			chain.toggleHeading({ level }).run()
+			chain.setHeading({ level }).run()
+			return
 		}
+		// A paragraph style (normal or a block style). Applying a style clears
+		// manual paragraph-level format overrides so the definition shows cleanly.
+		const styleKey = val === 'normal' ? null : val
+		chain
+			.setParagraph()
+			.updateAttributes('paragraph', {
+				styleKey,
+				fontFamily: null, fontSize: null, indent: null,
+				firstLineIndent: null, spacingBefore: null, spacingAfter: null,
+			})
+			.run()
 	}
 
 	function handleFontFamilyChange(val) {
 		// null = inherit project default (no inline override)
 		const attrVal = val === settings.fontFamily ? null : val
-		editor?.chain().focus().updateAttributes('paragraph', { fontFamily: attrVal }).run()
+		applyParaPatch({ fontFamily: attrVal })
 	}
 
 	function handleFontSizeChange(val) {
+		if (!editor) return
+		// A selected field (or any atom) is sized inline via the FontSize mark —
+		// this works whether the field sits in a paragraph or a heading.
+		if (isNodeSelection) {
+			if (val === settings.fontSize) editor.chain().focus().unsetFontSize().run()
+			else                           editor.chain().focus().setFontSize(val).run()
+			return
+		}
 		const attrVal = val === settings.fontSize ? null : val
-		editor?.chain().focus().updateAttributes('paragraph', { fontSize: attrVal }).run()
+		editor.chain().focus().updateAttributes('paragraph', { fontSize: attrVal }).run()
 	}
 
 	function handleIndent() {
 		const cur = parseEm(state.paraIndent)
-		editor?.chain().focus()
-			.updateAttributes('paragraph', { indent: `${cur + 1.5}em` })
-			.run()
+		applyParaPatch({ indent: `${cur + 1.5}em` })
 	}
 
 	function handleOutdent() {
 		const cur = parseEm(state.paraIndent)
 		const next = Math.max(0, cur - 1.5)
-		editor?.chain().focus()
-			.updateAttributes('paragraph', { indent: next > 0 ? `${next}em` : null })
-			.run()
+		applyParaPatch({ indent: next > 0 ? `${next}em` : null })
 	}
 
 	function handleFirstLineIndentToggle() {
-		// Toggle between "no indent" override ('0') and "inherit default" (null).
 		const isOverriddenOff = state.paraFirstLineIndent === '0'
-		editor?.chain().focus()
-			.updateAttributes('paragraph', { firstLineIndent: isOverriddenOff ? null : '0' })
-			.run()
+		applyParaPatch({ firstLineIndent: isOverriddenOff ? null : '0' })
 	}
 
-	// Display values for dropdowns: paragraph override takes priority, then project default
+	function handleInsertTokenClick(token) {
+		onInsertToken?.(token)
+		setFieldAnchor(null)
+	}
+
+	// Display values: inline mark > paragraph override > project default
 	const displayFontFamily = state.paraFontFamily || settings.fontFamily || FONT_FAMILIES[0].value
-	const displayFontSize   = state.paraFontSize   || settings.fontSize   || FONT_SIZES[3].value
+	const displayFontSize   = state.markFontSize || state.paraFontSize || settings.fontSize || FONT_SIZES[3].value
 	const firstLineOverriddenOff = state.paraFirstLineIndent === '0'
+
+	const showFieldMenu = templateMode && tokenOptions.length > 0
 
 	// ── render ───────────────────────────────────────────────────────────────
 
 	return (
 		<Box sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
 
-			{/* ── Row 1: style / font / size / b-i-u / settings ─────────────── */}
+			{/* ── Row 1: style / font / size / b-i-u / fields / preview / settings ── */}
 			<Toolbar variant="dense" disableGutters sx={{ px: 1, gap: 0.25, minHeight: 38 }}>
 
 				{/* Paragraph style */}
 				<ToolbarSelect
-					value={state.currentStyle || 'paragraph'}
+					value={state.currentStyle || 'normal'}
 					onChange={handleStyleChange}
-					sx={{ minWidth: 86 }}
+					sx={{ minWidth: 132 }}
 				>
-					<MenuItem value="paragraph" sx={{ fontSize: '0.85rem' }}>Normal</MenuItem>
-					<MenuItem value="h1"        sx={{ fontSize: '1.1rem', fontWeight: 700 }}>Heading 1</MenuItem>
-					<MenuItem value="h2"        sx={{ fontSize: '0.85rem', fontWeight: 700 }}>Heading 2</MenuItem>
-					<MenuItem value="h3"        sx={{ fontSize: '0.85rem', fontWeight: 600 }}>Heading 3</MenuItem>
+					{STYLE_ORDER.flatMap((key) => {
+						const item = (
+							<MenuItem
+								key={key}
+								value={key}
+								sx={{
+									fontSize:   HEADING_KEYS.includes(key) ? '0.95rem' : '0.85rem',
+									fontWeight: HEADING_KEYS.includes(key) ? 700 : 400,
+								}}
+							>
+								{STYLE_LABELS[key]}
+							</MenuItem>
+						)
+						// Separate the heading group from the paragraph styles.
+						return key === 'h3' ? [item, <Divider key="style-div" sx={{ my: 0.5 }} />] : [item]
+					})}
 				</ToolbarSelect>
 
 				<VDivider />
@@ -262,6 +373,47 @@ export default function EditorToolbar({ editor, settings, onSettingsChange, onSc
 
 				{/* Right group — ml:auto pushes it right; flexShrink:0 prevents clipping */}
 				<Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+
+					{/* Insert field (template mode only) */}
+					{showFieldMenu && (
+						<>
+							<TBtn
+								title="Insert field"
+								onClick={e => setFieldAnchor(e.currentTarget)}
+								disabled={previewActive}
+							>
+								<DataObjectIcon fontSize="small" />
+							</TBtn>
+							<Menu
+								anchorEl={fieldAnchor}
+								open={!!fieldAnchor}
+								onClose={() => setFieldAnchor(null)}
+							>
+								<MenuItem disabled sx={{ fontSize: '0.72rem', opacity: 0.7 }}>Insert field</MenuItem>
+								{tokenOptions.map(opt => (
+									<MenuItem
+										key={opt.token}
+										onClick={() => handleInsertTokenClick(opt.token)}
+										sx={{ fontSize: '0.85rem' }}
+									>
+										{opt.label}
+									</MenuItem>
+								))}
+							</Menu>
+						</>
+					)}
+
+					{/* Preview toggle (template mode only) */}
+					{templateMode && (
+						<TBtn
+							title={previewActive ? 'Back to editing' : 'Preview with sample values'}
+							active={previewActive}
+							onClick={onTogglePreview}
+						>
+							{previewActive ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+						</TBtn>
+					)}
+
 					<VDivider />
 					{/* Doc settings */}
 					<TBtn title="Document settings"
@@ -305,7 +457,7 @@ export default function EditorToolbar({ editor, settings, onSettingsChange, onSc
 					<FormatIndentDecreaseIcon fontSize="small" />
 				</TBtn>
 
-				{/* First-line indent toggle: ¶ icon styled like a toolbar button */}
+				{/* First-line indent toggle */}
 				<Tooltip title={firstLineOverriddenOff ? 'Restore first-line indent' : 'Remove first-line indent'} disableInteractive>
 					<IconButton
 						size="small"
@@ -343,10 +495,9 @@ export default function EditorToolbar({ editor, settings, onSettingsChange, onSc
 
 				<VDivider />
 
-				{/* Scene break — disabled in single-scene view; only meaningful when the
-			    full chapter is loaded and scenes can be split. */}
+				{/* Scene break */}
 				<TBtn
-					title={onSceneBreak ? 'Scene break' : 'Not available in single-scene view'}
+					title={onSceneBreak ? 'Scene break' : 'Not available here'}
 					onClick={onSceneBreak ?? undefined}
 					disabled={!onSceneBreak}
 				>

@@ -104,17 +104,33 @@ class ProjectDaoTest extends NovelKmsTestBase {
         Project original = projectDao.create("Old Title", "Old description");
 
         Instant createdAt = projectDao.findById(original.getId()).get().getCreatedAt();
-        
-        Optional<Project> updated = projectDao.update(original.getId(), "New Title", "New description", null, null);
- 
+
+        Optional<Project> updated = projectDao.update(original.getId(),
+                "New Title", "New description", null, null, null);
+
         assertTrue(updated.isPresent());
         assertEquals("New Title",        updated.get().getTitle());
         assertEquals("New description", updated.get().getDescription());
-        assertFalse(updated.get().getUpdatedAt().isBefore(createdAt));    }
+        assertFalse(updated.get().getUpdatedAt().isBefore(createdAt));
+    }
+
+    @Test
+    void update_persistsAuthorAndCopyright() throws SQLException {
+        Project original = projectDao.create("Untitled", null);
+
+        Optional<Project> updated = projectDao.update(original.getId(),
+                "Untitled", null, "Richard", "Sand", "(c) 2026 Richard Sand");
+
+        assertTrue(updated.isPresent());
+        assertEquals("Richard",                updated.get().getAuthorFirstName());
+        assertEquals("Sand",                   updated.get().getAuthorLastName());
+        assertEquals("(c) 2026 Richard Sand",  updated.get().getCopyright());
+    }
 
     @Test
     void update_unknownId_returnsEmpty() throws SQLException {
-        Optional<Project> updated = projectDao.update(UUID.randomUUID(), "Ghost", null, null, null);
+        Optional<Project> updated = projectDao.update(UUID.randomUUID(),
+                "Ghost", null, null, null, null);
 
         assertFalse(updated.isPresent());
     }

@@ -12,29 +12,29 @@
 	<packaging>jar</packaging>
 
 	<properties>
-		<apache-dbcp2.version>2.13.0</apache-dbcp2.version>
+		<apache-dbcp2.version>2.14.0</apache-dbcp2.version>
 		<commons-beanutils.version>1.11.0</commons-beanutils.version>
-		<commons-cli.version>1.9.0</commons-cli.version>
-		<commons-codec.version>1.19.0</commons-codec.version>
-		<commons-config.version>2.12.0</commons-config.version>
+		<commons-cli.version>1.11.0</commons-cli.version>
+		<commons-codec.version>1.22.0</commons-codec.version>
+		<commons-config.version>2.15.1</commons-config.version>
 		<commons-csv.version>1.14.1</commons-csv.version>
-		<commons-lang3.version>3.18.0</commons-lang3.version>
-		<dropwizard.version>4.0.16</dropwizard.version>
-		<flywaydb.version>11.17.0</flywaydb.version>
+		<commons-lang3.version>3.20.0</commons-lang3.version>
+		<dropwizard.version>4.0.17</dropwizard.version>
+		<flywaydb.version>11.20.3</flywaydb.version>
 		<freemarker.version>2.3.34</freemarker.version>
 		<guava.version>31.1-jre</guava.version>
-		<h2.version>2.3.232</h2.version>
+		<h2.version>2.4.240</h2.version>
 		<httpclient.version>4.5.14</httpclient.version>
-		<jackson.version>2.17.2</jackson.version>
+		<jackson.version>2.22.0</jackson.version>
 		<javax.mail>1.6.2</javax.mail>
 		<jersey.version>2.47</jersey.version>
 		<jetty.version>9.4.58.v20250814</jetty.version>
 		<json.version>20240303</json.version>
-		<junit.version>5.14.0</junit.version>
-		<logback.version>1.5.19</logback.version>
+		<junit.version>5.14.4</junit.version>
+		<logback.version>1.5.34</logback.version>
 		<lombok.version>1.18.20</lombok.version>
 		<nimbus-jose-jwt.version>9.48</nimbus-jose-jwt.version>
-		<postgres.version>42.7.8</postgres.version>
+		<postgres.version>42.7.11</postgres.version>
 	</properties>
 
 	<build>

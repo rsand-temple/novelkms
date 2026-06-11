@@ -3,7 +3,7 @@ import Paragraph from '@tiptap/extension-paragraph'
 /**
  * Replaces the default Paragraph node (StarterKit must have paragraph: false).
  *
- * Adds six optional inline-style attributes that are stored directly on <p> tags:
+ * Inline-style attributes stored directly on <p> tags (manual overrides):
  *   indent           → margin-left
  *   firstLineIndent  → text-indent  (null = inherit project default via CSS custom prop)
  *   fontFamily       → font-family  (null = inherit project default)
@@ -11,12 +11,16 @@ import Paragraph from '@tiptap/extension-paragraph'
  *   spacingBefore    → margin-top
  *   spacingAfter     → margin-bottom
  *
- * Cascade: CSS custom properties on the editor container set project defaults.
- *          Explicit inline styles on <p> override them at paragraph level.
- *          Bold/italic/FontSize marks override at the word level.
+ * Plus a semantic style label:
+ *   styleKey         → data-style="<key>"  (e.g. 'report', 'chapter_title')
  *
- * All attributes use rendered: false so TipTap does NOT emit data-* attributes.
- * Rendering is handled entirely inside renderHTML.
+ * Cascade (lowest → highest priority):
+ *   1. style definition  — CSS keyed on p[data-style="<key>"] (resolved per book/project)
+ *   2. paragraph overrides — explicit inline styles on <p> (the attrs above)
+ *   3. inline marks        — bold/italic/FontSize on a run of text
+ *
+ * data-style is a real attribute (so CSS can target it); the formatting attrs
+ * use rendered:false and are emitted as inline style inside renderHTML.
  */
 export const StyledParagraph = Paragraph.extend({
 	name: 'paragraph',
@@ -29,11 +33,12 @@ export const StyledParagraph = Paragraph.extend({
 			fontSize:        { default: null, rendered: false },
 			spacingBefore:   { default: null, rendered: false },
 			spacingAfter:    { default: null, rendered: false },
+			styleKey:        { default: null, rendered: false },
 		}
 	},
 
 	renderHTML({ node, HTMLAttributes }) {
-		const { indent, firstLineIndent, fontFamily, fontSize, spacingBefore, spacingAfter } = node.attrs
+		const { indent, firstLineIndent, fontFamily, fontSize, spacingBefore, spacingAfter, styleKey } = node.attrs
 
 		const ownStyles = [
 			indent          && `margin-left: ${indent}`,
@@ -54,6 +59,11 @@ export const StyledParagraph = Paragraph.extend({
 		} else {
 			delete attrs.style
 		}
+		if (styleKey) {
+			attrs['data-style'] = styleKey
+		} else {
+			delete attrs['data-style']
+		}
 
 		return ['p', attrs, 0]
 	},
@@ -71,6 +81,7 @@ export const StyledParagraph = Paragraph.extend({
 						fontSize:        s.fontSize     || null,
 						spacingBefore:   s.marginTop    || null,
 						spacingAfter:    s.marginBottom || null,
+						styleKey:        el.getAttribute('data-style') || null,
 					}
 				},
 			},

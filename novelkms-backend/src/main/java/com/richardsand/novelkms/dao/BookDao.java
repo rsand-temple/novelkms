@@ -19,6 +19,12 @@ public class BookDao {
 
     private final BasicDataSource ds;
 
+    // Schema defaults for NOT NULL margin columns (inches)
+    private static final double DEFAULT_MARGIN_TOP    = 1.0;
+    private static final double DEFAULT_MARGIN_BOTTOM = 1.0;
+    private static final double DEFAULT_MARGIN_INNER  = 1.25;
+    private static final double DEFAULT_MARGIN_OUTER  = 1.0;
+
     public BookDao(BasicDataSource ds) {
         this.ds = ds;
     }
@@ -108,8 +114,8 @@ public class BookDao {
                 .id(id).projectId(projectId).title(title).subtitle(subtitle).shortTitle(shortTitle)
                 .displayOrder(displayOrder).notes(notes)
                 .pageLayoutEnabled(false).pageSizePreset("LETTER")
-                .pageMarginTopIn(1.0).pageMarginBottomIn(1.0)
-                .pageMarginInnerIn(1.25).pageMarginOuterIn(1.0)
+                .pageMarginTopIn(DEFAULT_MARGIN_TOP).pageMarginBottomIn(DEFAULT_MARGIN_BOTTOM)
+                .pageMarginInnerIn(DEFAULT_MARGIN_INNER).pageMarginOuterIn(DEFAULT_MARGIN_OUTER)
                 .createdAt(now).updatedAt(now)
                 .build();
     }
@@ -138,12 +144,14 @@ public class BookDao {
             ps.setString(4, notes);
             ps.setBoolean(5, pageLayoutEnabled);
             ps.setString(6, pageSizePreset != null ? pageSizePreset : "LETTER");
-            ps.setObject(7, pageWidthIn);   // null-safe via setObject
-            ps.setObject(8, pageHeightIn);
-            ps.setObject(9, pageMarginTopIn);
-            ps.setObject(10, pageMarginBottomIn);
-            ps.setObject(11, pageMarginInnerIn);
-            ps.setObject(12, pageMarginOuterIn);
+            ps.setObject(7, pageWidthIn); // nullable — CUSTOM presets only
+            ps.setObject(8, pageHeightIn); // nullable — CUSTOM presets only
+            // Margin columns are NOT NULL in the schema — default when the
+            // caller omits them (e.g. a metadata-only update from the UI).
+            ps.setDouble(9, pageMarginTopIn != null ? pageMarginTopIn : DEFAULT_MARGIN_TOP);
+            ps.setDouble(10, pageMarginBottomIn != null ? pageMarginBottomIn : DEFAULT_MARGIN_BOTTOM);
+            ps.setDouble(11, pageMarginInnerIn != null ? pageMarginInnerIn : DEFAULT_MARGIN_INNER);
+            ps.setDouble(12, pageMarginOuterIn != null ? pageMarginOuterIn : DEFAULT_MARGIN_OUTER);
             ps.setTimestamp(13, Timestamp.from(now));
             ps.setObject(14, id);
             int rows = ps.executeUpdate();
