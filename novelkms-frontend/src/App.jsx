@@ -96,6 +96,7 @@ export default function App() {
 
 				<Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 					<EditorPanel
+						partId={selection.partId}
 						chapterId={selection.chapterId}
 						sceneId={selection.sceneId}
 						projectId={selection.projectId}

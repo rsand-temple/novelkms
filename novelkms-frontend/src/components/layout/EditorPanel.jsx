@@ -14,6 +14,7 @@ import { SceneBreak } from '../../extensions/SceneBreak';
 import { TemplateToken } from '../../extensions/TemplateToken';
 import { useProjectSettings } from '../../hooks/useProjectSettings';
 import { useScenes, useScene, useDeleteScene, SCENE_KEYS } from '../../hooks/useScenes';
+import { useChapter } from '../../hooks/useChapters';
 import { useGlobalTemplate, useBookTemplate, TEMPLATE_KEYS } from '../../hooks/useTemplates';
 import { useBook } from '../../hooks/useBooks';
 import { useProject } from '../../hooks/useProjects';
@@ -25,6 +26,7 @@ import { buildStyleSx } from '../../utils/styles';
 import { derivePageConfig } from '../../utils/pageConfig';
 import EditorToolbar from '../editor/EditorToolbar';
 import BookCoverPreview from '../editor/BookCoverPreview';
+import PartPagePreview from '../editor/PartPagePreview';
 
 const AUTOSAVE_DELAY_MS = 1500;
 
@@ -74,7 +76,6 @@ function getDocSceneBreakIds(editor) {
 	return ids;
 }
 
-/** Identity+version key for a resolved template, used to gate content reloads. */
 function templateKey(t) {
 	if (!t) return null;
 	return `${t.scope}:${t.templateType}:${t.bookId ?? ''}:${t.updatedAt}`;
@@ -86,127 +87,134 @@ function templateKey(t) {
  * EditorPanel
  *
  * Props:
- *   chapterId      — selected chapter (multi-scene mode).
+ *   partId         — selected part (part page preview mode).
+ *   chapterId      — selected chapter (multi-scene or chapter-heading mode).
  *   sceneId        — selected scene (single-scene mode).
- *   projectId      — current project (drives useProjectSettings + token preview).
- *   bookId         — current book (book-scope template target + token preview).
- *   templateType   — 'cover' | 'part' | null. When set, the editor is in
- *                    template mode and edits a page template instead of scenes.
+ *   projectId      — current project.
+ *   bookId         — current book.
+ *   templateType   — 'cover' | 'part' | null.
  *   templateScope  — 'global' | 'book' | null.
  *
- * Four modes, mutually exclusive (evaluated in priority order):
- *   • template mode      (templateType set)  — loads/saves a Template row.
- *   • book cover preview (bookId set, no chapter/scene/template, page layout
- *                         enabled on the book) — read-only two-page cover view.
- *   • single-scene mode  (sceneId set)        — one scene.
- *   • multi-scene mode   (chapterId set)      — full chapter with scene breaks.
+ * Modes (priority order):
+ *   1. template mode      — templateType set
+ *   2. book cover preview — bookId, no partId/chapterId/sceneId, page layout on
+ *   3. part page preview  — partId, no chapterId/sceneId, page layout on
+ *   4. single-scene mode  — sceneId set; no chapter heading shown
+ *   5. multi-scene mode   — chapterId set; chapter title/subtitle shown above prose
  */
-export default function EditorPanel({ chapterId, sceneId, projectId, bookId, templateType, templateScope }) {
+export default function EditorPanel({ partId, chapterId, sceneId, projectId, bookId, templateType, templateScope }) {
 	const { settings, updateSettings } = useProjectSettings(projectId);
-
 	const queryClient = useQueryClient();
 
-	// ── Mode ──────────────────────────────────────────────────────────────────
-	const templateMode    = !!templateType;
+	// ── Mode flags ────────────────────────────────────────────────────────────
+	const templateMode = !!templateType;
 	const singleSceneMode = !templateMode && !!sceneId;
+	// Multi-scene mode: chapterId set, no individual scene selected.
+	const multiSceneMode = !templateMode && !singleSceneMode && !!chapterId;
 
 	const isGlobalTpl = templateMode && templateScope === 'global';
-	const isBookTpl   = templateMode && templateScope === 'book';
+	const isBookTpl = templateMode && templateScope === 'book';
 
-	// Book cover preview mode: book selected, page layout enabled, nothing else active.
-	// We need the book record to check pageLayoutEnabled, so fetch it whenever
-	// bookId is set and we're not in template/scene/chapter mode.
-	const coverPreviewEligible = !templateMode && !chapterId && !sceneId && !!bookId;
-	const { data: coverBook }    = useBook(coverPreviewEligible ? bookId : null);
-	const { data: coverProject } = useProject(coverPreviewEligible ? projectId : null);
+	// Page-layout preview modes (book or part selected, page layout enabled).
+	const pagePreviewEligible = !templateMode && !chapterId && !sceneId && !!bookId;
+	const { data: previewPageBook } = useBook(pagePreviewEligible ? bookId : null);
+	const { data: previewPageProject } = useProject(pagePreviewEligible ? projectId : null);
 	const pageConfig = useMemo(
-		() => (coverPreviewEligible ? derivePageConfig(coverBook) : null),
-		[coverPreviewEligible, coverBook]
+		() => pagePreviewEligible ? derivePageConfig(previewPageBook) : null,
+		[pagePreviewEligible, previewPageBook]
 	);
-	const bookCoverMode = coverPreviewEligible && !!pageConfig;
+	const bookCoverMode = pagePreviewEligible && !partId && !!pageConfig;
+	const partPageMode = pagePreviewEligible && !!partId && !!pageConfig;
+	const inPagePreviewMode = bookCoverMode || partPageMode;
 
-	// ── Data ────────────────────────────────────────────────────────────────
-	const { data: scenes,      isLoading: scenesLoading      } = useScenes(!templateMode && !singleSceneMode ? chapterId : null);
+	// ── Chapter data for heading (multi-scene mode only) ──────────────────────
+	// Provides title, subtitle, and chapterNumber for the heading rendered above
+	// the prose. Not fetched in single-scene mode (heading is suppressed there).
+	const { data: chapterData } = useChapter(multiSceneMode ? chapterId : null);
+
+	// ── Scene / template data ─────────────────────────────────────────────────
+	const { data: scenes, isLoading: scenesLoading } = useScenes(multiSceneMode ? chapterId : null);
 	const { data: singleScene, isLoading: singleSceneLoading } = useScene(singleSceneMode ? sceneId : null);
 
 	const { data: globalTpl, isLoading: globalTplLoading } = useGlobalTemplate(templateType, isGlobalTpl);
-	const { data: bookTpl,   isLoading: bookTplLoading   } = useBookTemplate(bookId, templateType, isBookTpl);
-	const template        = isGlobalTpl ? globalTpl : (isBookTpl ? bookTpl : null);
+	const { data: bookTpl, isLoading: bookTplLoading } = useBookTemplate(bookId, templateType, isBookTpl);
+	const template = isGlobalTpl ? globalTpl : (isBookTpl ? bookTpl : null);
 	const templateLoading = (isGlobalTpl && globalTplLoading) || (isBookTpl && bookTplLoading);
 
-	// Preview binding sources (book scope resolves against real data).
-	const { data: previewBook }    = useBook(isBookTpl ? bookId : null);
+	const { data: previewBook } = useBook(isBookTpl ? bookId : null);
 	const { data: previewProject } = useProject(projectId);
 
-	// Resolved stylesheet for the active scope (book when known, else global).
-	const { data: bookStyleSheet }   = useBookStyles(bookId, !!bookId);
+	const { data: bookStyleSheet } = useBookStyles(bookId, !!bookId);
 	const { data: globalStyleSheet } = useGlobalStyles(!bookId);
 	const styleSheet = bookId ? bookStyleSheet : globalStyleSheet;
 
-	const isLoading = templateMode ? templateLoading : (singleSceneMode ? singleSceneLoading : scenesLoading);
+	const isLoading = templateMode
+		? templateLoading
+		: singleSceneMode
+			? singleSceneLoading
+			: scenesLoading;
 
 	const { mutate: deleteScene } = useDeleteScene();
 
-	const [isSaving, setIsSaving]           = useState(false);
+	const [isSaving, setIsSaving] = useState(false);
 	const [previewActive, setPreviewActive] = useState(false);
 
-	// ── refs ─────────────────────────────────────────────────────────────────
-	const saveTimer             = useRef(null);
-	const firstSceneIdRef       = useRef(null);
-	const prevSceneBreakIdsRef  = useRef([]);
-	const loadedChapterIdRef    = useRef(null);
-	const loadedSceneOrderRef   = useRef('');
-	const loadedSceneIdRef      = useRef(null);
-	const loadedTemplateKeyRef  = useRef(null);
-	const singleSceneModeRef    = useRef(singleSceneMode);
-	const templateModeRef       = useRef(templateMode);
-	const templateScopeRef      = useRef(templateScope);
-	const templateTypeRef       = useRef(templateType);
-	const bookIdRef             = useRef(bookId);
-	const sceneIdRef            = useRef(sceneId);
-	const scheduleSaveRef       = useRef(null);
-	const chapterIdRef          = useRef(chapterId);
-	const editorRef             = useRef(null);
+	// previewActive is only meaningful in template mode. Gating on templateMode
+	// here avoids calling setState in an effect (cascading-render warning).
+	const showEditorPreview = templateMode && previewActive;
 
-	useEffect(() => { chapterIdRef.current       = chapterId;       }, [chapterId]);
+	// ── refs ─────────────────────────────────────────────────────────────────
+	const saveTimer = useRef(null);
+	const firstSceneIdRef = useRef(null);
+	const prevSceneBreakIdsRef = useRef([]);
+	const loadedChapterIdRef = useRef(null);
+	const loadedSceneOrderRef = useRef('');
+	const loadedSceneIdRef = useRef(null);
+	const loadedTemplateKeyRef = useRef(null);
+	const singleSceneModeRef = useRef(singleSceneMode);
+	const templateModeRef = useRef(templateMode);
+	const templateScopeRef = useRef(templateScope);
+	const templateTypeRef = useRef(templateType);
+	const bookIdRef = useRef(bookId);
+	const sceneIdRef = useRef(sceneId);
+	const scheduleSaveRef = useRef(null);
+	const chapterIdRef = useRef(chapterId);
+	const editorRef = useRef(null);
+
+	useEffect(() => { chapterIdRef.current = chapterId; }, [chapterId]);
 	useEffect(() => { singleSceneModeRef.current = singleSceneMode; }, [singleSceneMode]);
-	useEffect(() => { templateModeRef.current    = templateMode;    }, [templateMode]);
-	useEffect(() => { templateScopeRef.current   = templateScope;   }, [templateScope]);
-	useEffect(() => { templateTypeRef.current    = templateType;    }, [templateType]);
-	useEffect(() => { bookIdRef.current          = bookId;          }, [bookId]);
-	useEffect(() => { sceneIdRef.current         = sceneId;         }, [sceneId]);
+	useEffect(() => { templateModeRef.current = templateMode; }, [templateMode]);
+	useEffect(() => { templateScopeRef.current = templateScope; }, [templateScope]);
+	useEffect(() => { templateTypeRef.current = templateType; }, [templateType]);
+	useEffect(() => { bookIdRef.current = bookId; }, [bookId]);
+	useEffect(() => { sceneIdRef.current = sceneId; }, [sceneId]);
 	useEffect(() => { if (scenes?.length) firstSceneIdRef.current = scenes[0].id; }, [scenes]);
 
-	// Toggling single/multi within scene mode resets the relevant load guard.
 	useEffect(() => {
 		if (singleSceneMode) {
-			loadedChapterIdRef.current  = null;
+			loadedChapterIdRef.current = null;
 			loadedSceneOrderRef.current = '';
 		} else {
 			loadedSceneIdRef.current = null;
 		}
 	}, [singleSceneMode]);
 
-	// Entering/leaving template mode, or changing the template target, forces a
-	// fresh content load and cancels any pending autosave.
 	useEffect(() => {
 		if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
 		loadedTemplateKeyRef.current = null;
-		loadedChapterIdRef.current   = null;
-		loadedSceneOrderRef.current  = '';
-		loadedSceneIdRef.current     = null;
+		loadedChapterIdRef.current = null;
+		loadedSceneOrderRef.current = '';
+		loadedSceneIdRef.current = null;
 		prevSceneBreakIdsRef.current = [];
-		setPreviewActive(false);
 	}, [templateMode, templateType, templateScope, bookId]);
 
-	// ── save ──────────────────────────────────────────────────────────────────
+	// ── save ─────────────────────────────────────────────────────────────────
 
 	const scheduleSave = useCallback((html) => {
 		if (saveTimer.current) clearTimeout(saveTimer.current);
 		saveTimer.current = setTimeout(async () => {
 			setIsSaving(true);
 			try {
-				// Template mode — save to the global or book-override row.
 				if (templateModeRef.current) {
 					const type = templateTypeRef.current;
 					let saved;
@@ -232,9 +240,7 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 					if (!firstId) return;
 					const chunks = parseSceneChunks(html, firstId);
 					if (!chunks.length) return;
-					await Promise.all(
-						chunks.map(c => scenesApi.updateContent(c.sceneId, c.content))
-					);
+					await Promise.all(chunks.map(c => scenesApi.updateContent(c.sceneId, c.content)));
 					chunks.forEach(c =>
 						queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(c.sceneId) })
 					);
@@ -253,11 +259,7 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 
 	const editor = useEditor({
 		extensions: [
-			StarterKit.configure({
-				paragraph: false,
-				underline: false,
-				horizontalRule: false,
-			}),
+			StarterKit.configure({ paragraph: false, underline: false, horizontalRule: false }),
 			StyledParagraph,
 			FontSize,
 			SceneBreak,
@@ -269,23 +271,16 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 		],
 		content: '',
 		onUpdate: ({ editor }) => {
-			// Scene-break add/remove tracking only applies to multi-scene editing.
 			if (!singleSceneModeRef.current && !templateModeRef.current) {
 				const currentIds = getDocSceneBreakIds(editor);
 				const prevIds = prevSceneBreakIdsRef.current;
 				const removedIds = prevIds.filter(id => !currentIds.includes(id));
-
 				if (removedIds.length > 0) {
 					const cid = chapterIdRef.current;
 					loadedSceneOrderRef.current = loadedSceneOrderRef.current
-						.split(',')
-						.filter(id => !removedIds.includes(id))
-						.join(',');
-					removedIds.forEach(id => {
-						deleteScene({ id, chapterId: cid });
-					});
+						.split(',').filter(id => !removedIds.includes(id)).join(',');
+					removedIds.forEach(id => deleteScene({ id, chapterId: cid }));
 				}
-
 				prevSceneBreakIdsRef.current = currentIds;
 			}
 			scheduleSaveRef.current?.(editor.getHTML());
@@ -314,50 +309,40 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 		const cid = chapterIdRef.current;
 		const firstId = firstSceneIdRef.current;
 		if (!cid || !firstId || !editorRef.current) return;
-
 		try {
 			const newScene = await scenesApi.create(cid, { title: '' });
-
 			const ed = editorRef.current;
 			ed.chain().focus().setSceneBreak({ sceneId: newScene.id }).run();
-
 			const breakIds = getDocSceneBreakIds(ed);
 			const orderedIds = [firstId, ...breakIds];
-
 			await scenesApi.reorderInChapter(cid, orderedIds);
-
 			loadedSceneOrderRef.current = orderedIds.join(',');
 			queryClient.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(cid) });
-
 		} catch (err) {
 			console.error('[EditorPanel] Failed to insert scene break:', err);
 		}
 	}, [queryClient]);
 
-	// ── token insertion + preview ──────────────────────────────────────────────
+	// ── token insertion + preview ─────────────────────────────────────────────
 
 	const tokenOptions = useMemo(
 		() => (templateMode ? tokensForType(templateType) : []),
 		[templateMode, templateType]
 	);
-
 	const handleInsertToken = useCallback((token) => {
 		editorRef.current?.chain().focus().insertTemplateToken({ token }).run();
 	}, []);
-
 	const handleTogglePreview = useCallback(() => setPreviewActive(p => !p), []);
 
 	const previewValues = useMemo(
 		() => resolveValues({ scope: templateScope, book: previewBook, project: previewProject }),
 		[templateScope, previewBook, previewProject]
 	);
-
 	const previewHtml = useMemo(() => {
-		if (!previewActive || !editor) return '';
+		if (!showEditorPreview || !editor) return '';
 		return renderPreviewHtml(editor.getHTML(), previewValues);
-	}, [previewActive, previewValues, editor]);
+	}, [showEditorPreview, previewValues, editor]);
 
-	// Per-style CSS (headings + p[data-style=...]) from the resolved sheet.
 	const styleSx = useMemo(() => buildStyleSx(styleSheet), [styleSheet]);
 
 	// ── load content ─────────────────────────────────────────────────────────
@@ -365,7 +350,6 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 	useEffect(() => {
 		if (!editor) return;
 
-		// Template mode
 		if (templateMode) {
 			if (!template) return;
 			const key = templateKey(template);
@@ -376,7 +360,6 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 			return;
 		}
 
-		// Single-scene mode
 		if (singleSceneMode) {
 			if (!singleScene) return;
 			if (loadedSceneIdRef.current === sceneId) return;
@@ -386,22 +369,17 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 			return;
 		}
 
-		// Multi-scene mode
 		if (!scenes) return;
 
 		const newOrder = scenes.map(s => s.id).join(',');
 		const chapterChanged = loadedChapterIdRef.current !== chapterId;
-		const orderChanged   = newOrder !== loadedSceneOrderRef.current;
+		const orderChanged = newOrder !== loadedSceneOrderRef.current;
 
 		if (!chapterChanged && !orderChanged) return;
-
-		if (chapterChanged && saveTimer.current) {
-			clearTimeout(saveTimer.current);
-			saveTimer.current = null;
-		}
+		if (chapterChanged && saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
 
 		if (scenes.length === 0) {
-			loadedChapterIdRef.current  = chapterId;
+			loadedChapterIdRef.current = chapterId;
 			loadedSceneOrderRef.current = '';
 			prevSceneBreakIdsRef.current = [];
 			editor.commands.setContent('', false);
@@ -410,24 +388,24 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 
 		const html = buildCombinedHTML(scenes);
 		prevSceneBreakIdsRef.current = scenes.slice(1).map(s => s.id);
-		loadedChapterIdRef.current   = chapterId;
-		loadedSceneOrderRef.current  = newOrder;
+		loadedChapterIdRef.current = chapterId;
+		loadedSceneOrderRef.current = newOrder;
 		editor.commands.setContent(html, false);
 	}, [editor, scenes, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template]);
 
-	useEffect(() => () => {
-		if (saveTimer.current) clearTimeout(saveTimer.current);
-	}, []);
+	useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
 	// ── render ────────────────────────────────────────────────────────────────
 
-	// Empty state: no template, no chapter/scene, and no book-cover preview
-	// (either page layout is off, or no book is selected at all).
-	const showEmptyState = !templateMode && !chapterId && !sceneId && !bookCoverMode;
+	const showEmptyState = !templateMode && !chapterId && !sceneId && !inPagePreviewMode;
+	const toolbarEditor = inPagePreviewMode ? null : editor;
 
-	// In book cover mode the toolbar controls aren't useful, so pass null to
-	// disable them while still keeping the doc-settings gear accessible.
-	const toolbarEditor = bookCoverMode ? null : editor;
+	// Chapter heading values (multi-scene mode only).
+	// Falls back to "Chapter N" when the chapter has no defined title.
+	const chapterHeadingTitle = chapterData
+		? (chapterData.title?.trim() || `Chapter ${chapterData.chapterNumber}`)
+		: null;
+	const chapterHeadingSubtitle = chapterData?.subtitle?.trim() || null;
 
 	return (
 		<Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -436,7 +414,7 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 				editor={toolbarEditor}
 				settings={settings}
 				onSettingsChange={updateSettings}
-				onSceneBreak={(singleSceneMode || templateMode || bookCoverMode) ? null : handleSceneBreak}
+				onSceneBreak={(singleSceneMode || templateMode || inPagePreviewMode) ? null : handleSceneBreak}
 				isSaving={isSaving}
 				templateMode={templateMode}
 				tokenOptions={tokenOptions}
@@ -450,8 +428,17 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 			{bookCoverMode ? (
 				<BookCoverPreview
 					bookId={bookId}
-					book={coverBook}
-					project={coverProject}
+					book={previewPageBook}
+					project={previewPageProject}
+					pageConfig={pageConfig}
+					settings={settings}
+				/>
+			) : partPageMode ? (
+				<PartPagePreview
+					partId={partId}
+					bookId={bookId}
+					book={previewPageBook}
+					project={previewPageProject}
 					pageConfig={pageConfig}
 					settings={settings}
 				/>
@@ -472,88 +459,124 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 						px: 2,
 
 						'--nkms-font-family': settings.fontFamily,
-						'--nkms-font-size':   settings.fontSize,
+						'--nkms-font-size': settings.fontSize,
 						'--nkms-line-height': settings.lineHeight,
-						// Templates are layout-precise — suppress the body first-line
-						// indent so centered title/byline lines aren't shifted.
 						'--nkms-text-indent': templateMode ? '0px' : settings.firstLineIndent,
 						'--nkms-spacing-after': settings.spacingAfter,
 
 						'& .tiptap p': {
-							textIndent:   'var(--nkms-text-indent)',
+							textIndent: 'var(--nkms-text-indent)',
 							marginBottom: 'var(--nkms-spacing-after)',
-							marginTop:    0,
+							marginTop: 0,
 						},
-
 						'& .tiptap': { outline: 'none' },
-
 						'& .tiptap p.is-editor-empty:first-of-type::before': {
-							content:       'attr(data-placeholder)',
-							color:         'text.disabled',
+							content: 'attr(data-placeholder)',
+							color: 'text.disabled',
 							pointerEvents: 'none',
-							float:         'left',
-							height:        0,
+							float: 'left',
+							height: 0,
 						},
-
-						// Template field pill (TemplateToken node view)
 						'& .nkms-token': {
-							display:       'inline-block',
-							px:            0.5,
-							borderRadius:  0.75,
-							bgcolor:       'primary.main',
-							color:         'primary.contrastText',
-							fontSize:      '0.8em',
-							fontFamily:    'system-ui, -apple-system, sans-serif',
-							lineHeight:    1.5,
-							whiteSpace:    'nowrap',
-							userSelect:    'none',
+							display: 'inline-block',
+							px: 0.5,
+							borderRadius: 0.75,
+							bgcolor: 'primary.main',
+							color: 'primary.contrastText',
+							fontSize: '0.8em',
+							fontFamily: 'system-ui, -apple-system, sans-serif',
+							lineHeight: 1.5,
+							whiteSpace: 'nowrap',
+							userSelect: 'none',
 							verticalAlign: 'baseline',
 						},
-
 						'& .tiptap blockquote': {
-							borderLeft:  '3px solid',
+							borderLeft: '3px solid',
 							borderColor: 'divider',
-							pl:          2,
-							ml:          0,
-							color:       'text.secondary',
-							fontStyle:   'italic',
+							pl: 2,
+							ml: 0,
+							color: 'text.secondary',
+							fontStyle: 'italic',
 						},
-
 						'& .tiptap hr': {
-							border:    'none',
+							border: 'none',
 							textAlign: 'center',
-							my:        3,
+							my: 3,
 							'&::after': {
-								content:       '"· · ·"',
-								color:         'text.disabled',
+								content: '"· · ·"',
+								color: 'text.disabled',
 								letterSpacing: '0.5em',
 							},
 						},
-
 						'& .tiptap h1': { fontSize: '1.6rem', fontWeight: 700, mt: 2, mb: 0.5 },
 						'& .tiptap h2': { fontSize: '1.3rem', fontWeight: 700, mt: 2, mb: 0.5 },
 						'& .tiptap h3': { fontSize: '1.1rem', fontWeight: 600, mt: 1.5, mb: 0.5 },
 						'& .tiptap ul, & .tiptap ol': { pl: 3 },
 
-						// Per-style definitions (override the hard-coded heading fallbacks above).
 						...styleSx,
 					}}
 				>
-					{/* Editor view stays mounted; hidden (not unmounted) during preview. */}
-					<Box sx={{ display: previewActive ? 'none' : 'block' }}>
+					{/* Editor content and the chapter heading share the same
+					    display:none wrapper so they disappear together during
+					    template preview. showEditorPreview is always false outside
+					    template mode, so the heading is always visible here. */}
+					<Box sx={{ display: showEditorPreview ? 'none' : 'block' }}>
+
+						{/* Chapter heading — multi-scene mode only.
+						    Not shown when a single scene is selected: the user chose
+						    a specific scene so the chapter context is secondary. */}
+						{multiSceneMode && chapterHeadingTitle && (
+							<Box
+								sx={{
+									textAlign: 'center',
+									maxWidth: '72ch',
+									mx: 'auto',
+									px: 1,
+									mb: 5,
+								}}
+							>
+								<Typography
+									sx={{
+										fontFamily: 'var(--nkms-font-family)',
+										fontSize: '1.75rem',
+										fontWeight: 700,
+										lineHeight: 1.2,
+										color: 'text.primary',
+									}}
+								>
+									{chapterHeadingTitle}
+								</Typography>
+
+								{chapterHeadingSubtitle && (
+									<Typography
+										sx={{
+											fontFamily: 'var(--nkms-font-family)',
+											fontSize: '1.1rem',
+											fontWeight: 400,
+											fontStyle: 'italic',
+											color: 'text.secondary',
+											mt: 0.75,
+										}}
+									>
+										{chapterHeadingSubtitle}
+									</Typography>
+								)}
+							</Box>
+						)}
+
 						<EditorContent editor={editor} />
 					</Box>
 
-					{templateMode && previewActive && (
+					{showEditorPreview && (
 						<Box
 							className="tiptap"
 							sx={{
 								fontFamily: 'var(--nkms-font-family)',
-								fontSize:   'var(--nkms-font-size)',
+								fontSize: 'var(--nkms-font-size)',
 								lineHeight: 'var(--nkms-line-height)',
-								maxWidth:   '72ch',
-								mx:         'auto',
-								px:         1,
+								maxWidth: '72ch',
+								mx: 'auto',
+								px: 1,
 							}}
 							dangerouslySetInnerHTML={{ __html: previewHtml }}
 						/>
