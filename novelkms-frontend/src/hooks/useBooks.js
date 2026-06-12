@@ -54,3 +54,45 @@ export const useDeleteBook = () => {
     },
   })
 }
+
+// ── Cover image mutations ─────────────────────────────────────────────────────
+
+/**
+ * Uploads a cover image for a book.
+ * Variables: { id, file, projectId? }
+ *   id        — book UUID
+ *   file      — File object from <input type="file">
+ *   projectId — if provided, also invalidates the book list so hasCoverImage
+ *               is fresh in any list view.
+ */
+export const useUploadCoverImage = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, file }) => booksApi.uploadCoverImage(id, file),
+    onSuccess: (_, { id, projectId }) => {
+      // Invalidating the detail re-fetches hasCoverImage and the new updatedAt,
+      // which the BookCoverPreview uses as a cache-buster on the image URL.
+      queryClient.invalidateQueries({ queryKey: BOOK_KEYS.detail(id) })
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: BOOK_KEYS.byProject(projectId) })
+      }
+    },
+  })
+}
+
+/**
+ * Removes the cover image from a book.
+ * Variables: { id, projectId? }
+ */
+export const useDeleteCoverImage = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }) => booksApi.deleteCoverImage(id),
+    onSuccess: (_, { id, projectId }) => {
+      queryClient.invalidateQueries({ queryKey: BOOK_KEYS.detail(id) })
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: BOOK_KEYS.byProject(projectId) })
+      }
+    },
+  })
+}

@@ -68,6 +68,17 @@ public class Book {
     @JsonProperty
     private Double pageMarginOuterIn;
 
+    // ── Cover image ───────────────────────────────────────────────────────────
+
+    /**
+     * True when a cover image has been uploaded for this book.
+     * The image bytes themselves are never serialized here — they are served
+     * via GET /api/books/{id}/cover-image.  This flag lets the frontend know
+     * whether to render a thumbnail or a placeholder without fetching the blob.
+     */
+    @JsonProperty
+    private boolean hasCoverImage;
+
     // ── Timestamps ────────────────────────────────────────────────────────────
 
     @JsonProperty

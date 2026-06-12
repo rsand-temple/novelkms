@@ -1,6 +1,7 @@
 package com.richardsand.novelkms.resource;
 
 import java.sql.SQLException;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -61,8 +62,18 @@ public class BookResource {
         @JsonProperty public Double  pageMarginOuterIn;
     }
 
+    /**
+     * Body for cover-image upload.
+     * imageData — base64-encoded raw image bytes.
+     * mimeType  — e.g. "image/jpeg", "image/png", "image/webp".
+     */
+    public static class CoverImageRequest {
+        @JsonProperty public String imageData;
+        @JsonProperty public String mimeType;
+    }
+
     // -------------------------------------------------------------------------
-    // Endpoints
+    // Book CRUD
     // -------------------------------------------------------------------------
 
     @GET
@@ -131,6 +142,73 @@ public class BookResource {
     public Response deleteBook(@PathParam("id") UUID id) {
         try {
             return bookDao.delete(id)
+                    ? Response.noContent().build()
+                    : Response.status(Response.Status.NOT_FOUND).build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Cover image
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the raw cover image bytes with the correct Content-Type header.
+     * The method-level @Produces overrides the class-level JSON default.
+     */
+    @GET
+    @Path("/books/{id}/cover-image")
+    @Produces(MediaType.WILDCARD)
+    public Response getCoverImage(@PathParam("id") UUID id) {
+        try {
+            return bookDao.getCoverImage(id)
+                    .map(img -> Response.ok(img.data(), img.mimeType()).build())
+                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    /**
+     * Stores or replaces the cover image for a book.
+     * Accepts { "imageData": "<base64>", "mimeType": "image/jpeg" }.
+     * Returns 204 on success, 404 if the book does not exist.
+     */
+    @PUT
+    @Path("/books/{id}/cover-image")
+    public Response setCoverImage(@PathParam("id") UUID id, CoverImageRequest req) {
+        if (req == null || req.imageData == null || req.mimeType == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("imageData and mimeType are required").build();
+        }
+        if (!req.mimeType.startsWith("image/")) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("mimeType must be an image type (e.g. image/jpeg)").build();
+        }
+        try {
+            byte[] bytes = Base64.getDecoder().decode(req.imageData);
+            boolean found = bookDao.setCoverImage(id, bytes, req.mimeType);
+            return found
+                    ? Response.noContent().build()
+                    : Response.status(Response.Status.NOT_FOUND).build();
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("imageData must be valid base64").build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    /**
+     * Removes the cover image from a book.
+     * Returns 204 on success, 404 if the book does not exist.
+     */
+    @DELETE
+    @Path("/books/{id}/cover-image")
+    public Response deleteCoverImage(@PathParam("id") UUID id) {
+        try {
+            return bookDao.deleteCoverImage(id)
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
         } catch (SQLException e) {

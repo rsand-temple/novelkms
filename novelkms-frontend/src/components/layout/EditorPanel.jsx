@@ -22,7 +22,9 @@ import { scenesApi } from '../../api/scenes';
 import { templatesApi } from '../../api/templates';
 import { resolveValues, renderPreviewHtml, tokensForType } from '../../utils/templateTokens';
 import { buildStyleSx } from '../../utils/styles';
+import { derivePageConfig } from '../../utils/pageConfig';
 import EditorToolbar from '../editor/EditorToolbar';
+import BookCoverPreview from '../editor/BookCoverPreview';
 
 const AUTOSAVE_DELAY_MS = 1500;
 
@@ -92,11 +94,12 @@ function templateKey(t) {
  *                    template mode and edits a page template instead of scenes.
  *   templateScope  — 'global' | 'book' | null.
  *
- * Three modes, mutually exclusive:
- *   • template mode (templateType set) — loads/saves a Template row; the
- *     Insert-field menu and preview toggle are enabled; scene-break is off.
- *   • single-scene mode (sceneId set)  — one scene.
- *   • multi-scene mode (chapterId set) — full chapter with scene breaks.
+ * Four modes, mutually exclusive (evaluated in priority order):
+ *   • template mode      (templateType set)  — loads/saves a Template row.
+ *   • book cover preview (bookId set, no chapter/scene/template, page layout
+ *                         enabled on the book) — read-only two-page cover view.
+ *   • single-scene mode  (sceneId set)        — one scene.
+ *   • multi-scene mode   (chapterId set)      — full chapter with scene breaks.
  */
 export default function EditorPanel({ chapterId, sceneId, projectId, bookId, templateType, templateScope }) {
 	const { settings, updateSettings } = useProjectSettings(projectId);
@@ -109,6 +112,18 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 
 	const isGlobalTpl = templateMode && templateScope === 'global';
 	const isBookTpl   = templateMode && templateScope === 'book';
+
+	// Book cover preview mode: book selected, page layout enabled, nothing else active.
+	// We need the book record to check pageLayoutEnabled, so fetch it whenever
+	// bookId is set and we're not in template/scene/chapter mode.
+	const coverPreviewEligible = !templateMode && !chapterId && !sceneId && !!bookId;
+	const { data: coverBook }    = useBook(coverPreviewEligible ? bookId : null);
+	const { data: coverProject } = useProject(coverPreviewEligible ? projectId : null);
+	const pageConfig = useMemo(
+		() => (coverPreviewEligible ? derivePageConfig(coverBook) : null),
+		[coverPreviewEligible, coverBook]
+	);
+	const bookCoverMode = coverPreviewEligible && !!pageConfig;
 
 	// ── Data ────────────────────────────────────────────────────────────────
 	const { data: scenes,      isLoading: scenesLoading      } = useScenes(!templateMode && !singleSceneMode ? chapterId : null);
@@ -132,7 +147,7 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 
 	const { mutate: deleteScene } = useDeleteScene();
 
-	const [isSaving, setIsSaving]         = useState(false);
+	const [isSaving, setIsSaving]           = useState(false);
 	const [previewActive, setPreviewActive] = useState(false);
 
 	// ── refs ─────────────────────────────────────────────────────────────────
@@ -173,8 +188,7 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 	}, [singleSceneMode]);
 
 	// Entering/leaving template mode, or changing the template target, forces a
-	// fresh content load and cancels any pending autosave so it can't fire
-	// against the wrong target.
+	// fresh content load and cancels any pending autosave.
 	useEffect(() => {
 		if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
 		loadedTemplateKeyRef.current = null;
@@ -407,16 +421,22 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 
 	// ── render ────────────────────────────────────────────────────────────────
 
-	const showEmptyState = !templateMode && !chapterId && !sceneId;
+	// Empty state: no template, no chapter/scene, and no book-cover preview
+	// (either page layout is off, or no book is selected at all).
+	const showEmptyState = !templateMode && !chapterId && !sceneId && !bookCoverMode;
+
+	// In book cover mode the toolbar controls aren't useful, so pass null to
+	// disable them while still keeping the doc-settings gear accessible.
+	const toolbarEditor = bookCoverMode ? null : editor;
 
 	return (
 		<Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
 			<EditorToolbar
-				editor={editor}
+				editor={toolbarEditor}
 				settings={settings}
 				onSettingsChange={updateSettings}
-				onSceneBreak={(singleSceneMode || templateMode) ? null : handleSceneBreak}
+				onSceneBreak={(singleSceneMode || templateMode || bookCoverMode) ? null : handleSceneBreak}
 				isSaving={isSaving}
 				templateMode={templateMode}
 				tokenOptions={tokenOptions}
@@ -427,7 +447,15 @@ export default function EditorPanel({ chapterId, sceneId, projectId, bookId, tem
 
 			{/* ── Content area ─────────────────────────────────────────────── */}
 
-			{showEmptyState ? (
+			{bookCoverMode ? (
+				<BookCoverPreview
+					bookId={bookId}
+					book={coverBook}
+					project={coverProject}
+					pageConfig={pageConfig}
+					settings={settings}
+				/>
+			) : showEmptyState ? (
 				<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.disabled' }}>
 					<Typography variant="body1">Select a chapter or scene to begin editing.</Typography>
 				</Box>

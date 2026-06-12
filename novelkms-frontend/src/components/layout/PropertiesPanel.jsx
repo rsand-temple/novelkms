@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
 	Box, Typography, TextField, Divider, CircularProgress,
@@ -8,7 +8,7 @@ import {
 import { useScene, SCENE_KEYS }    from '../../hooks/useScenes';
 import { useChapter, CHAPTER_KEYS } from '../../hooks/useChapters';
 import { usePart, PART_KEYS }       from '../../hooks/useParts';
-import { useBook, BOOK_KEYS }       from '../../hooks/useBooks';
+import { useBook, BOOK_KEYS, useUploadCoverImage, useDeleteCoverImage } from '../../hooks/useBooks';
 import { useProject }               from '../../hooks/useProjects';
 import { useUpdateProject, PROJECT_KEYS } from '../../hooks/useProjects';
 import {
@@ -194,6 +194,33 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 		},
 	});
 
+	// ── Cover image ───────────────────────────────────────────────────────────
+
+	const fileInputRef = useRef(null);
+	const uploadCoverImage = useUploadCoverImage();
+	const deleteCoverImage = useDeleteCoverImage();
+
+	function handleImageUpload(e) {
+		const file = e.target.files?.[0];
+		if (!file) return;
+		// Reset the input so the same file can be re-selected after a remove.
+		e.target.value = '';
+		uploadCoverImage.mutate({ id: bookId, file, projectId });
+	}
+
+	function handleImageDelete() {
+		deleteCoverImage.mutate({ id: bookId, projectId });
+	}
+
+	// Cache-bust the thumbnail URL when the book record changes (both
+	// setCoverImage and deleteCoverImage bump updated_at on the server).
+	const thumbnailUrl = booksApi.getCoverImageUrl(bookId) +
+		`?t=${encodeURIComponent(book.updatedAt ?? '')}`;
+
+	const imageIsBusy = uploadCoverImage.isPending || deleteCoverImage.isPending;
+
+	// ── Page size preset change ───────────────────────────────────────────────
+
 	function handlePresetChange(val) {
 		setPageSizePreset(val);
 		const preset = PAGE_SIZE_PRESETS.find(p => p.value === val);
@@ -231,6 +258,66 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 				helperText="Abbreviated title for display in tight spaces" />
 			<TextField label="Notes" size="small" fullWidth multiline minRows={3}
 				value={notes} onChange={(e) => setNotes(e.target.value)} />
+
+			{/* ── Cover Image ───────────────────────────────────────────────── */}
+			<Divider />
+			<Typography variant="caption" color="text.secondary"
+				sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+				Cover Image
+			</Typography>
+			<Typography variant="caption" color="text.secondary">
+				Displayed as page 1 when viewing the book in page layout mode. Scaled to fill the full page.
+			</Typography>
+
+			{book.hasCoverImage && (
+				<Box sx={{ textAlign: 'center' }}>
+					<Box
+						component="img"
+						src={thumbnailUrl}
+						alt="Cover"
+						sx={{
+							maxWidth:    '100%',
+							maxHeight:   180,
+							objectFit:   'contain',
+							borderRadius: 1,
+							border:      '1px solid',
+							borderColor: 'divider',
+							display:     'block',
+							mx:          'auto',
+						}}
+					/>
+				</Box>
+			)}
+
+			<Stack direction="row" spacing={1} alignItems="center">
+				{/* Hidden file input; triggered by the Button label below. */}
+				<input
+					ref={fileInputRef}
+					type="file"
+					accept="image/*"
+					style={{ display: 'none' }}
+					onChange={handleImageUpload}
+				/>
+				<Button
+					size="small"
+					variant="outlined"
+					disabled={imageIsBusy}
+					onClick={() => fileInputRef.current?.click()}
+				>
+					{book.hasCoverImage ? 'Replace Image' : 'Upload Cover Image'}
+				</Button>
+				{book.hasCoverImage && (
+					<Button
+						size="small"
+						variant="outlined"
+						color="warning"
+						disabled={imageIsBusy}
+						onClick={handleImageDelete}
+					>
+						Remove
+					</Button>
+				)}
+			</Stack>
 
 			{/* ── Page Layout ───────────────────────────────────────────────── */}
 			<Divider />

@@ -82,6 +82,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 .dataSource(jdbcUrl, adminUser, adminPwd)
                 .locations("classpath:db/migration/" + ((isPostgres) ? "postgresql" : "h2"))
                 .load();
+        //flyway.repair();
         flyway.migrate();
 
         // DAOs
