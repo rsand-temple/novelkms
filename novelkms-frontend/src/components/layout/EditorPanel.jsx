@@ -37,12 +37,12 @@ const AUTOSAVE_DELAY_MS = 1500;
 // 96 DPI is a neutral default that gives a recognisable page shape without
 // requiring the author to enable page layout first.
 const DEFAULT_PAGE_CONFIG = {
-	widthPx:        576,  // 6.0" × 96 dpi
-	heightPx:       864,  // 9.0" × 96 dpi
-	marginTopPx:     96,  // 1.0"
-	marginBottomPx:  96,  // 1.0"
-	marginInnerPx:  120,  // 1.25"
-	marginOuterPx:   96,  // 1.0"
+	widthPx: 576,  // 6.0" × 96 dpi
+	heightPx: 864,  // 9.0" × 96 dpi
+	marginTopPx: 96,  // 1.0"
+	marginBottomPx: 96,  // 1.0"
+	marginInnerPx: 120,  // 1.25"
+	marginOuterPx: 96,  // 1.0"
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -133,19 +133,19 @@ export default function EditorPanel({
 	const queryClient = useQueryClient();
 
 	// ── Mode flags ────────────────────────────────────────────────────────────
-	const templateMode    = !!templateType;
+	const templateMode = !!templateType;
 	const singleSceneMode = !templateMode && !!sceneId;
-	const multiSceneMode  = !templateMode && !singleSceneMode && !!chapterId;
+	const multiSceneMode = !templateMode && !singleSceneMode && !!chapterId;
 
 	const isGlobalTpl = templateMode && templateScope === 'global';
-	const isBookTpl   = templateMode && templateScope === 'book';
+	const isBookTpl = templateMode && templateScope === 'book';
 
 	// Page-layout preview: fires whenever a book (or part within a book) is
 	// selected with no chapter/scene/template active — regardless of whether
 	// page layout is configured on the book.
 	const pagePreviewEligible = !templateMode && !chapterId && !sceneId && !!bookId;
 
-	const { data: previewPageBook }    = useBook(pagePreviewEligible ? bookId : null);
+	const { data: previewPageBook } = useBook(pagePreviewEligible ? bookId : null);
 	const { data: previewPageProject } = useProject(pagePreviewEligible ? projectId : null);
 
 	// Use the book's configured page dimensions when available; fall back to
@@ -158,9 +158,9 @@ export default function EditorPanel({
 	const effectivePageConfig = configuredPageConfig ?? (pagePreviewEligible ? DEFAULT_PAGE_CONFIG : null);
 
 	// Book cover: book selected, no part underneath.
-	const bookCoverMode    = pagePreviewEligible && !partId;
+	const bookCoverMode = pagePreviewEligible && !partId;
 	// Part page: a part within the book is selected.
-	const partPageMode     = pagePreviewEligible && !!partId;
+	const partPageMode = pagePreviewEligible && !!partId;
 	const inPagePreviewMode = bookCoverMode || partPageMode;
 
 	// Project shelf: project selected but no book open yet.
@@ -171,18 +171,18 @@ export default function EditorPanel({
 	const { data: chapterData } = useChapter(multiSceneMode ? chapterId : null);
 
 	// ── Scene / template data ─────────────────────────────────────────────────
-	const { data: scenes,      isLoading: scenesLoading      } = useScenes(multiSceneMode ? chapterId : null);
+	const { data: scenes, isLoading: scenesLoading } = useScenes(multiSceneMode ? chapterId : null);
 	const { data: singleScene, isLoading: singleSceneLoading } = useScene(singleSceneMode ? sceneId : null);
 
 	const { data: globalTpl, isLoading: globalTplLoading } = useGlobalTemplate(templateType, isGlobalTpl);
-	const { data: bookTpl,   isLoading: bookTplLoading   } = useBookTemplate(bookId, templateType, isBookTpl);
-	const template        = isGlobalTpl ? globalTpl : (isBookTpl ? bookTpl : null);
+	const { data: bookTpl, isLoading: bookTplLoading } = useBookTemplate(bookId, templateType, isBookTpl);
+	const template = isGlobalTpl ? globalTpl : (isBookTpl ? bookTpl : null);
 	const templateLoading = (isGlobalTpl && globalTplLoading) || (isBookTpl && bookTplLoading);
 
-	const { data: previewBook }    = useBook(isBookTpl ? bookId : null);
+	const { data: previewBook } = useBook(isBookTpl ? bookId : null);
 	const { data: previewProject } = useProject(projectId);
 
-	const { data: bookStyleSheet }   = useBookStyles(bookId, !!bookId);
+	const { data: bookStyleSheet } = useBookStyles(bookId, !!bookId);
 	const { data: globalStyleSheet } = useGlobalStyles(!bookId);
 	const styleSheet = bookId ? bookStyleSheet : globalStyleSheet;
 
@@ -194,42 +194,42 @@ export default function EditorPanel({
 
 	const { mutate: deleteScene } = useDeleteScene();
 
-	const [isSaving, setIsSaving]           = useState(false);
+	const [isSaving, setIsSaving] = useState(false);
 	const [previewActive, setPreviewActive] = useState(false);
 
 	const showEditorPreview = templateMode && previewActive;
 
 	// ── refs ─────────────────────────────────────────────────────────────────
-	const saveTimer             = useRef(null);
-	const firstSceneIdRef       = useRef(null);
-	const prevSceneBreakIdsRef  = useRef([]);
-	const loadedChapterIdRef    = useRef(null);
-	const loadedSceneOrderRef   = useRef('');
-	const loadedSceneIdRef      = useRef(null);
-	const loadedTemplateKeyRef  = useRef(null);
-	const singleSceneModeRef    = useRef(singleSceneMode);
-	const templateModeRef       = useRef(templateMode);
-	const templateScopeRef      = useRef(templateScope);
-	const templateTypeRef       = useRef(templateType);
-	const bookIdRef             = useRef(bookId);
-	const sceneIdRef            = useRef(sceneId);
-	const scheduleSaveRef       = useRef(null);
-	const chapterIdRef          = useRef(chapterId);
-	const editorRef             = useRef(null);
+	const saveTimer = useRef(null);
+	const firstSceneIdRef = useRef(null);
+	const prevSceneBreakIdsRef = useRef([]);
+	const loadedChapterIdRef = useRef(null);
+	const loadedSceneOrderRef = useRef('');
+	const loadedSceneIdRef = useRef(null);
+	const loadedTemplateKeyRef = useRef(null);
+	const singleSceneModeRef = useRef(singleSceneMode);
+	const templateModeRef = useRef(templateMode);
+	const templateScopeRef = useRef(templateScope);
+	const templateTypeRef = useRef(templateType);
+	const bookIdRef = useRef(bookId);
+	const sceneIdRef = useRef(sceneId);
+	const scheduleSaveRef = useRef(null);
+	const chapterIdRef = useRef(chapterId);
+	const editorRef = useRef(null);
 
-	useEffect(() => { chapterIdRef.current       = chapterId;       }, [chapterId]);
+	useEffect(() => { chapterIdRef.current = chapterId; }, [chapterId]);
 	useEffect(() => { singleSceneModeRef.current = singleSceneMode; }, [singleSceneMode]);
-	useEffect(() => { templateModeRef.current    = templateMode;    }, [templateMode]);
-	useEffect(() => { templateScopeRef.current   = templateScope;   }, [templateScope]);
-	useEffect(() => { templateTypeRef.current    = templateType;    }, [templateType]);
-	useEffect(() => { bookIdRef.current          = bookId;          }, [bookId]);
-	useEffect(() => { sceneIdRef.current         = sceneId;         }, [sceneId]);
+	useEffect(() => { templateModeRef.current = templateMode; }, [templateMode]);
+	useEffect(() => { templateScopeRef.current = templateScope; }, [templateScope]);
+	useEffect(() => { templateTypeRef.current = templateType; }, [templateType]);
+	useEffect(() => { bookIdRef.current = bookId; }, [bookId]);
+	useEffect(() => { sceneIdRef.current = sceneId; }, [sceneId]);
 
 	useEffect(() => { if (scenes?.length) firstSceneIdRef.current = scenes[0].id; }, [scenes]);
 
 	useEffect(() => {
 		if (singleSceneMode) {
-			loadedChapterIdRef.current  = null;
+			loadedChapterIdRef.current = null;
 			loadedSceneOrderRef.current = '';
 		} else {
 			loadedSceneIdRef.current = null;
@@ -239,9 +239,9 @@ export default function EditorPanel({
 	useEffect(() => {
 		if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
 		loadedTemplateKeyRef.current = null;
-		loadedChapterIdRef.current   = null;
-		loadedSceneOrderRef.current  = '';
-		loadedSceneIdRef.current     = null;
+		loadedChapterIdRef.current = null;
+		loadedSceneOrderRef.current = '';
+		loadedSceneIdRef.current = null;
 		prevSceneBreakIdsRef.current = [];
 	}, [templateMode, templateType, templateScope, bookId]);
 
@@ -371,7 +371,7 @@ export default function EditorPanel({
 		() => (templateMode ? tokensForType(templateType) : []),
 		[templateMode, templateType]
 	);
-	const handleInsertToken   = useCallback((token) => {
+	const handleInsertToken = useCallback((token) => {
 		editorRef.current?.chain().focus().insertTemplateToken({ token }).run();
 	}, []);
 	const handleTogglePreview = useCallback(() => setPreviewActive(p => !p), []);
@@ -415,14 +415,14 @@ export default function EditorPanel({
 
 		const newOrder = scenes.map(s => s.id).join(',');
 		const chapterChanged = loadedChapterIdRef.current !== chapterId;
-		const orderChanged   = newOrder !== loadedSceneOrderRef.current;
+		const orderChanged = newOrder !== loadedSceneOrderRef.current;
 
 		if (!chapterChanged && !orderChanged) return;
 		if (chapterChanged && saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
 
 		if (scenes.length === 0) {
-			loadedChapterIdRef.current   = chapterId;
-			loadedSceneOrderRef.current  = '';
+			loadedChapterIdRef.current = chapterId;
+			loadedSceneOrderRef.current = '';
 			prevSceneBreakIdsRef.current = [];
 			editor.commands.setContent('', false);
 			return;
@@ -430,8 +430,8 @@ export default function EditorPanel({
 
 		const html = buildCombinedHTML(scenes);
 		prevSceneBreakIdsRef.current = scenes.slice(1).map(s => s.id);
-		loadedChapterIdRef.current   = chapterId;
-		loadedSceneOrderRef.current  = newOrder;
+		loadedChapterIdRef.current = chapterId;
+		loadedSceneOrderRef.current = newOrder;
 		editor.commands.setContent(html, false);
 	}, [editor, scenes, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template]);
 
@@ -447,7 +447,7 @@ export default function EditorPanel({
 	// but formatting controls are inactive.
 	const toolbarEditor = (inPagePreviewMode || projectShelfMode) ? null : editor;
 
-	const chapterHeadingTitle    = chapterData
+	const chapterHeadingTitle = chapterData
 		? (chapterData.title?.trim() || `Chapter ${chapterData.chapterNumber}`)
 		: null;
 	const chapterHeadingSubtitle = chapterData?.subtitle?.trim() || null;
@@ -466,6 +466,7 @@ export default function EditorPanel({
 				onInsertToken={handleInsertToken}
 				previewActive={previewActive}
 				onTogglePreview={handleTogglePreview}
+				styleSheet={styleSheet}
 			/>
 
 			{/* ── Content area ─────────────────────────────────────────────── */}
@@ -508,53 +509,53 @@ export default function EditorPanel({
 						py: 5,
 						px: 2,
 
-						'--nkms-font-family':   settings.fontFamily,
-						'--nkms-font-size':     settings.fontSize,
-						'--nkms-line-height':   settings.lineHeight,
-						'--nkms-text-indent':   templateMode ? '0px' : settings.firstLineIndent,
+						'--nkms-font-family': settings.fontFamily,
+						'--nkms-font-size': settings.fontSize,
+						'--nkms-line-height': settings.lineHeight,
+						'--nkms-text-indent': templateMode ? '0px' : settings.firstLineIndent,
 						'--nkms-spacing-after': settings.spacingAfter,
 
 						'& .tiptap p': {
-							textIndent:   'var(--nkms-text-indent)',
+							textIndent: 'var(--nkms-text-indent)',
 							marginBottom: 'var(--nkms-spacing-after)',
-							marginTop:    0,
+							marginTop: 0,
 						},
 						'& .tiptap': { outline: 'none' },
 						'& .tiptap p.is-editor-empty:first-of-type::before': {
-							content:       'attr(data-placeholder)',
-							color:         'text.disabled',
+							content: 'attr(data-placeholder)',
+							color: 'text.disabled',
 							pointerEvents: 'none',
-							float:         'left',
-							height:        0,
+							float: 'left',
+							height: 0,
 						},
 						'& .nkms-token': {
-							display:       'inline-block',
-							px:            0.5,
-							borderRadius:  0.75,
-							bgcolor:       'primary.main',
-							color:         'primary.contrastText',
-							fontSize:      '0.8em',
-							fontFamily:    'system-ui, -apple-system, sans-serif',
-							lineHeight:    1.5,
-							whiteSpace:    'nowrap',
-							userSelect:    'none',
+							display: 'inline-block',
+							px: 0.5,
+							borderRadius: 0.75,
+							bgcolor: 'primary.main',
+							color: 'primary.contrastText',
+							fontSize: '0.8em',
+							fontFamily: 'system-ui, -apple-system, sans-serif',
+							lineHeight: 1.5,
+							whiteSpace: 'nowrap',
+							userSelect: 'none',
 							verticalAlign: 'baseline',
 						},
 						'& .tiptap blockquote': {
-							borderLeft:  '3px solid',
+							borderLeft: '3px solid',
 							borderColor: 'divider',
-							pl:          2,
-							ml:          0,
-							color:       'text.secondary',
-							fontStyle:   'italic',
+							pl: 2,
+							ml: 0,
+							color: 'text.secondary',
+							fontStyle: 'italic',
 						},
 						'& .tiptap hr': {
-							border:    'none',
+							border: 'none',
 							textAlign: 'center',
-							my:        3,
+							my: 3,
 							'&::after': {
-								content:       '"· · ·"',
-								color:         'text.disabled',
+								content: '"· · ·"',
+								color: 'text.disabled',
 								letterSpacing: '0.5em',
 							},
 						},
@@ -572,19 +573,19 @@ export default function EditorPanel({
 							<Box
 								sx={{
 									textAlign: 'center',
-									maxWidth:  '72ch',
-									mx:        'auto',
-									px:        1,
-									mb:        5,
+									maxWidth: '72ch',
+									mx: 'auto',
+									px: 1,
+									mb: 5,
 								}}
 							>
 								<Typography
 									sx={{
 										fontFamily: 'var(--nkms-font-family)',
-										fontSize:   '1.75rem',
+										fontSize: '1.75rem',
 										fontWeight: 700,
 										lineHeight: 1.2,
-										color:      'text.primary',
+										color: 'text.primary',
 									}}
 								>
 									{chapterHeadingTitle}
@@ -593,11 +594,11 @@ export default function EditorPanel({
 									<Typography
 										sx={{
 											fontFamily: 'var(--nkms-font-family)',
-											fontSize:   '1.1rem',
+											fontSize: '1.1rem',
 											fontWeight: 400,
-											fontStyle:  'italic',
-											color:      'text.secondary',
-											mt:         0.75,
+											fontStyle: 'italic',
+											color: 'text.secondary',
+											mt: 0.75,
 										}}
 									>
 										{chapterHeadingSubtitle}
@@ -614,11 +615,11 @@ export default function EditorPanel({
 							className="tiptap"
 							sx={{
 								fontFamily: 'var(--nkms-font-family)',
-								fontSize:   'var(--nkms-font-size)',
+								fontSize: 'var(--nkms-font-size)',
 								lineHeight: 'var(--nkms-line-height)',
-								maxWidth:   '72ch',
-								mx:         'auto',
-								px:         1,
+								maxWidth: '72ch',
+								mx: 'auto',
+								px: 1,
 							}}
 							dangerouslySetInnerHTML={{ __html: previewHtml }}
 						/>

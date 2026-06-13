@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useEditorState } from '@tiptap/react'
 import { NodeSelection } from '@tiptap/pm/state'
 import {
@@ -111,6 +111,11 @@ function TBtn({ title, onClick, active, children, disabled }) {
 					disabled={disabled}
 					// Keep editor focus
 					onMouseDown={e => e.preventDefault()}
+					sx={active ? {
+						bgcolor: 'action.selected',
+						borderRadius: 1,
+						'&:hover': { bgcolor: 'action.focus' },
+					} : undefined}
 				>
 					{children}
 				</IconButton>
@@ -142,6 +147,7 @@ export default function EditorToolbar({
 	editor, settings, onSettingsChange, onSceneBreak, isSaving,
 	templateMode = false, tokenOptions = [], onInsertToken,
 	previewActive = false, onTogglePreview,
+	styleSheet = [],
 }) {
 	const [settingsAnchor, setSettingsAnchor] = useState(null)
 	const [fieldAnchor, setFieldAnchor] = useState(null)
@@ -187,6 +193,15 @@ export default function EditorToolbar({
 
 	// Is a field (or any atom) currently selected?
 	const isNodeSelection = editor ? editor.state.selection instanceof NodeSelection : false
+
+	// Look up the resolved definition for the paragraph style at the cursor.
+	// This is used to reflect style-level font / bold / italic in the toolbar
+	// even when no inline paragraph override is present.
+	const currentStyleDef = useMemo(() => {
+		if (!Array.isArray(styleSheet) || !state.currentStyle) return null
+		const entry = styleSheet.find(s => s.styleKey === state.currentStyle)
+		return entry?.definition ?? null
+	}, [styleSheet, state.currentStyle])
 
 	// ── paragraph-attribute helpers ──────────────────────────────────────────
 
@@ -313,9 +328,29 @@ export default function EditorToolbar({
 		reader.readAsDataURL(file)
 	}
 
-	// Display values: inline mark > paragraph override > project default
-	const displayFontFamily = state.paraFontFamily || settings.fontFamily || FONT_FAMILIES[0].value
-	const displayFontSize = state.markFontSize || state.paraFontSize || settings.fontSize || FONT_SIZES[3].value
+	// Display values: inline mark > paragraph override > style definition > project default
+	const displayFontFamily =
+		state.paraFontFamily ||  // inline paragraph override
+		currentStyleDef?.fontFamily ||  // style definition (e.g. Courier New for 'report')
+		settings.fontFamily ||
+		FONT_FAMILIES[0].value
+	// Only use the style definition's fontSize when it exactly matches a toolbar
+	// option — otherwise fall through to the project default.  Backend definitions
+	// may store font sizes in a unit format (pt, em, px) that differs from the rem
+	// values in FONT_SIZES, causing the Select to show blank instead of a label.
+	const styleDefFontSize = FONT_SIZES.some(f => f.value === currentStyleDef?.fontSize)
+		? currentStyleDef.fontSize
+		: null
+	const displayFontSize =
+		state.markFontSize ||  // inline FontSize mark (token fields)
+		state.paraFontSize ||  // inline paragraph override
+		styleDefFontSize ||  // style definition (only when a known toolbar value)
+		settings.fontSize ||  // project default
+		FONT_SIZES[3].value
+	// Bold / italic: depressed when the inline mark is active OR when the
+	// resolved style definition declares that property.
+	const effectiveBold = state.isBold || (currentStyleDef?.bold ?? false)
+	const effectiveItalic = state.isItalic || (currentStyleDef?.italic ?? false)
 	const firstLineOverriddenOff = state.paraFirstLineIndent === '0'
 
 	const showFieldMenu = templateMode && tokenOptions.length > 0
@@ -382,13 +417,13 @@ export default function EditorToolbar({
 
 				{/* Bold / Italic / Underline */}
 				<TBtn title="Bold (Ctrl+B)"
-					active={state.isBold}
+					active={effectiveBold}
 					onClick={() => editor?.chain().focus().toggleBold().run()}
 				>
 					<FormatBoldIcon fontSize="small" />
 				</TBtn>
 				<TBtn title="Italic (Ctrl+I)"
-					active={state.isItalic}
+					active={effectiveItalic}
 					onClick={() => editor?.chain().focus().toggleItalic().run()}
 				>
 					<FormatItalicIcon fontSize="small" />
