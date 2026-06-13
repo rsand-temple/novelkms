@@ -70,14 +70,15 @@ public class ChapterDao {
                 "WHERE c.book_id = ? AND c.part_id IS NULL " +
                 "ORDER BY o.chapter_number";
 
-        List<Chapter>     result = new ArrayList<>();
-        Connection        conn   = ds.getConnection();
-        PreparedStatement ps     = conn.prepareStatement(sql);
-        ps.setObject(1, bookId); // CTE
-        ps.setObject(2, bookId); // outer WHERE
-        try (ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                result.add(map(rs));
+        List<Chapter> result = new ArrayList<>();
+        try (Connection conn = ds.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setObject(1, bookId); // CTE
+            ps.setObject(2, bookId); // outer WHERE
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(map(rs));
+                }
             }
         }
         return result;
@@ -104,14 +105,15 @@ public class ChapterDao {
                 "WHERE c.part_id = ? " +
                 "ORDER BY o.chapter_number";
 
-        List<Chapter>     result = new ArrayList<>();
-        Connection        conn   = ds.getConnection();
-        PreparedStatement ps     = conn.prepareStatement(sql);
-        ps.setObject(1, partId); // CTE subquery
-        ps.setObject(2, partId); // outer WHERE
-        try (ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                result.add(map(rs));
+        List<Chapter> result = new ArrayList<>();
+        try (Connection conn = ds.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setObject(1, partId); // CTE subquery
+            ps.setObject(2, partId); // outer WHERE
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(map(rs));
+                }
             }
         }
         return result;
