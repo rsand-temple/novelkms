@@ -27,13 +27,14 @@
 		<httpclient.version>4.5.14</httpclient.version>
 		<jackson.version>2.22.0</jackson.version>
 		<javax.mail>1.6.2</javax.mail>
-		<jersey.version>2.47</jersey.version>
+		<jersey.version>3.0.18</jersey.version>
 		<jetty.version>9.4.58.v20250814</jetty.version>
 		<json.version>20240303</json.version>
 		<junit.version>5.14.4</junit.version>
 		<logback.version>1.5.34</logback.version>
 		<lombok.version>1.18.20</lombok.version>
 		<nimbus-jose-jwt.version>9.48</nimbus-jose-jwt.version>
+		<poi-ooxml.version>5.3.0</poi-ooxml.version>
 		<postgres.version>42.7.11</postgres.version>
 	</properties>
 
@@ -109,7 +110,7 @@
 			<version>${dropwizard.version}</version>
 			<scope>test</scope>
 		</dependency>
-		
+
 		<!-- H2 database -->
 		<dependency>
 			<groupId>com.h2database</groupId>
@@ -164,6 +165,7 @@
 			<artifactId>guava-retrying</artifactId>
 			<version>2.0.0</version>
 		</dependency>
+
 		<dependency>
 			<groupId>com.sun.mail</groupId>
 			<artifactId>javax.mail</artifactId>
@@ -216,6 +218,11 @@
 			<version>${commons-lang3.version}</version>
 		</dependency>
 		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>${poi-ooxml.version}</version>
+		</dependency>
+		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpclient</artifactId>
 			<version>${httpclient.version}</version>
@@ -250,6 +257,12 @@
 			<groupId>jakarta.validation</groupId>
 			<artifactId>jakarta.validation-api</artifactId>
 			<version>3.0.2</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.glassfish.jersey.media</groupId>
+			<artifactId>jersey-media-multipart</artifactId>
+			<version>${jersey.version}</version>
 		</dependency>
 
 		<!-- JUnit -->

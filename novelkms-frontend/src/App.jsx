@@ -3,10 +3,12 @@ import {
 	Box, AppBar, Toolbar, Typography, Button, Menu, MenuItem,
 } from '@mui/material'
 import DescriptionIcon from '@mui/icons-material/Description'
+import FileUploadIcon from '@mui/icons-material/FileUpload'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import NavPanel from './components/layout/NavPanel'
 import EditorPanel from './components/layout/EditorPanel'
 import PropertiesPanel from './components/layout/PropertiesPanel'
+import ImportDialog from './components/nav/dialogs/ImportDialog'
 
 const NAV_WIDTH = 280
 const PROPS_WIDTH = 280
@@ -24,6 +26,8 @@ const EMPTY_SELECTION = {
 export default function App() {
 	const [selection, setSel] = useState(EMPTY_SELECTION)
 	const [tplAnchor, setTplAnchor] = useState(null)
+	const [importAnchor, setImportAnchor] = useState(null)
+	const [importDialogOpen, setImportDialogOpen] = useState(false)
 
 	// Any manuscript selection (nav tree, toolbar, properties) clears template
 	// mode automatically, so we never thread template state through the tree.
@@ -48,8 +52,6 @@ export default function App() {
 	}, [])
 
 	// Called when the user clicks a book thumbnail in the project shelf.
-	// ProjectShelf resolves Part 1 or Chapter 1 before calling this, so
-	// partId/chapterId are already set when a destination was found.
 	const handleSelectBook = useCallback((bookId, partId, chapterId) => {
 		setSelection({
 			projectId: selection.projectId,
@@ -60,9 +62,25 @@ export default function App() {
 		})
 	}, [setSelection, selection.projectId])
 
+	// Called after a successful import — navigate directly to the new book.
+	const handleImportSuccess = useCallback((bookId) => {
+		setSelection(prev => ({
+			...prev,
+			bookId,
+			partId: null,
+			chapterId: null,
+			sceneId: null,
+		}))
+	}, [setSelection])
+
 	const openGlobalTemplate = (type) => {
 		setTplAnchor(null)
 		selectTemplate({ type, scope: 'global' })
+	}
+
+	const openImportDialog = () => {
+		setImportAnchor(null)
+		setImportDialogOpen(true)
 	}
 
 	return (
@@ -76,6 +94,23 @@ export default function App() {
 
 					<Box sx={{ flexGrow: 1 }} />
 
+					{/* Import menu */}
+					<Button
+						color="inherit"
+						size="small"
+						startIcon={<FileUploadIcon fontSize="small" />}
+						endIcon={<ArrowDropDownIcon />}
+						onClick={(e) => setImportAnchor(e.currentTarget)}
+						sx={{ mr: 1 }}
+					>
+						Import
+					</Button>
+					<Menu anchorEl={importAnchor} open={!!importAnchor} onClose={() => setImportAnchor(null)}>
+						<MenuItem onClick={() => openImportDialog()}>From Word (.docx)</MenuItem>
+						<MenuItem disabled>From Markdown (coming soon)</MenuItem>
+					</Menu>
+
+					{/* Templates menu */}
 					<Button
 						color="inherit"
 						size="small"
@@ -135,6 +170,15 @@ export default function App() {
 				</Box>
 
 			</Box>
+
+			{/* Import dialog — rendered at root level so it is never clipped */}
+			<ImportDialog
+				open={importDialogOpen}
+				onClose={() => setImportDialogOpen(false)}
+				projectId={selection.projectId}
+				onSuccess={handleImportSuccess}
+			/>
+
 		</Box>
 	)
 }

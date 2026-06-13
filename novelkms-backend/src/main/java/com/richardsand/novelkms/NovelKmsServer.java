@@ -5,6 +5,7 @@ import java.time.Duration;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.flywaydb.core.Flyway;
+import org.glassfish.jersey.media.multipart.MultiPartFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,11 +21,13 @@ import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterResource;
+import com.richardsand.novelkms.resource.ImportResource;
 import com.richardsand.novelkms.resource.PartResource;
 import com.richardsand.novelkms.resource.ProjectResource;
 import com.richardsand.novelkms.resource.SceneResource;
 import com.richardsand.novelkms.resource.StyleResource;
 import com.richardsand.novelkms.resource.TemplateResource;
+import com.richardsand.novelkms.service.ImportService;
 
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
@@ -46,7 +49,6 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         String adminUser = config.getDatabase().adminUser;
         String adminPwd  = config.getDatabase().adminPwd;
 
-        // Optionally set driver class if you like (BasicDataSource can usually infer from URL)
         if (jdbcUrl != null && jdbcUrl.startsWith("jdbc:postgresql:")) {
             logger.info("Loading POSTGRESQL driver");
             ds.setDriverClassName("org.postgresql.Driver");
@@ -64,7 +66,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         ds.setMaxOpenPreparedStatements(100);
         ds.setDefaultAutoCommit(true);
         ds.setMaxTotal(15);
-        ds.setMaxWait(Duration.ofMillis(10000)); // fail fast instead of hanging
+        ds.setMaxWait(Duration.ofMillis(10000));
         ds.setFastFailValidation(true);
         ds.setRemoveAbandonedOnBorrow(true);
         ds.setRemoveAbandonedTimeout(Duration.ofSeconds(30));
@@ -77,7 +79,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
             isPostgres = false;
         }
 
-        // Flyway migration, if necessary
+        // Flyway migration
         Flyway flyway = Flyway.configure()
                 .dataSource(jdbcUrl, adminUser, adminPwd)
                 .locations("classpath:db/migration/" + ((isPostgres) ? "postgresql" : "h2"))
@@ -94,9 +96,16 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         TemplateDao templateDao = new TemplateDao(ds);
         StyleDao    styleDao    = new StyleDao(ds);
 
+        // Services
+        ImportService importService = new ImportService(bookDao, partDao, chapterDao, sceneDao);
+
+        // Multipart support for file uploads
+        env.jersey().register(MultiPartFeature.class);
+
         // Resources
         env.jersey().register(BookResource.class);
         env.jersey().register(ChapterResource.class);
+        env.jersey().register(ImportResource.class);
         env.jersey().register(PartResource.class);
         env.jersey().register(ProjectResource.class);
         env.jersey().register(SceneResource.class);
@@ -108,7 +117,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         mapper.findAndRegisterModules();
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        // Make classes injectable to resources with HK2
+        // HK2 bindings
         env.jersey().register(new org.glassfish.hk2.utilities.binding.AbstractBinder() {
             @Override
             protected void configure() {
@@ -121,6 +130,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(sceneDao).to(SceneDao.class);
                 bind(templateDao).to(TemplateDao.class);
                 bind(styleDao).to(StyleDao.class);
+                bind(importService).to(ImportService.class);
             }
         });
 
