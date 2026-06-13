@@ -1,39 +1,40 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useEditorState } from '@tiptap/react'
 import { NodeSelection } from '@tiptap/pm/state'
 import {
 	Box, Toolbar, IconButton, Tooltip, Divider,
 	Select, MenuItem, Menu, CircularProgress, Typography,
 } from '@mui/material'
-import FormatBoldIcon           from '@mui/icons-material/FormatBold'
-import FormatItalicIcon         from '@mui/icons-material/FormatItalic'
-import FormatUnderlinedIcon     from '@mui/icons-material/FormatUnderlined'
-import FormatListBulletedIcon   from '@mui/icons-material/FormatListBulleted'
-import FormatListNumberedIcon   from '@mui/icons-material/FormatListNumbered'
+import FormatBoldIcon from '@mui/icons-material/FormatBold'
+import FormatItalicIcon from '@mui/icons-material/FormatItalic'
+import FormatUnderlinedIcon from '@mui/icons-material/FormatUnderlined'
+import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted'
+import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered'
 import FormatIndentIncreaseIcon from '@mui/icons-material/FormatIndentIncrease'
 import FormatIndentDecreaseIcon from '@mui/icons-material/FormatIndentDecrease'
-import FormatAlignLeftIcon      from '@mui/icons-material/FormatAlignLeft'
-import FormatAlignCenterIcon    from '@mui/icons-material/FormatAlignCenter'
-import FormatAlignRightIcon     from '@mui/icons-material/FormatAlignRight'
-import HorizontalRuleIcon       from '@mui/icons-material/HorizontalRule'
-import SettingsIcon             from '@mui/icons-material/Settings'
-import FormatQuoteIcon          from '@mui/icons-material/FormatQuote'
-import DataObjectIcon           from '@mui/icons-material/DataObject'
-import VisibilityIcon           from '@mui/icons-material/Visibility'
-import VisibilityOffIcon        from '@mui/icons-material/VisibilityOff'
-import DocSettingsPopover       from './DocSettingsPopover'
+import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft'
+import FormatAlignCenterIcon from '@mui/icons-material/FormatAlignCenter'
+import FormatAlignRightIcon from '@mui/icons-material/FormatAlignRight'
+import HorizontalRuleIcon from '@mui/icons-material/HorizontalRule'
+import SettingsIcon from '@mui/icons-material/Settings'
+import FormatQuoteIcon from '@mui/icons-material/FormatQuote'
+import DataObjectIcon from '@mui/icons-material/DataObject'
+import VisibilityIcon from '@mui/icons-material/Visibility'
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
+import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
+import DocSettingsPopover from './DocSettingsPopover'
 import { STYLE_ORDER, STYLE_LABELS, HEADING_KEYS } from '../../utils/styles'
 
 // ── font options ───────────────────────────────────────────────────────────────
 
 const FONT_FAMILIES = [
-	{ label: 'Georgia',         value: 'Georgia, serif' },
+	{ label: 'Georgia', value: 'Georgia, serif' },
 	{ label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
-	{ label: 'Garamond',        value: 'Garamond, serif' },
-	{ label: 'Palatino',        value: '"Palatino Linotype", Palatino, serif' },
-	{ label: 'Helvetica',       value: 'Helvetica, Arial, sans-serif' },
-	{ label: 'Arial',           value: 'Arial, sans-serif' },
-	{ label: 'Courier New',     value: '"Courier New", Courier, monospace' },
+	{ label: 'Garamond', value: 'Garamond, serif' },
+	{ label: 'Palatino', value: '"Palatino Linotype", Palatino, serif' },
+	{ label: 'Helvetica', value: 'Helvetica, Arial, sans-serif' },
+	{ label: 'Arial', value: 'Arial, sans-serif' },
+	{ label: 'Courier New', value: '"Courier New", Courier, monospace' },
 ]
 
 const FONT_SIZES = [
@@ -143,7 +144,12 @@ export default function EditorToolbar({
 	previewActive = false, onTogglePreview,
 }) {
 	const [settingsAnchor, setSettingsAnchor] = useState(null)
-	const [fieldAnchor, setFieldAnchor]       = useState(null)
+	const [fieldAnchor, setFieldAnchor] = useState(null)
+
+	// Hidden file input for image insertion. Triggered via ref so we avoid the
+	// MUI Button component="label" nesting edge cases (same pattern as cover image
+	// upload in PropertiesPanel).
+	const imageInputRef = useRef(null)
 
 	// useEditorState re-renders this component reactively when editor state changes.
 	const state = useEditorState({
@@ -153,26 +159,26 @@ export default function EditorToolbar({
 			if (!e) return {}
 			const paraAttrs = resolveParaAttrs(e)
 			return {
-				isBold:         e.isActive('bold'),
-				isItalic:       e.isActive('italic'),
-				isUnderline:    e.isActive('underline'),
-				isBulletList:   e.isActive('bulletList'),
-				isOrderedList:  e.isActive('orderedList'),
-				isBlockquote:   e.isActive('blockquote'),
+				isBold: e.isActive('bold'),
+				isItalic: e.isActive('italic'),
+				isUnderline: e.isActive('underline'),
+				isBulletList: e.isActive('bulletList'),
+				isOrderedList: e.isActive('orderedList'),
+				isBlockquote: e.isActive('blockquote'),
 				currentStyle:
 					e.isActive('heading', { level: 1 }) ? 'h1' :
-					e.isActive('heading', { level: 2 }) ? 'h2' :
-					e.isActive('heading', { level: 3 }) ? 'h3' :
-					(paraAttrs.styleKey || 'normal'),
-				paraStyleKey:         paraAttrs.styleKey ?? null,
-				paraFontFamily:       paraAttrs.fontFamily ?? null,
-				paraFontSize:         paraAttrs.fontSize   ?? null,
-				paraIndent:           paraAttrs.indent     ?? null,
-				paraFirstLineIndent:  paraAttrs.firstLineIndent,
+						e.isActive('heading', { level: 2 }) ? 'h2' :
+							e.isActive('heading', { level: 3 }) ? 'h3' :
+								(paraAttrs.styleKey || 'normal'),
+				paraStyleKey: paraAttrs.styleKey ?? null,
+				paraFontFamily: paraAttrs.fontFamily ?? null,
+				paraFontSize: paraAttrs.fontSize ?? null,
+				paraIndent: paraAttrs.indent ?? null,
+				paraFirstLineIndent: paraAttrs.firstLineIndent,
 				// Inline FontSize mark (used for field-level sizing)
-				markFontSize:         e.getAttributes('fontSize')?.size ?? null,
-				textAlign:            paraAttrs.textAlign  ?? 'left',
-				wordCount:            e.storage?.characterCount?.words?.() ?? 0,
+				markFontSize: e.getAttributes('fontSize')?.size ?? null,
+				textAlign: paraAttrs.textAlign ?? 'left',
+				wordCount: e.storage?.characterCount?.words?.() ?? 0,
 			}
 		},
 	}) ?? {}
@@ -256,7 +262,7 @@ export default function EditorToolbar({
 		// this works whether the field sits in a paragraph or a heading.
 		if (isNodeSelection) {
 			if (val === settings.fontSize) editor.chain().focus().unsetFontSize().run()
-			else                           editor.chain().focus().setFontSize(val).run()
+			else editor.chain().focus().setFontSize(val).run()
 			return
 		}
 		const attrVal = val === settings.fontSize ? null : val
@@ -284,9 +290,32 @@ export default function EditorToolbar({
 		setFieldAnchor(null)
 	}
 
+	/**
+	 * Called when the user selects a file from the hidden image input.
+	 * Reads the file as a base64 data URL and inserts an Image node at the
+	 * current cursor position. The data URL is stored verbatim in the scene
+	 * content HTML — no separate image endpoint is used.
+	 */
+	function handleImageFileSelected(e) {
+		const file = e.target.files?.[0]
+		if (!file || !editor) return
+
+		// Reset the input so the same file can be re-selected after removal.
+		e.target.value = ''
+
+		const reader = new FileReader()
+		reader.onload = (ev) => {
+			const src = ev.target.result
+			if (src) {
+				editor.chain().focus().setImage({ src }).run()
+			}
+		}
+		reader.readAsDataURL(file)
+	}
+
 	// Display values: inline mark > paragraph override > project default
 	const displayFontFamily = state.paraFontFamily || settings.fontFamily || FONT_FAMILIES[0].value
-	const displayFontSize   = state.markFontSize || state.paraFontSize || settings.fontSize || FONT_SIZES[3].value
+	const displayFontSize = state.markFontSize || state.paraFontSize || settings.fontSize || FONT_SIZES[3].value
 	const firstLineOverriddenOff = state.paraFirstLineIndent === '0'
 
 	const showFieldMenu = templateMode && tokenOptions.length > 0
@@ -311,7 +340,7 @@ export default function EditorToolbar({
 								key={key}
 								value={key}
 								sx={{
-									fontSize:   HEADING_KEYS.includes(key) ? '0.95rem' : '0.85rem',
+									fontSize: HEADING_KEYS.includes(key) ? '0.95rem' : '0.85rem',
 									fontWeight: HEADING_KEYS.includes(key) ? 700 : 400,
 								}}
 							>
@@ -424,7 +453,7 @@ export default function EditorToolbar({
 				</Box>
 			</Toolbar>
 
-			{/* ── Row 2: lists / indent / align / scene break ───────────────── */}
+			{/* ── Row 2: lists / indent / align / scene break / image ───────── */}
 			<Toolbar variant="dense" disableGutters sx={{ px: 1, gap: 0.25, minHeight: 34, borderTop: 1, borderColor: 'divider' }}>
 
 				{/* Lists */}
@@ -503,6 +532,27 @@ export default function EditorToolbar({
 				>
 					<HorizontalRuleIcon fontSize="small" />
 				</TBtn>
+
+				<VDivider />
+
+				{/* Insert image — triggers a hidden file input via ref.
+				    Disabled when the editor is not active (page preview modes,
+				    template preview). Base64 data URL is embedded directly in
+				    scene/template content HTML; no image storage endpoint is used. */}
+				<TBtn
+					title="Insert image"
+					onClick={() => imageInputRef.current?.click()}
+					disabled={!editor}
+				>
+					<AddPhotoAlternateIcon fontSize="small" />
+				</TBtn>
+				<input
+					ref={imageInputRef}
+					type="file"
+					accept="image/*"
+					style={{ display: 'none' }}
+					onChange={handleImageFileSelected}
+				/>
 
 				{/* Word count + save indicator pushed right */}
 				<Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>

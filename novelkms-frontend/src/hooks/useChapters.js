@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chaptersApi } from '../api/chapters'
+import { scenesApi } from '../api/scenes'
 import { BOOK_KEYS } from './useBooks'
 
 export const CHAPTER_KEYS = {
@@ -27,7 +28,15 @@ export const useCreateChapter = () => {
 	const queryClient = useQueryClient()
 	return useMutation({
 		mutationFn: ({ bookId, data }) => chaptersApi.create(bookId, data),
-		onSuccess: (_, { bookId }) => {
+		onSuccess: async (chapter, { bookId }) => {
+			// Auto-create an initial scene so content typed immediately after
+			// chapter creation is preserved.  Blank title → backend generates
+			// "New Scene {shortId}" via SceneDao.create.
+			try {
+				await scenesApi.create(chapter.id, { title: '' })
+			} catch (err) {
+				console.error('[useCreateChapter] Failed to create initial scene:', err)
+			}
 			queryClient.invalidateQueries({ queryKey: CHAPTER_KEYS.byBook(bookId) })
 		},
 	})
