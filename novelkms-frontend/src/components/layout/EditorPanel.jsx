@@ -28,6 +28,7 @@ import { derivePageConfig } from '../../utils/pageConfig';
 import EditorToolbar from '../editor/EditorToolbar';
 import BookCoverPreview from '../editor/BookCoverPreview';
 import PartPagePreview from '../editor/PartPagePreview';
+import ProjectShelf from '../editor/ProjectShelf';
 
 const AUTOSAVE_DELAY_MS = 1500;
 
@@ -108,20 +109,26 @@ function templateKey(t) {
  *   bookId         — current book.
  *   templateType   — 'cover' | 'part' | null.
  *   templateScope  — 'global' | 'book' | null.
+ *   onSelectBook   — callback(bookId) invoked when the user clicks a book in
+ *                    the project shelf (project home mode).
  *
  * Modes (priority order):
  *   1. template mode      — templateType set
  *   2. book cover preview — bookId set, no partId/chapterId/sceneId/template
  *   3. part page preview  — partId set, no chapterId/sceneId/template
- *   4. single-scene mode  — sceneId set; no chapter heading
- *   5. multi-scene mode   — chapterId set; chapter title/subtitle shown above prose
+ *   4. project shelf      — projectId set, no bookId (project home / book picker)
+ *   5. single-scene mode  — sceneId set; no chapter heading
+ *   6. multi-scene mode   — chapterId set; chapter title/subtitle shown above prose
  *
  * The book cover and part page previews activate whenever a book or part is
  * selected, regardless of whether page layout is enabled on the book.  When
  * page layout is not configured, DEFAULT_PAGE_CONFIG provides fallback
  * dimensions (6" × 9" Trade Paperback) so the canvas always renders.
  */
-export default function EditorPanel({ partId, chapterId, sceneId, projectId, bookId, templateType, templateScope }) {
+export default function EditorPanel({
+	partId, chapterId, sceneId, projectId, bookId,
+	templateType, templateScope, onSelectBook,
+}) {
 	const { settings, updateSettings } = useProjectSettings(projectId);
 	const queryClient = useQueryClient();
 
@@ -155,6 +162,10 @@ export default function EditorPanel({ partId, chapterId, sceneId, projectId, boo
 	// Part page: a part within the book is selected.
 	const partPageMode     = pagePreviewEligible && !!partId;
 	const inPagePreviewMode = bookCoverMode || partPageMode;
+
+	// Project shelf: project selected but no book open yet.
+	// Clicking a book card calls onSelectBook to open it.
+	const projectShelfMode = !templateMode && !bookId && !!projectId;
 
 	// ── Chapter data for heading (multi-scene mode only) ──────────────────────
 	const { data: chapterData } = useChapter(multiSceneMode ? chapterId : null);
@@ -213,6 +224,7 @@ export default function EditorPanel({ partId, chapterId, sceneId, projectId, boo
 	useEffect(() => { templateTypeRef.current    = templateType;    }, [templateType]);
 	useEffect(() => { bookIdRef.current          = bookId;          }, [bookId]);
 	useEffect(() => { sceneIdRef.current         = sceneId;         }, [sceneId]);
+
 	useEffect(() => { if (scenes?.length) firstSceneIdRef.current = scenes[0].id; }, [scenes]);
 
 	useEffect(() => {
@@ -427,8 +439,13 @@ export default function EditorPanel({ partId, chapterId, sceneId, projectId, boo
 
 	// ── render ────────────────────────────────────────────────────────────────
 
-	const showEmptyState = !templateMode && !chapterId && !sceneId && !inPagePreviewMode;
-	const toolbarEditor  = inPagePreviewMode ? null : editor;
+	// showEmptyState only when nothing at all is selected (not even a project).
+	const showEmptyState = !templateMode && !chapterId && !sceneId && !inPagePreviewMode && !projectShelfMode;
+
+	// Toolbar gets a live editor reference only when actually editing;
+	// preview and shelf modes pass null so the gear icon stays accessible
+	// but formatting controls are inactive.
+	const toolbarEditor = (inPagePreviewMode || projectShelfMode) ? null : editor;
 
 	const chapterHeadingTitle    = chapterData
 		? (chapterData.title?.trim() || `Chapter ${chapterData.chapterNumber}`)
@@ -442,7 +459,7 @@ export default function EditorPanel({ partId, chapterId, sceneId, projectId, boo
 				editor={toolbarEditor}
 				settings={settings}
 				onSettingsChange={updateSettings}
-				onSceneBreak={(singleSceneMode || templateMode || inPagePreviewMode) ? null : handleSceneBreak}
+				onSceneBreak={(singleSceneMode || templateMode || inPagePreviewMode || projectShelfMode) ? null : handleSceneBreak}
 				isSaving={isSaving}
 				templateMode={templateMode}
 				tokenOptions={tokenOptions}
@@ -469,6 +486,11 @@ export default function EditorPanel({ partId, chapterId, sceneId, projectId, boo
 					project={previewPageProject}
 					pageConfig={effectivePageConfig}
 					settings={settings}
+				/>
+			) : projectShelfMode ? (
+				<ProjectShelf
+					projectId={projectId}
+					onSelectBook={onSelectBook}
 				/>
 			) : showEmptyState ? (
 				<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.disabled' }}>
@@ -540,7 +562,6 @@ export default function EditorPanel({ partId, chapterId, sceneId, projectId, boo
 						'& .tiptap h2': { fontSize: '1.3rem', fontWeight: 700, mt: 2, mb: 0.5 },
 						'& .tiptap h3': { fontSize: '1.1rem', fontWeight: 600, mt: 1.5, mb: 0.5 },
 						'& .tiptap ul, & .tiptap ol': { pl: 3 },
-
 
 						...styleSx,
 					}}

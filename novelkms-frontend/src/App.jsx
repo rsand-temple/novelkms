@@ -47,6 +47,18 @@ export default function App() {
 		}))
 	}, [])
 
+	// Called when the user clicks a book thumbnail in the project shelf.
+	// Retains the current projectId; clears everything else.
+	const handleSelectBook = useCallback((bookId) => {
+		setSelection({
+			projectId: selection.projectId,
+			bookId,
+			partId:    null,
+			chapterId: null,
+			sceneId:   null,
+		})
+	}, [setSelection, selection.projectId])
+
 	const openGlobalTemplate = (type) => {
 		setTplAnchor(null)
 		selectTemplate({ type, scope: 'global' })
@@ -103,6 +115,7 @@ export default function App() {
 						bookId={selection.bookId}
 						templateType={selection.templateType}
 						templateScope={selection.templateScope}
+						onSelectBook={handleSelectBook}
 					/>
 				</Box>
 
