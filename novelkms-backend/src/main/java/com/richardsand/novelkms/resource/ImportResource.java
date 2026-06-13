@@ -36,11 +36,11 @@ public class ImportResource {
      *
      * Multipart form upload. Fields:
      *   projectId  — UUID of the target project (required)
-     *   bookTitle  — optional title override; falls back to doc title or filename
+     *   bookTitle  — optional title override; cover page title takes priority
+     *                over filename fallback but not over this explicit value
      *   file       — the .docx binary
      *
      * Returns ImportService.ImportResult as JSON on success (200 OK).
-     * Returns 400 if required fields are missing or 500 on parse/DB error.
      */
     @POST
     @Path("/import/docx")

@@ -34,6 +34,15 @@ public class Part {
     @JsonProperty
     private String notes;
 
+    /**
+     * 1-based ordinal position of this part within its book, computed via
+     * ROW_NUMBER() in the DAO. Not stored in the database — transient, like
+     * Chapter.chapterNumber. Used by the frontend to display "Part I/II/III"
+     * when the part has no custom title.
+     */
+    @JsonProperty
+    private int partNumber;
+
     @JsonProperty
     private Instant createdAt;
 

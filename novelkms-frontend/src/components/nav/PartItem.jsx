@@ -1,18 +1,37 @@
 import { useState, useRef } from 'react'
 import { Collapse, InputBase, ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
-import ExpandMoreIcon   from '@mui/icons-material/ExpandMore'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
-import BookmarksIcon    from '@mui/icons-material/Bookmarks'
+import BookmarksIcon from '@mui/icons-material/Bookmarks'
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { usePartChapters, useUpdatePart } from '../../hooks/useParts'
-import ChapterItem          from './ChapterItem'
-import ChapterListZone      from './ChapterListZone'
-import { containerIds }     from '../../dnd/dndUtils'
+import ChapterItem from './ChapterItem'
+import ChapterListZone from './ChapterListZone'
+import { containerIds } from '../../dnd/dndUtils'
 import { useNavContextMenu } from './NavContextMenuContext'
+
+// ── Roman numeral helper ─────────────────────────────────────────────────────
+// Converts a positive integer to a Roman numeral string (I, II, III, …).
+// Used when a part has no custom title so the nav tree shows "Part I/II/III".
+const toRoman = (n) => {
+	if (!n || n < 1) return '?'
+	const vals = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+	const syms = ['M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I']
+	let r = ''
+	for (let i = 0; i < vals.length; i++) {
+		while (n >= vals[i]) { r += syms[i]; n -= vals[i] }
+	}
+	return r
+}
 
 /**
  * PartItem — nav tree node for a Part.
+ *
+ * When part.title is blank the row displays "Part I / II / III …" using
+ * part.partNumber (computed by the backend via ROW_NUMBER). The title input
+ * in PropertiesPanel remains empty in that case, letting the author give the
+ * part a real name later without the auto-label getting in the way.
  *
  * The part row is sortable (drag to reorder parts within the book).
  * DnD listeners are disabled while the inline rename InputBase is active.
@@ -23,24 +42,26 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 
 	const isSelected = selection.partId === part.id && !selection.chapterId
 
+	// Display title: custom title if set, otherwise "Part I/II/III"
+	const displayTitle = part.title?.trim()
+		? part.title
+		: `Part ${toRoman(part.partNumber)}`
+
 	// ── Context menu & rename ─────────────────────────────────────────────────
 	const { openContextMenu, renamingId, endRename } = useNavContextMenu()
 	const isRenaming = renamingId === String(part.id)
-	// Uncontrolled input: defaultValue initialises when InputBase mounts.
 	const renameInputRef = useRef(null)
 	const { mutate: updatePart } = useUpdatePart()
 
 	const handleRenameCommit = () => {
 		const newTitle = (renameInputRef.current?.value ?? '').trim()
-		if (newTitle && newTitle !== part.title) {
-			// useUpdatePart expects { id, data }; onSuccess uses the returned part
-			// object for invalidation so bookId does not need to be in data.
+		if (newTitle !== (part.title ?? '')) {
 			updatePart({
-				id:   part.id,
+				id: part.id,
 				data: {
-					title:    newTitle,
+					title: newTitle,
 					subtitle: part.subtitle,
-					notes:    part.notes,
+					notes: part.notes,
 				},
 			})
 		}
@@ -49,7 +70,7 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 
 	const handleRenameKeyDown = (e) => {
 		e.stopPropagation()
-		if (e.key === 'Enter')  handleRenameCommit()
+		if (e.key === 'Enter') handleRenameCommit()
 		if (e.key === 'Escape') endRename()
 	}
 
@@ -67,10 +88,10 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 	} = useSortable({
 		id: String(part.id),
 		data: {
-			type:        'part',
-			title:       part.title || 'Untitled Part',
+			type: 'part',
+			title: displayTitle,
 			containerId: containerIds.parts(String(bookId)),
-			bookId:      String(bookId),
+			bookId: String(bookId),
 		},
 	})
 
@@ -82,14 +103,16 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 
 	const handleClick = () => {
 		if (!open) setOpen(true)
-		setSelection((prev) => ({ ...prev, partId: part.id, chapterId: null, sceneId: null }))
+		// Always set bookId explicitly — the user may have expanded the book node
+		// via the arrow without clicking the row, leaving prev.bookId unset.
+		setSelection((prev) => ({ ...prev, bookId, partId: part.id, chapterId: null, sceneId: null }))
 	}
 
 	const handleContextMenu = (e) => {
-		setSelection((prev) => ({ ...prev, partId: part.id, chapterId: null, sceneId: null }))
+		setSelection((prev) => ({ ...prev, bookId, partId: part.id, chapterId: null, sceneId: null }))
 		openContextMenu(e, 'part', {
-			id:        part.id,
-			title:     part.title,
+			id: part.id,
+			title: part.title,
 			bookId,
 			projectId: selection.projectId,
 		})
@@ -99,9 +122,9 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 		<div
 			ref={setNodeRef}
 			style={{
-				transform:  CSS.Transform.toString(transform),
+				transform: CSS.Transform.toString(transform),
 				transition,
-				opacity:    isDragging ? 0.4 : 1,
+				opacity: isDragging ? 0.4 : 1,
 			}}
 			{...attributes}
 		>
@@ -110,8 +133,6 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 				onClick={handleClick}
 				onContextMenu={handleContextMenu}
 				sx={{ pl: 7 }}
-				// Gate DnD listeners off during rename to prevent drag initiation
-				// while the user is typing in the InputBase.
 				{...(isRenaming ? {} : listeners)}
 			>
 				<ListItemIcon
@@ -134,16 +155,16 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 						autoFocus
 						fullWidth
 						sx={{
-							fontSize:  '0.875rem',
+							fontSize: '0.875rem',
 							fontStyle: 'italic',
 							borderBottom: '1px solid',
-							borderColor:  'primary.main',
+							borderColor: 'primary.main',
 							'& .MuiInputBase-input': { p: 0 },
 						}}
 					/>
 				) : (
 					<ListItemText
-						primary={part.title}
+						primary={displayTitle}
 						slotProps={{ primary: { variant: 'body2', sx: { fontStyle: 'italic' } } }}
 					/>
 				)}

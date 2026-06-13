@@ -2,14 +2,22 @@ package com.richardsand.novelkms.service;
 
 import java.io.InputStream;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.poi.xwpf.usermodel.IRunElement;
 import org.apache.poi.xwpf.usermodel.UnderlinePatterns;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.poi.xwpf.usermodel.XWPFPicture;
+import org.apache.poi.xwpf.usermodel.XWPFPictureData;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
 import org.apache.poi.xwpf.usermodel.XWPFStyle;
 import org.apache.poi.xwpf.usermodel.XWPFStyles;
@@ -19,10 +27,11 @@ import org.slf4j.LoggerFactory;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.PartDao;
+import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
-import com.richardsand.novelkms.model.Book;
 import com.richardsand.novelkms.model.Chapter;
 import com.richardsand.novelkms.model.Part;
+import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.Scene;
 
 public class ImportService {
@@ -33,17 +42,20 @@ public class ImportService {
     private final PartDao    partDao;
     private final ChapterDao chapterDao;
     private final SceneDao   sceneDao;
+    private final ProjectDao projectDao;
 
-    public ImportService(BookDao bookDao, PartDao partDao, ChapterDao chapterDao, SceneDao sceneDao) {
-        this.bookDao    = bookDao;
-        this.partDao    = partDao;
+    public ImportService(BookDao bookDao, PartDao partDao, ChapterDao chapterDao,
+            SceneDao sceneDao, ProjectDao projectDao) {
+        this.bookDao = bookDao;
+        this.partDao = partDao;
         this.chapterDao = chapterDao;
-        this.sceneDao   = sceneDao;
+        this.sceneDao = sceneDao;
+        this.projectDao = projectDao;
     }
 
-    // -------------------------------------------------------------------------
+    // =========================================================================
     // Public result type
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
     public static class ImportResult {
         public UUID         bookId;
@@ -52,33 +64,88 @@ public class ImportService {
         public int          chapterCount;
         public int          sceneCount;
         public int          wordCount;
+        public boolean      coverImageImported;
+        public boolean      authorUpdated;
         public List<String> warnings = new ArrayList<>();
     }
 
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Cover page extraction result
+    // =========================================================================
+
+    private static class CoverPageResult {
+        String  title;
+        String  subtitle;
+        String  authorFirst;
+        String  authorLast;
+        byte[]  coverImageBytes;
+        String  coverImageMimeType;
+        boolean isCoverPage;
+    }
+
+    // =========================================================================
     // Entry point
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
-    public ImportResult importDocx(UUID projectId, String bookTitleOverride, String filename, InputStream stream)
-            throws Exception {
-
+    public ImportResult importDocx(UUID projectId, String bookTitleOverride,
+            String filename, InputStream stream) throws Exception {
         ImportResult result = new ImportResult();
 
         try (XWPFDocument doc = new XWPFDocument(stream)) {
-
             List<XWPFParagraph> paragraphs = doc.getParagraphs();
-            logger.info("DOCX import started: projectId={}, paragraphCount={}", projectId, paragraphs.size());
+            logger.info("DOCX import started: projectId={}, paragraphs={}", projectId, paragraphs.size());
 
-            boolean hasParts = detectParts(paragraphs, doc);
-            logger.info("DOCX import structure: hasParts={}", hasParts);
+            CoverPageResult coverPage = extractCoverPage(paragraphs, doc);
+            logger.info("DOCX import: isCoverPage={}, detectedTitle={}", coverPage.isCoverPage, coverPage.title);
 
-            String bookTitle = resolveBookTitle(bookTitleOverride, doc, filename);
+            // Title priority: user override > cover page detection > doc properties > filename
+            String bookTitle;
+            if (bookTitleOverride != null && !bookTitleOverride.isBlank()) {
+                bookTitle = bookTitleOverride.trim();
+            } else if (coverPage.title != null) {
+                bookTitle = coverPage.title;
+            } else {
+                bookTitle = resolveBookTitle(null, doc, filename);
+            }
 
-            Book book = bookDao.create(projectId, bookTitle, null, null, null);
-            result.bookId    = book.getId();
+            // Create book — subtitle from cover page if detected (and not a byline)
+            com.richardsand.novelkms.model.Book book = bookDao.create(projectId, bookTitle, coverPage.subtitle, null, null);
+            result.bookId = book.getId();
             result.bookTitle = bookTitle;
 
-            parse(paragraphs, doc, book.getId(), hasParts, result);
+            // Record provenance
+            bookDao.setImportMetadata(book.getId(), filename, Instant.now());
+
+            // Store cover image
+            if (coverPage.coverImageBytes != null) {
+                bookDao.setCoverImage(book.getId(), coverPage.coverImageBytes, coverPage.coverImageMimeType);
+                result.coverImageImported = true;
+                logger.info("DOCX import: cover image stored ({} bytes, {})",
+                        coverPage.coverImageBytes.length, coverPage.coverImageMimeType);
+            }
+
+            // Update project author if currently blank
+            if (coverPage.authorFirst != null || coverPage.authorLast != null) {
+                try {
+                    Optional<Project> proj = projectDao.findById(projectId);
+                    if (proj.isPresent()) {
+                        Project p          = proj.get();
+                        boolean firstBlank = p.getAuthorFirstName() == null || p.getAuthorFirstName().isBlank();
+                        boolean lastBlank  = p.getAuthorLastName() == null || p.getAuthorLastName().isBlank();
+                        if (firstBlank && lastBlank) {
+                            projectDao.update(projectId, p.getTitle(), p.getDescription(),
+                                    coverPage.authorFirst, coverPage.authorLast, p.getCopyright());
+                            result.authorUpdated = true;
+                            logger.info("DOCX import: project author set to '{} {}'",
+                                    coverPage.authorFirst, coverPage.authorLast);
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("DOCX import: could not update project author: {}", e.getMessage());
+                }
+            }
+
+            parse(paragraphs, doc, book.getId(), coverPage.isCoverPage, result);
         }
 
         logger.info("DOCX import complete: parts={}, chapters={}, scenes={}, words={}",
@@ -86,150 +153,374 @@ public class ImportService {
         return result;
     }
 
-    // -------------------------------------------------------------------------
-    // Structure detection
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Cover page extraction
+    // =========================================================================
 
     /**
-     * Returns true if the document uses a two-level heading structure where
-     * Heading 1 = parts and Heading 2 = chapters. Requires at least one H1,
-     * one H2, and at least one body paragraph following an H2.
+     * Examines paragraphs before the first H1 and extracts manuscript
+     * cover-page metadata: title, subtitle, author, cover image.
+     *
+     * Title detection looks for any paragraph whose style name contains "title"
+     * but not "heading" — matching "Novel Title", "Book Title", "Title", etc.
+     *
+     * "Novel Subtitle" / similar lines that begin with "by " are treated as
+     * author bylines, not book subtitles.
      */
-    private boolean detectParts(List<XWPFParagraph> paragraphs, XWPFDocument doc) {
-        int     h1Count     = 0;
-        int     h2Count     = 0;
-        int     bodyAfterH2 = 0;
-        boolean lastWasH2   = false;
+    private CoverPageResult extractCoverPage(List<XWPFParagraph> allParas, XWPFDocument doc) {
+        CoverPageResult result = new CoverPageResult();
 
-        for (XWPFParagraph para : paragraphs) {
-            String style = getWordStyleName(para, doc).toLowerCase();
-            if (style.matches("heading\\s*1")) {
-                h1Count++;
-                lastWasH2 = false;
-            } else if (style.matches("heading\\s*2")) {
-                h2Count++;
-                lastWasH2 = true;
-            } else {
-                String text = para.getText().trim();
-                if (lastWasH2 && !text.isEmpty() && !isSceneBreakText(text)) {
-                    bodyAfterH2++;
-                    lastWasH2 = false;
+        // Collect paragraphs before the first H1
+        List<XWPFParagraph> preamble = new ArrayList<>();
+        for (XWPFParagraph para : allParas) {
+            if (isHeadingN(getWordStyleName(para, doc), 1))
+                break;
+            preamble.add(para);
+        }
+        if (preamble.isEmpty())
+            return result;
+
+        // ── Cover image ───────────────────────────────────────────────────────
+        outer: for (XWPFParagraph para : preamble) {
+            for (XWPFRun run : para.getRuns()) {
+                for (XWPFPicture pic : run.getEmbeddedPictures()) {
+                    XWPFPictureData pd = pic.getPictureData();
+                    if (pd != null && pd.getData() != null && pd.getData().length > 0) {
+                        result.coverImageBytes = pd.getData();
+                        result.coverImageMimeType = getMimeTypeForPicture(pd);
+                        break outer;
+                    }
                 }
             }
         }
 
-        return h1Count >= 1 && h2Count >= 1 && bodyAfterH2 >= 1;
+        // ── Text analysis ─────────────────────────────────────────────────────
+        List<String> lines  = new ArrayList<>();
+        List<String> styles = new ArrayList<>();
+        for (XWPFParagraph para : preamble) {
+            String text  = para.getText().trim();
+            String style = getWordStyleName(para, doc);
+            if (!text.isEmpty()) {
+                lines.add(text);
+                styles.add(style);
+            }
+        }
+
+        boolean hasWordCount  = lines.stream().anyMatch(this::looksLikeWordCount);
+        boolean hasTitleStyle = styles.stream().anyMatch(s -> isTitleStyle(s));
+        boolean hasAllCaps    = lines.stream().anyMatch(this::looksLikeAllCapsTitle);
+
+        result.isCoverPage = preamble.size() <= 15
+                && (hasWordCount || hasTitleStyle || hasAllCaps || result.coverImageBytes != null);
+
+        if (!result.isCoverPage)
+            return result;
+
+        // ── Title + subtitle ─────────────────────────────────────────────────
+        // Look for a paragraph whose style contains "title" (but not "heading")
+        for (int i = 0; i < styles.size(); i++) {
+            if (isTitleStyle(styles.get(i))) {
+                result.title = lines.get(i);
+                // Check next line for subtitle — skip "by Author" bylines
+                if (i + 1 < lines.size()) {
+                    String  nextLine  = lines.get(i + 1);
+                    String  nextStyle = styles.get(i + 1);
+                    boolean isByLine  = nextLine.toLowerCase().startsWith("by ");
+                    if (isSubtitleStyle(nextStyle) && !isByLine) {
+                        result.subtitle = nextLine;
+                    }
+                }
+                break;
+            }
+        }
+
+        // Fallback: all-caps line
+        if (result.title == null) {
+            for (int i = 0; i < lines.size(); i++) {
+                if (looksLikeAllCapsTitle(lines.get(i))) {
+                    result.title = toTitleCase(lines.get(i));
+                    if (i + 1 < lines.size()) {
+                        String next = lines.get(i + 1);
+                        if (!looksLikeWordCount(next) && !looksLikeName(next) && wordCount(next) <= 8
+                                && !next.toLowerCase().startsWith("by ")) {
+                            result.subtitle = next;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // ── Author name ───────────────────────────────────────────────────────
+        // 1. Document core properties creator field (most reliable)
+        try {
+            if (doc.getProperties() != null && doc.getProperties().getCoreProperties() != null) {
+                String creator = doc.getProperties().getCoreProperties().getCreator();
+                if (creator != null && !creator.isBlank()) {
+                    parseAuthorInto(creator, result);
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not read document creator: {}", e.getMessage());
+        }
+
+        // 2. "Novel Subtitle" / subtitle-style lines beginning with "by "
+        if (result.authorFirst == null && result.authorLast == null) {
+            for (int i = 0; i < lines.size(); i++) {
+                if (isSubtitleStyle(styles.get(i)) && lines.get(i).toLowerCase().startsWith("by ")) {
+                    parseAuthorInto(lines.get(i), result);
+                    break;
+                }
+            }
+        }
+
+        // 3. First contact-block line that looks like a personal name
+        if (result.authorFirst == null && result.authorLast == null) {
+            int limit = Math.min(4, lines.size());
+            for (int i = 0; i < limit; i++) {
+                if (looksLikeName(lines.get(i))) {
+                    parseAuthorInto(lines.get(i), result);
+                    break;
+                }
+            }
+        }
+
+        return result;
     }
 
-    // -------------------------------------------------------------------------
-    // Title resolution
-    // -------------------------------------------------------------------------
+    // ── Cover page style helpers ──────────────────────────────────────────────
+
+    /** Style contains "title" but is not a heading (matches "Novel Title", "Title", etc.). */
+    private boolean isTitleStyle(String style) {
+        String lower = style.toLowerCase();
+        return lower.contains("title") && !lower.contains("heading");
+    }
+
+    /** Style contains "subtitle" (matches "Novel Subtitle", "Subtitle", etc.). */
+    private boolean isSubtitleStyle(String style) {
+        return style.toLowerCase().contains("subtitle");
+    }
+
+    private boolean looksLikeWordCount(String text) {
+        return text.toLowerCase().contains("word") && text.matches(".*\\d.*");
+    }
+
+    private boolean looksLikeAllCapsTitle(String text) {
+        if (text.length() < 2)
+            return false;
+        String lettersOnly = text.replaceAll("[^a-zA-Z ]", "");
+        if (lettersOnly.isBlank())
+            return false;
+        boolean allCaps = lettersOnly.equals(lettersOnly.toUpperCase());
+        int     words   = text.trim().split("\\s+").length;
+        return allCaps && words >= 1 && words <= 7;
+    }
+
+    /**
+     * Returns true for strings that look like personal names: 2–3 words, first
+     * letter capitalised, allows middle initials (e.g. "Richard A. Sand").
+     */
+    private boolean looksLikeName(String text) {
+        String t = text.trim();
+        if (t.toLowerCase().startsWith("by "))
+            t = t.substring(3).trim();
+        // First word: capital + letters. Subsequent words: capital + letters OR single capital + dot
+        return t.matches("[A-Z][a-zA-Z'\\-]+(\\s([A-Z][a-zA-Z'\\-]*\\.?)){1,2}");
+    }
+
+    /** Parses "First Last", "First M. Last", or "by First Last" into result. */
+    private void parseAuthorInto(String author, CoverPageResult result) {
+        String t = author.trim();
+        if (t.toLowerCase().startsWith("by "))
+            t = t.substring(3).trim();
+        // Handle "First\tLast" (tab-separated) as well as space-separated
+        String[] parts = t.split("[\\s\\t]+");
+        if (parts.length >= 2) {
+            result.authorFirst = parts[0];
+            result.authorLast = parts[parts.length - 1]; // handles middle names/initials
+        } else if (parts.length == 1 && !parts[0].isEmpty()) {
+            result.authorLast = parts[0];
+        }
+    }
+
+    private String toTitleCase(String allCaps) {
+        Set<String>   small = new HashSet<>(Arrays.asList(
+                "a", "an", "the", "and", "but", "or", "for", "nor",
+                "on", "at", "to", "by", "in", "of", "up", "as"));
+        String[]      words = allCaps.toLowerCase().split("\\s+");
+        StringBuilder sb    = new StringBuilder();
+        for (int i = 0; i < words.length; i++) {
+            if (words[i].isEmpty())
+                continue;
+            if (i == 0 || !small.contains(words[i])) {
+                sb.append(Character.toUpperCase(words[i].charAt(0))).append(words[i].substring(1));
+            } else {
+                sb.append(words[i]);
+            }
+            if (i < words.length - 1)
+                sb.append(' ');
+        }
+        return sb.toString();
+    }
+
+    // =========================================================================
+    // Title resolution fallback
+    // =========================================================================
 
     private String resolveBookTitle(String override, XWPFDocument doc, String filename) {
-        if (override != null && !override.isBlank()) {
+        if (override != null && !override.isBlank())
             return override.trim();
-        }
-        // Try document core properties
         try {
             if (doc.getProperties() != null && doc.getProperties().getCoreProperties() != null) {
                 String title = doc.getProperties().getCoreProperties().getTitle();
-                if (title != null && !title.isBlank()) return title.trim();
+                if (title != null && !title.isBlank())
+                    return title.trim();
             }
         } catch (Exception e) {
-            logger.warn("Could not read document core properties title: {}", e.getMessage());
+            logger.warn("Could not read document title property: {}", e.getMessage());
         }
-        // Fall back to filename without extension
         if (filename != null && !filename.isBlank()) {
             String base = filename.replaceFirst("\\.[^.]+$", "").trim();
-            if (!base.isBlank()) return base;
+            if (!base.isBlank())
+                return base;
         }
         return "Imported Book";
     }
 
-    // -------------------------------------------------------------------------
+    // =========================================================================
     // Main parser
-    // -------------------------------------------------------------------------
+    //
+    // Parts detection is context-sensitive rather than a global pre-scan.
+    // When an H1 is immediately followed by an H2 (as next significant
+    // non-blank paragraph), the H1's role is determined by what comes after
+    // the H2:
+    //
+    // H1 → H2 → H1 (next significant after H2 is another H1)
+    // → "subtitle" pattern: H1 = Part, H2 = part subtitle
+    //
+    // H1 → H2 → body (next significant after H2 is body content)
+    // → "traditional" pattern: H1 = Part, H2 = Chapter within that part
+    //
+    // H1 → body
+    // → H1 = Chapter (no parts involved)
+    // =========================================================================
 
     private void parse(List<XWPFParagraph> paragraphs, XWPFDocument doc,
-                       UUID bookId, boolean hasParts, ImportResult result) throws SQLException {
+            UUID bookId, boolean skipCoverPage, ImportResult result) throws SQLException {
 
-        Part    currentPart    = null;
-        Chapter currentChapter = null;
-        Chapter preamble       = null;   // chapter for pre-heading content
-
-        List<String> sceneParas = new ArrayList<>(); // HTML paragraphs accumulating for current scene
+        Part         currentPart    = null;
+        Chapter      currentChapter = null;
+        Chapter      preamble       = null;
+        List<String> sceneParas     = new ArrayList<>();
 
         for (int i = 0; i < paragraphs.size(); i++) {
             XWPFParagraph para      = paragraphs.get(i);
             String        styleName = getWordStyleName(para, doc);
             String        text      = para.getText().trim();
 
-            boolean isPartHeading    = hasParts && isHeadingN(styleName, 1);
-            boolean isChapterHeading = hasParts ? isHeadingN(styleName, 2) : isHeadingN(styleName, 1);
-            boolean isSceneBreak     = isSceneBreakText(text);
-            boolean isSubtitleStyle  = styleName.toLowerCase().contains("subtitle");
+            boolean isH1         = isHeadingN(styleName, 1);
+            boolean isH2         = isHeadingN(styleName, 2);
+            boolean isSceneBreak = isSceneBreakText(text) || isSceneBreakStyle(styleName);
 
-            if (isPartHeading) {
-                // Save whatever was accumulating
+            if (isH1) {
                 finalizeScene(currentChapter, sceneParas, result);
                 sceneParas = new ArrayList<>();
 
-                String partTitle = text.isEmpty() ? "Part " + (result.partCount + 1) : text;
-                currentPart = partDao.create(bookId, partTitle, null, null);
-                result.partCount++;
-                currentChapter = null;
+                // Context-sensitive: look ahead to determine Part vs. Chapter
+                int     nextIdx  = findNextSignificantIdx(paragraphs, i + 1, doc);
+                boolean nextIsH2 = nextIdx >= 0
+                        && isHeadingN(getWordStyleName(paragraphs.get(nextIdx), doc), 2);
 
-            } else if (isChapterHeading) {
-                // Save whatever was accumulating
-                finalizeScene(currentChapter, sceneParas, result);
-                sceneParas = new ArrayList<>();
+                if (nextIsH2) {
+                    // Further lookahead: what follows the H2?
+                    int     afterH2Idx   = findNextSignificantIdx(paragraphs, nextIdx + 1, doc);
+                    boolean afterH2IsH1  = afterH2Idx >= 0
+                            && isHeadingN(getWordStyleName(paragraphs.get(afterH2Idx), doc), 1);
+                    boolean afterH2IsEnd = afterH2Idx < 0;
 
-                // Lookahead for subtitle
-                String subtitle = null;
-                if (i + 1 < paragraphs.size()) {
-                    XWPFParagraph next          = paragraphs.get(i + 1);
-                    String        nextStyleName = getWordStyleName(next, doc);
-                    if (nextStyleName.toLowerCase().contains("subtitle")) {
-                        subtitle = next.getText().trim();
-                        if (subtitle.isBlank()) subtitle = null;
-                        i++; // consume subtitle paragraph
+                    if (afterH2IsH1 || afterH2IsEnd) {
+                        // Pattern: H1 "Part 1" → H2 "Seoul" → H1 "Chapter 1"
+                        // → H1 is a Part, H2 is the part subtitle/location
+                        String partTitle    = stripPartTitle(text);
+                        String partSubtitle = paragraphs.get(nextIdx).getText().trim();
+                        if (partSubtitle.isBlank())
+                            partSubtitle = null;
+                        currentPart = partDao.create(bookId, partTitle, partSubtitle, null);
+                        result.partCount++;
+                        currentChapter = null;
+                        i = nextIdx; // consume the H2 subtitle paragraph
+
+                    } else {
+                        // Pattern: H1 "Part 1" → H2 "Chapter 1" → body
+                        // → H1 is a Part; H2s will be Chapters (handled below)
+                        String partTitle = stripPartTitle(text);
+                        currentPart = partDao.create(bookId, partTitle, null, null);
+                        result.partCount++;
+                        currentChapter = null;
+                        // Do NOT consume the H2 — let the next iteration handle it as a chapter
+                    }
+                } else {
+                    // No H2 follows: this H1 is a Chapter
+                    String chapterTitle = stripChapterTitle(text);
+                    UUID   partId       = currentPart != null ? currentPart.getId() : null;
+                    // Check immediately-following subtitle paragraph
+                    String subtitle = null;
+                    if (i + 1 < paragraphs.size()) {
+                        XWPFParagraph next      = paragraphs.get(i + 1);
+                        String        nextStyle = getWordStyleName(next, doc);
+                        if (isSubtitleStyle(nextStyle)) {
+                            subtitle = next.getText().trim();
+                            if (subtitle.isBlank())
+                                subtitle = null;
+                            i++;
+                        }
+                    }
+                    currentChapter = chapterDao.create(bookId, partId, chapterTitle, subtitle, null);
+                    result.chapterCount++;
+                }
+
+            } else if (isH2) {
+                // H2 that was not consumed by the H1 lookahead above.
+                // In the "traditional" structure (H1=Part, H2=Chapter) this is a chapter.
+                // In "no-parts" docs an H2 can appear as in-content sub-heading.
+                if (currentPart != null && currentChapter == null) {
+                    // Traditional mode: H2 is a Chapter within the current Part
+                    finalizeScene(currentChapter, sceneParas, result);
+                    sceneParas = new ArrayList<>();
+                    String chapterTitle = stripChapterTitle(text);
+                    currentChapter = chapterDao.create(bookId, currentPart.getId(), chapterTitle, null, null);
+                    result.chapterCount++;
+                } else {
+                    // In-content sub-heading — render as <h2> in the current scene
+                    if (!text.isEmpty()) {
+                        if (currentChapter == null && !skipCoverPage) {
+                            if (preamble == null) {
+                                preamble = chapterDao.create(bookId, null, "Preamble", null, null);
+                                result.chapterCount++;
+                                result.warnings.add("Paragraphs found before first heading — placed in a 'Preamble' chapter.");
+                            }
+                            currentChapter = preamble;
+                        }
+                        if (currentChapter != null) {
+                            sceneParas.add("<h2>" + escapeHtml(text) + "</h2>");
+                        }
                     }
                 }
 
-                String chapterTitle = text.isEmpty() ? "Chapter " + (result.chapterCount + 1) : text;
-                UUID   partId       = currentPart != null ? currentPart.getId() : null;
-                currentChapter = chapterDao.create(bookId, partId, chapterTitle, subtitle, null);
-                result.chapterCount++;
-
             } else if (isSceneBreak) {
-                // Only split if we actually have content built up
                 if (currentChapter != null && !sceneParas.isEmpty()) {
                     finalizeScene(currentChapter, sceneParas, result);
                     sceneParas = new ArrayList<>();
                 }
-                // If no content yet, discard the scene break (e.g., break right after chapter heading)
-
-            } else if (isSubtitleStyle) {
-                // Standalone subtitle paragraph not immediately after a heading — treat as body
-                if (ensureChapter(currentChapter, preamble, bookId, result) == null) {
-                    // This is the first paragraph and no chapter context exists yet
-                    preamble = chapterDao.create(bookId, null, "Preamble", null, null);
-                    result.chapterCount++;
-                    currentChapter = preamble;
-                    result.warnings.add("Paragraphs found before first heading — placed in a 'Preamble' chapter.");
-                }
-                String html = buildParagraphHtml(para, styleName, hasParts);
-                if (html != null) {
-                    sceneParas.add(html);
-                    result.wordCount += countWords(text);
-                }
 
             } else {
-                // Body content paragraph
-                if (text.isEmpty() && sceneParas.isEmpty()) continue; // skip leading blanks
+                // Body content
+                if (text.isEmpty() && sceneParas.isEmpty())
+                    continue;
 
-                // Ensure we have a chapter
                 if (currentChapter == null) {
+                    if (skipCoverPage)
+                        continue; // cover page content — silently discard
                     if (preamble == null) {
                         preamble = chapterDao.create(bookId, null, "Preamble", null, null);
                         result.chapterCount++;
@@ -238,18 +529,16 @@ public class ImportService {
                     currentChapter = preamble;
                 }
 
-                String html = buildParagraphHtml(para, styleName, hasParts);
+                String html = buildParagraphHtml(para, styleName);
                 if (html != null) {
                     sceneParas.add(html);
-                    result.wordCount += countWords(text);
+                    result.wordCount += wordCount(text);
                 }
             }
         }
 
-        // Finalize any remaining accumulated content
         finalizeScene(currentChapter, sceneParas, result);
 
-        // Guard: if the document yielded no chapters at all, create a placeholder
         if (result.chapterCount == 0) {
             chapterDao.create(bookId, null, "Chapter 1", null, null);
             result.chapterCount = 1;
@@ -258,59 +547,91 @@ public class ImportService {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Scene finalization
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Parse helpers
+    // =========================================================================
 
     /**
-     * Writes the accumulated paragraph list as a scene under the given chapter.
-     * Does nothing if chapter is null. Always creates at least an empty scene
-     * if the chapter has no scenes yet (checked via sceneParas being non-empty
-     * or explicitly called at chapter transitions).
+     * Returns null (blank title) when the heading text is a generic part label
+     * like "Part 1", "Part I", "Part One" — auto-numbering will render it.
+     * Named parts like "The Dark Tower" are kept as-is.
      */
+    private String stripPartTitle(String text) {
+        if (text == null || text.isBlank())
+            return "";
+        String t = text.trim();
+        if (t.matches("(?i)Part\\s+(\\d+|[IVXLCDM]+|one|two|three|four|five|six|seven|eight"
+                + "|nine|ten|eleven|twelve)(\\s.*)?")) {
+            return "";
+        }
+        return t;
+    }
+
+    /**
+     * Returns null (blank title) when the heading starts with "Chapter" —
+     * auto-numbering will render "Chapter N". Named chapters are kept as-is.
+     */
+    private String stripChapterTitle(String text) {
+        if (text == null || text.isBlank())
+            return "";
+        String t = text.trim();
+        if (t.toLowerCase().startsWith("chapter"))
+            return "";
+        return t;
+    }
+
+    /**
+     * Returns the index of the next paragraph that is not a blank Normal
+     * paragraph, starting from {@code startFrom}. Returns -1 if none found.
+     * Used for H1 context-sensitive lookahead.
+     */
+    private int findNextSignificantIdx(List<XWPFParagraph> paras, int startFrom, XWPFDocument doc) {
+        for (int i = startFrom; i < paras.size(); i++) {
+            String text  = paras.get(i).getText().trim();
+            String style = getWordStyleName(paras.get(i), doc);
+            // Skip blank paragraphs in Normal / blank-line styles
+            if (text.isEmpty() && style.equalsIgnoreCase("Normal"))
+                continue;
+            return i;
+        }
+        return -1;
+    }
+
+    // =========================================================================
+    // Scene finalization
+    // =========================================================================
+
     private void finalizeScene(Chapter chapter, List<String> htmlParas, ImportResult result)
             throws SQLException {
-        if (chapter == null || htmlParas.isEmpty()) return;
-
-        String content   = String.join("\n", htmlParas);
-        int    wordCount = countWords(stripHtml(content));
-
-        Scene scene = sceneDao.create(chapter.getId(), "", null);
-        sceneDao.saveContent(scene.getId(), content, wordCount);
+        if (chapter == null || htmlParas.isEmpty())
+            return;
+        String content = String.join("\n", htmlParas);
+        int    wc      = wordCount(stripHtml(content));
+        Scene  scene   = sceneDao.create(chapter.getId(), "", null);
+        sceneDao.saveContent(scene.getId(), content, wc);
         result.sceneCount++;
     }
 
-    // Helper used in the subtitle-style branch
-    private Chapter ensureChapter(Chapter current, Chapter preamble, UUID bookId, ImportResult result) {
-        if (current != null) return current;
-        return preamble;
-    }
-
-    // -------------------------------------------------------------------------
+    // =========================================================================
     // HTML generation
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
     /**
-     * Converts a Word paragraph to an HTML string compatible with TipTap's
-     * document model. Returns null for paragraphs that should be silently skipped
-     * (e.g., table of contents entries).
-     *
-     * Inline formatting preserved: bold, italic, underline, strikethrough.
-     * Inline font sizes are NOT imported — the style cascade governs sizing.
+     * Converts a body paragraph to TipTap-compatible HTML. Only called for
+     * paragraphs that are actual scene content — heading paragraphs used for
+     * structural purposes (Parts, Chapters) never reach this method.
      */
-    private String buildParagraphHtml(XWPFParagraph para, String styleName, boolean hasParts) {
+    private String buildParagraphHtml(XWPFParagraph para, String styleName) {
         String lower    = styleName.toLowerCase().trim();
         String tag      = "p";
         String styleKey = null;
 
-        // Heading paragraphs that reach this method are sub-chapter-level headings
-        // (H2 in no-parts mode becomes h2, H3 always becomes h3, etc.)
-        if (!hasParts && lower.matches("heading\\s*2")) {
+        if (lower.matches("heading\\s*2")) {
             tag = "h2";
         } else if (lower.matches("heading\\s*3")) {
             tag = "h3";
-        } else if (lower.matches("heading\\s*4") || lower.matches("heading\\s*5") || lower.matches("heading\\s*6")) {
-            tag = "h3"; // collapse deep headings to h3
+        } else if (lower.matches("heading\\s*[456]")) {
+            tag = "h3"; // collapse deep headings
         } else if (lower.matches("block.*(text|quotation|quote)?")
                 || lower.equals("quote")
                 || lower.equals("blockquote")
@@ -319,23 +640,20 @@ public class ImportService {
         } else if (lower.equals("emphasis")) {
             styleKey = "emphasis";
         }
-        // Normal / Body Text / etc. → plain <p> with no data-style
+        // Scene, Scene First Paragraph, Normal, Author Info, etc. → plain <p>
 
         StringBuilder sb = new StringBuilder();
         sb.append("<").append(tag);
-        if (styleKey != null) {
+        if (styleKey != null)
             sb.append(" data-style=\"").append(styleKey).append("\"");
-        }
         sb.append(">");
 
-        // getIRuns() returns all run elements in document order, including
-        // XWPFHyperlinkRun (which extends XWPFRun), so one loop handles both.
+        // getIRuns() returns runs in document order including XWPFHyperlinkRun
         for (IRunElement runElement : para.getIRuns()) {
             if (runElement instanceof XWPFRun run) {
                 String runHtml = buildRunHtml(run);
-                if (!runHtml.isEmpty()) {
+                if (!runHtml.isEmpty())
                     sb.append(runHtml);
-                }
             }
         }
 
@@ -344,49 +662,66 @@ public class ImportService {
     }
 
     private String buildRunHtml(XWPFRun run) {
+        // Embedded pictures are processed first. In Word an image run typically
+        // contains only the picture (no text), so we return immediately after
+        // emitting the <img> tags. The ResizableImage TipTap extension stores
+        // images as base64 data URLs; allowBase64: true is already configured.
+        List<XWPFPicture> pics = run.getEmbeddedPictures();
+        if (!pics.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (XWPFPicture pic : pics) {
+                XWPFPictureData pd = pic.getPictureData();
+                if (pd != null && pd.getData() != null && pd.getData().length > 0) {
+                    String mimeType = getMimeTypeForPicture(pd);
+                    String base64   = Base64.getEncoder().encodeToString(pd.getData());
+                    sb.append("<img src=\"data:")
+                            .append(mimeType)
+                            .append(";base64,")
+                            .append(base64)
+                            .append("\" data-align=\"center\">");
+                }
+            }
+            return sb.toString();
+        }
+
+        // Plain text run with optional inline formatting marks
         String text = run.getText(0);
-        if (text == null || text.isEmpty()) return "";
-
+        if (text == null || text.isEmpty())
+            return "";
         text = escapeHtml(text);
-
-        // Apply inline marks. Order matters: innermost wrap applied first so
-        // outermost wrapper ends up on the outside.
-        boolean isStrike    = run.isStrikeThrough();
-        boolean isItalic    = run.isItalic();
-        boolean isBold      = run.isBold();
-        boolean isUnderline = run.getUnderline() != null && run.getUnderline() != UnderlinePatterns.NONE;
-
-        if (isStrike)    text = "<s>" + text + "</s>";
-        if (isItalic)    text = "<em>" + text + "</em>";
-        if (isBold)      text = "<strong>" + text + "</strong>";
-        if (isUnderline) text = "<u>" + text + "</u>";
-
+        if (run.isStrikeThrough())
+            text = "<s>" + text + "</s>";
+        if (run.isItalic())
+            text = "<em>" + text + "</em>";
+        if (run.isBold())
+            text = "<strong>" + text + "</strong>";
+        if (run.getUnderline() != null && run.getUnderline() != UnderlinePatterns.NONE) {
+            text = "<u>" + text + "</u>";
+        }
         return text;
     }
 
-    // -------------------------------------------------------------------------
-    // Style and structure helpers
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Style / structure helpers
+    // =========================================================================
 
     /**
-     * Resolves a human-readable style name for the paragraph. Looks up the
-     * named style from the document's style table so locale-specific style IDs
-     * (e.g., "berschrift1" in German Word) resolve to normalized names like
-     * "Heading 1".
+     * Resolves a human-readable style name by looking up the document's style
+     * table. Handles locale-specific style IDs (e.g. German "berschrift1").
      */
     private String getWordStyleName(XWPFParagraph para, XWPFDocument doc) {
         String styleId = para.getStyleID();
-        if (styleId == null) return "Normal";
-
+        if (styleId == null)
+            return "Normal";
         XWPFStyles styles = doc.getStyles();
         if (styles != null) {
             XWPFStyle style = styles.getStyle(styleId);
             if (style != null) {
                 String name = style.getName();
-                if (name != null && !name.isBlank()) return name;
+                if (name != null && !name.isBlank())
+                    return name;
             }
         }
-        // Fallback: CamelCase ID to "Camel Case"
         return styleId.replaceAll("([A-Z])", " $1").trim();
     }
 
@@ -395,40 +730,57 @@ public class ImportService {
     }
 
     private boolean isSceneBreakText(String text) {
-        if (text == null) return false;
+        if (text == null)
+            return false;
         String t = text.trim();
-        // Common scene-break patterns authors use
-        return t.matches("\\*+\\s*\\*+\\s*\\*+")   // * * *, ***, ** ** **, etc.
-            || t.equals("#")
-            || t.matches("-{3,}")                  // --- or longer
-            || t.equals("—")
-            || t.equals("–")
-            || t.equals("· · ·")
-            || t.equals("• • •")
-            || t.equals("~")
-            || t.matches("~+\\s*~+\\s*~+");       // ~ ~ ~
+        return t.matches("\\*+\\s*\\*+\\s*\\*+")
+                || t.equals("#")
+                || t.matches("-{3,}")
+                || t.equals("—")
+                || t.equals("–")
+                || t.equals("· · ·")
+                || t.equals("• • •")
+                || t.equals("~")
+                || t.matches("~+\\s*~+\\s*~+");
     }
 
-    // -------------------------------------------------------------------------
+    /** True when the paragraph style name indicates a scene break (e.g. "Scene Break"). */
+    private boolean isSceneBreakStyle(String styleName) {
+        String lower = styleName.toLowerCase();
+        return lower.contains("scene break") || lower.contains("scenebreak");
+    }
+
+    /** Maps POI's getPictureType() int to a MIME type string. */
+    private String getMimeTypeForPicture(XWPFPictureData pd) {
+        return switch (pd.getPictureType()) {
+        case 5 -> "image/jpeg";
+        case 6 -> "image/png";
+        case 8 -> "image/gif";
+        case 9 -> "image/tiff";
+        case 11 -> "image/bmp";
+        case 12 -> "image/svg+xml";
+        default -> "image/jpeg";
+        };
+    }
+
+    // =========================================================================
     // Utilities
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
     private String escapeHtml(String text) {
-        if (text == null) return "";
-        return text
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;");
+        if (text == null)
+            return "";
+        return text.replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     private String stripHtml(String html) {
-        if (html == null) return "";
-        return html.replaceAll("<[^>]+>", " ");
+        return html == null ? "" : html.replaceAll("<[^>]+>", " ");
     }
 
-    private int countWords(String text) {
-        if (text == null || text.isBlank()) return 0;
+    private int wordCount(String text) {
+        if (text == null || text.isBlank())
+            return 0;
         return text.trim().split("\\s+").length;
     }
 }

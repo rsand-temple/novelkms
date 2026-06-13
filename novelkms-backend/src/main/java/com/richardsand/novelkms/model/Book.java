@@ -79,6 +79,22 @@ public class Book {
     @JsonProperty
     private boolean hasCoverImage;
 
+    // ── Import provenance ─────────────────────────────────────────────────────
+
+    /**
+     * Original filename of the file this book was imported from
+     * (e.g. "TheAloneMan.docx"). Null for books created from scratch.
+     */
+    @JsonProperty
+    private String importedFrom;
+
+    /**
+     * UTC timestamp of the import run. Null for books created from scratch.
+     * Read-only from the UI; only set by the import pipeline.
+     */
+    @JsonProperty
+    private Instant importedAt;
+
     // ── Timestamps ────────────────────────────────────────────────────────────
 
     @JsonProperty

@@ -35,6 +35,7 @@ public class PartDao {
                 .subtitle(rs.getString("subtitle"))
                 .displayOrder(rs.getInt("display_order"))
                 .notes(rs.getString("notes"))
+                .partNumber(rs.getInt("part_number"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .updatedAt(rs.getTimestamp("updated_at").toInstant())
                 .build();
@@ -45,7 +46,17 @@ public class PartDao {
     // -------------------------------------------------------------------------
 
     public List<Part> findByBookId(UUID bookId) throws SQLException {
-        String     sql    = "SELECT * FROM part WHERE book_id = ? ORDER BY display_order, title";
+        // ROW_NUMBER() over display_order gives the 1-based part number within
+        // the book, matching the order the nav tree renders them.
+        String     sql    = """
+                WITH numbered AS (
+                    SELECT *,
+                           ROW_NUMBER() OVER (ORDER BY display_order) AS part_number
+                    FROM part
+                    WHERE book_id = ?
+                )
+                SELECT * FROM numbered ORDER BY display_order
+                """;
         List<Part> result = new ArrayList<>();
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
@@ -60,10 +71,21 @@ public class PartDao {
     }
 
     public Optional<Part> findById(UUID id) throws SQLException {
-        String sql = "SELECT * FROM part WHERE id = ?";
+        // Scope ROW_NUMBER() to the part's own book via scalar subquery,
+        // matching the approach used in ChapterDao.findById().
+        String sql = """
+                WITH numbered AS (
+                    SELECT *,
+                           ROW_NUMBER() OVER (PARTITION BY book_id ORDER BY display_order) AS part_number
+                    FROM part
+                    WHERE book_id = (SELECT book_id FROM part WHERE id = ?)
+                )
+                SELECT * FROM numbered WHERE id = ?
+                """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
+            ps.setObject(2, id);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? Optional.of(map(rs)) : Optional.empty();
             }
@@ -94,9 +116,11 @@ public class PartDao {
             ps.setTimestamp(8, Timestamp.from(now));
             ps.executeUpdate();
         }
+        // displayOrder is 0-based count of existing parts, so partNumber = displayOrder + 1
         return Part.builder()
                 .id(id).bookId(bookId).title(title).subtitle(subtitle)
                 .displayOrder(displayOrder).notes(notes)
+                .partNumber(displayOrder + 1)
                 .createdAt(now).updatedAt(now)
                 .build();
     }
@@ -115,7 +139,8 @@ public class PartDao {
             ps.setTimestamp(4, Timestamp.from(now));
             ps.setObject(5, id);
             int rows = ps.executeUpdate();
-            if (rows == 0) return Optional.empty();
+            if (rows == 0)
+                return Optional.empty();
         }
         return findById(id);
     }
@@ -133,17 +158,13 @@ public class PartDao {
     // Ordering
     // -------------------------------------------------------------------------
 
-    /**
-     * Assigns display_order 0..n-1 to the given part IDs in the order supplied.
-     * The book_id guard prevents accidental updates to parts in a different book.
-     */
     public void reorderInBook(UUID bookId, List<UUID> ids) throws SQLException {
         String sql = """
                 UPDATE part SET display_order = ?, updated_at = ?
                 WHERE id = ? AND book_id = ?
                 """;
         try (Connection c = ds.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sql)) {
             c.setAutoCommit(false);
             try {
                 Instant now = Instant.now();

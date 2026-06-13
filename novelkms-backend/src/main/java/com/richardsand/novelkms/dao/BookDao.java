@@ -48,6 +48,7 @@ public class BookDao {
                    page_layout_enabled, page_size_preset, page_width_in, page_height_in,
                    page_margin_top_in, page_margin_bottom_in,
                    page_margin_inner_in, page_margin_outer_in,
+                   imported_from, imported_at,
                    created_at, updated_at,
                    CASE WHEN cover_image IS NOT NULL THEN TRUE ELSE FALSE END AS has_cover_image
             FROM book
@@ -58,6 +59,7 @@ public class BookDao {
     // -------------------------------------------------------------------------
 
     private Book map(ResultSet rs) throws SQLException {
+        Timestamp importedAtTs = rs.getTimestamp("imported_at");
         return Book.builder()
                 .id(rs.getObject("id", UUID.class))
                 .projectId(rs.getObject("project_id", UUID.class))
@@ -75,6 +77,8 @@ public class BookDao {
                 .pageMarginInnerIn(rs.getObject("page_margin_inner_in", Double.class))
                 .pageMarginOuterIn(rs.getObject("page_margin_outer_in", Double.class))
                 .hasCoverImage(rs.getBoolean("has_cover_image"))
+                .importedFrom(rs.getString("imported_from"))
+                .importedAt(importedAtTs != null ? importedAtTs.toInstant() : null)
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .updatedAt(rs.getTimestamp("updated_at").toInstant())
                 .build();
@@ -175,6 +179,31 @@ public class BookDao {
     }
 
     // -------------------------------------------------------------------------
+    // Import metadata
+    // -------------------------------------------------------------------------
+
+    /**
+     * Records the provenance of an imported book. Called once by the import
+     * pipeline immediately after book creation; never called by normal edits.
+     * Updates updated_at so that downstream caches invalidate correctly.
+     */
+    public void setImportMetadata(UUID id, String importedFrom, Instant importedAt) throws SQLException {
+        String sql = """
+                UPDATE book
+                SET imported_from = ?, imported_at = ?, updated_at = ?
+                WHERE id = ?
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, importedFrom);
+            ps.setTimestamp(2, Timestamp.from(importedAt));
+            ps.setTimestamp(3, Timestamp.from(Instant.now()));
+            ps.setObject(4, id);
+            ps.executeUpdate();
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Mutations
     // -------------------------------------------------------------------------
 
@@ -206,6 +235,7 @@ public class BookDao {
                 .pageMarginTopIn(DEFAULT_MARGIN_TOP).pageMarginBottomIn(DEFAULT_MARGIN_BOTTOM)
                 .pageMarginInnerIn(DEFAULT_MARGIN_INNER).pageMarginOuterIn(DEFAULT_MARGIN_OUTER)
                 .hasCoverImage(false)
+                .importedFrom(null).importedAt(null)
                 .createdAt(now).updatedAt(now)
                 .build();
     }

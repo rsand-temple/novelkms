@@ -141,7 +141,13 @@ function PartForm({ part, partId, bookId }) {
 
 	return (
 		<Stack spacing={2} sx={{ p: 2 }}>
-			<Typography variant="overline" color="text.secondary">Part</Typography>
+			<Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+				<Chip
+					label={`Part ${part.partNumber}`}
+					size="small" variant="outlined"
+					sx={{ fontWeight: 500, color: 'text.secondary', borderColor: 'divider' }}
+				/>
+			</Stack>
 			<TextField label="Title" size="small" fullWidth
 				value={title} onChange={(e) => setTitle(e.target.value)} />
 			<TextField label="Subtitle" size="small" fullWidth
@@ -162,7 +168,7 @@ function PartProperties({ partId, bookId }) {
 	const { data: part, isLoading } = usePart(partId);
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!part) return null;
-	return <PartForm key={`${part.id}:${part.title ?? ''}`} part={part} partId={partId} bookId={bookId} />;
+	return <PartForm key={`${part.id}:${part.title ?? ''}:${part.partNumber}`} part={part} partId={partId} bookId={bookId} />;
 }
 
 // ── Book ──────────────────────────────────────────────────────────────────────

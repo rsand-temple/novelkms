@@ -97,7 +97,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         StyleDao    styleDao    = new StyleDao(ds);
 
         // Services
-        ImportService importService = new ImportService(bookDao, partDao, chapterDao, sceneDao);
+        ImportService importService = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
 
         // Multipart support for file uploads
         env.jersey().register(MultiPartFeature.class);
