@@ -48,14 +48,15 @@ export default function App() {
 	}, [])
 
 	// Called when the user clicks a book thumbnail in the project shelf.
-	// Retains the current projectId; clears everything else.
-	const handleSelectBook = useCallback((bookId) => {
+	// ProjectShelf resolves Part 1 or Chapter 1 before calling this, so
+	// partId/chapterId are already set when a destination was found.
+	const handleSelectBook = useCallback((bookId, partId, chapterId) => {
 		setSelection({
 			projectId: selection.projectId,
 			bookId,
-			partId:    null,
-			chapterId: null,
-			sceneId:   null,
+			partId: partId ?? null,
+			chapterId: chapterId ?? null,
+			sceneId: null,
 		})
 	}, [setSelection, selection.projectId])
 

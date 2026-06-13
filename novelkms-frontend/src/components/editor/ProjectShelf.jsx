@@ -1,11 +1,13 @@
-import { useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import {
 	Box, Card, CardActionArea, Typography, CircularProgress, Tooltip,
 } from '@mui/material'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
-import { useBooks }   from '../../hooks/useBooks'
+import { useBooks } from '../../hooks/useBooks'
 import { useProject } from '../../hooks/useProjects'
-import { booksApi }   from '../../api/books'
+import { booksApi } from '../../api/books'
+import { partsApi } from '../../api/parts'
+import { chaptersApi } from '../../api/chapters'
 
 // Thumbnail dimensions — 5:7 aspect ratio approximates a standard novel page.
 const THUMB_W = 140
@@ -15,15 +17,17 @@ const THUMB_H = 196
  * ProjectShelf
  *
  * Shown in the center panel when a project is selected but no book is open.
- * Renders a grid of book thumbnails; clicking one selects that book.
+ * Renders a grid of book thumbnails; clicking one navigates into the book by
+ * selecting Part 1 (if the book has parts) or Chapter 1 (if it has direct
+ * chapters), or the book itself if the book has no content yet.
  *
  * Props:
  *   projectId    — UUID of the active project
- *   onSelectBook — callback(bookId: string) to open a book
+ *   onSelectBook — callback(bookId, partId, chapterId) to open a book
  */
 export default function ProjectShelf({ projectId, onSelectBook }) {
 	const { data: books, isLoading } = useBooks(projectId)
-	const { data: project }          = useProject(projectId)
+	const { data: project } = useProject(projectId)
 
 	const authorName = project
 		? [project.authorFirstName, project.authorLastName].filter(Boolean).join(' ')
@@ -41,13 +45,13 @@ export default function ProjectShelf({ projectId, onSelectBook }) {
 		return (
 			<Box
 				sx={{
-					flex:           1,
-					display:        'flex',
-					flexDirection:  'column',
-					alignItems:     'center',
+					flex: 1,
+					display: 'flex',
+					flexDirection: 'column',
+					alignItems: 'center',
 					justifyContent: 'center',
-					gap:            1,
-					color:          'text.disabled',
+					gap: 1,
+					color: 'text.disabled',
 				}}
 			>
 				<MenuBookIcon sx={{ fontSize: 40, opacity: 0.3 }} />
@@ -59,13 +63,13 @@ export default function ProjectShelf({ projectId, onSelectBook }) {
 	return (
 		<Box
 			sx={{
-				flex:          1,
-				overflowY:     'auto',
-				p:             4,
-				display:       'flex',
-				flexWrap:      'wrap',
-				gap:           3,
-				alignContent:  'flex-start',
+				flex: 1,
+				overflowY: 'auto',
+				p: 4,
+				display: 'flex',
+				flexWrap: 'wrap',
+				gap: 3,
+				alignContent: 'flex-start',
 			}}
 		>
 			{books.map(book => (
@@ -73,7 +77,7 @@ export default function ProjectShelf({ projectId, onSelectBook }) {
 					key={book.id}
 					book={book}
 					authorName={authorName}
-					onSelect={() => onSelectBook(book.id)}
+					onSelectBook={onSelectBook}
 				/>
 			))}
 		</Box>
@@ -82,23 +86,50 @@ export default function ProjectShelf({ projectId, onSelectBook }) {
 
 // ── BookThumb ─────────────────────────────────────────────────────────────────
 
-function BookThumb({ book, authorName, onSelect }) {
+function BookThumb({ book, authorName, onSelectBook }) {
+	const [isNavigating, setIsNavigating] = useState(false)
+
 	const imageUrl = book.hasCoverImage
 		? `${booksApi.getCoverImageUrl(book.id)}?t=${encodeURIComponent(book.updatedAt ?? '')}`
 		: null
 
 	const label = book.title || 'Untitled'
 
+	// Navigate into the book: Part 1 if the book has parts, Chapter 1 if it
+	// has direct chapters, or the book cover if neither exists yet.
+	const handleClick = async () => {
+		if (isNavigating) return
+		setIsNavigating(true)
+		try {
+			const parts = await partsApi.getByBook(book.id)
+			if (parts?.length) {
+				onSelectBook(book.id, parts[0].id, null)
+				return
+			}
+			const chapters = await chaptersApi.getByBook(book.id)
+			if (chapters?.length) {
+				onSelectBook(book.id, null, chapters[0].id)
+				return
+			}
+		} catch (err) {
+			console.error('[ProjectShelf] Failed to load book structure:', err)
+		} finally {
+			setIsNavigating(false)
+		}
+		// No parts or chapters yet — open the book cover.
+		onSelectBook(book.id, null, null)
+	}
+
 	return (
 		<Tooltip title={label} placement="top" enterDelay={500} disableInteractive>
 			<Card elevation={3} sx={{ width: THUMB_W, flexShrink: 0 }}>
-				<CardActionArea onClick={onSelect}>
+				<CardActionArea onClick={handleClick} disabled={isNavigating}>
 
 					{/* Thumbnail area */}
 					<Box
 						sx={{
-							width:    THUMB_W,
-							height:   THUMB_H,
+							width: THUMB_W,
+							height: THUMB_H,
 							overflow: 'hidden',
 							position: 'relative',
 						}}
@@ -109,16 +140,32 @@ function BookThumb({ book, authorName, onSelect }) {
 								src={imageUrl}
 								alt={label}
 								sx={{
-									position:  'absolute',
-									inset:     0,
-									width:     '100%',
-									height:    '100%',
+									position: 'absolute',
+									inset: 0,
+									width: '100%',
+									height: '100%',
 									objectFit: 'cover',
-									display:   'block',
+									display: 'block',
 								}}
 							/>
 						) : (
 							<CoverStub book={book} authorName={authorName} />
+						)}
+
+						{/* Navigation spinner overlay */}
+						{isNavigating && (
+							<Box
+								sx={{
+									position: 'absolute',
+									inset: 0,
+									display: 'flex',
+									alignItems: 'center',
+									justifyContent: 'center',
+									bgcolor: 'rgba(0,0,0,0.35)',
+								}}
+							>
+								<CircularProgress size={28} sx={{ color: 'common.white' }} />
+							</Box>
 						)}
 					</Box>
 
@@ -136,9 +183,9 @@ function BookThumb({ book, authorName, onSelect }) {
 								variant="caption"
 								noWrap
 								sx={{
-									display:   'block',
-									color:     'text.secondary',
-									fontSize:  '0.65rem',
+									display: 'block',
+									color: 'text.secondary',
+									fontSize: '0.65rem',
 									fontStyle: 'italic',
 								}}
 							>
@@ -173,25 +220,25 @@ function CoverStub({ book, authorName }) {
 	return (
 		<Box
 			sx={{
-				width:          '100%',
-				height:         '100%',
-				display:        'flex',
-				flexDirection:  'column',
-				alignItems:     'center',
+				width: '100%',
+				height: '100%',
+				display: 'flex',
+				flexDirection: 'column',
+				alignItems: 'center',
 				justifyContent: 'center',
-				gap:            0.75,
-				p:              1.5,
-				background:     `linear-gradient(160deg, hsl(${hue},35%,28%) 0%, hsl(${hue},25%,18%) 100%)`,
+				gap: 0.75,
+				p: 1.5,
+				background: `linear-gradient(160deg, hsl(${hue},35%,28%) 0%, hsl(${hue},25%,18%) 100%)`,
 			}}
 		>
 			<Typography
 				sx={{
-					color:      `hsl(${hue}, 25%, 90%)`,
-					fontSize:   '0.78rem',
+					color: `hsl(${hue}, 25%, 90%)`,
+					fontSize: '0.78rem',
 					fontWeight: 700,
-					textAlign:  'center',
+					textAlign: 'center',
 					lineHeight: 1.25,
-					wordBreak:  'break-word',
+					wordBreak: 'break-word',
 				}}
 			>
 				{book.title || 'Untitled'}
@@ -200,12 +247,12 @@ function CoverStub({ book, authorName }) {
 			{book.subtitle && (
 				<Typography
 					sx={{
-						color:      `hsl(${hue}, 20%, 70%)`,
-						fontSize:   '0.6rem',
-						fontStyle:  'italic',
-						textAlign:  'center',
+						color: `hsl(${hue}, 20%, 70%)`,
+						fontSize: '0.6rem',
+						fontStyle: 'italic',
+						textAlign: 'center',
 						lineHeight: 1.2,
-						wordBreak:  'break-word',
+						wordBreak: 'break-word',
 					}}
 				>
 					{book.subtitle}
@@ -215,10 +262,10 @@ function CoverStub({ book, authorName }) {
 			{authorName && (
 				<Typography
 					sx={{
-						color:     `hsl(${hue}, 15%, 62%)`,
-						fontSize:  '0.58rem',
+						color: `hsl(${hue}, 15%, 62%)`,
+						fontSize: '0.58rem',
 						textAlign: 'center',
-						mt:        'auto',
+						mt: 'auto',
 						wordBreak: 'break-word',
 					}}
 				>
