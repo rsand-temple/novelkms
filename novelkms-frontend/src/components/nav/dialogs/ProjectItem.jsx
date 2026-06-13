@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Box, Collapse, InputBase, ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
 import ExpandMoreIcon   from '@mui/icons-material/ExpandMore'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
@@ -6,7 +6,7 @@ import FolderIcon       from '@mui/icons-material/Folder'
 import { useBooks }          from '../../hooks/useBooks'
 import { useUpdateProject }  from '../../hooks/useProjects'
 import BookItem              from './BookItem'
-import { useNavContextMenu } from './NavContextMenuContext'
+import { useNavContextMenu } from './NavContextMenu'
 
 export default function ProjectItem({ project, selection, setSelection }) {
 	const [open, setOpen] = useState(false)
@@ -22,33 +22,15 @@ export default function ProjectItem({ project, selection, setSelection }) {
 	const renameInputRef = useRef(null)
 	const { mutate: updateProject } = useUpdateProject()
 
-	// Focus the rename input after a short delay so the MUI Menu's focus-
-	// restoration event (fired when the menu closes) does not race with
-	// autoFocus and immediately trigger onBlur → commit before the user types.
-	// Calling DOM methods (.focus / .select) in an effect is the correct
-	// pattern for external-system interaction and does not trigger setState warnings.
-	useEffect(() => {
-		if (!isRenaming) return
-		const t = setTimeout(() => {
-			if (renameInputRef.current) {
-				renameInputRef.current.focus()
-				renameInputRef.current.select()
-			}
-		}, 50)
-		return () => clearTimeout(t)
-	}, [isRenaming])
-
 	const handleRenameCommit = () => {
 		const newTitle = (renameInputRef.current?.value ?? '').trim()
 		if (newTitle && newTitle !== project.title) {
 			updateProject({
-				id:   project.id,
-				data: {
-					title:           newTitle,
-					description:     project.description     ?? '',
-					authorFirstName: project.authorFirstName ?? '',
-					authorLastName:  project.authorLastName  ?? '',
-				},
+				id:              project.id,
+				title:           newTitle,
+				description:     project.description     ?? '',
+				authorFirstName: project.authorFirstName ?? '',
+				authorLastName:  project.authorLastName  ?? '',
 			})
 		}
 		endRename()

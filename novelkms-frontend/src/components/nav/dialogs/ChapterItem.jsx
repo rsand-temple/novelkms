@@ -9,7 +9,7 @@ import { useScenes }         from '../../hooks/useScenes'
 import { useUpdateChapter }  from '../../hooks/useChapters'
 import SceneItem             from './SceneItem'
 import { containerIds }      from '../../dnd/dndUtils'
-import { useNavContextMenu } from './NavContextMenuContext'
+import { useNavContextMenu } from './NavContextMenu'
 
 /**
  * ChapterItem — nav tree node for a Chapter.
@@ -41,15 +41,12 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 		const newTitle = (renameInputRef.current?.value ?? '').trim()
 		// Allow saving an empty title — display will fall back to "Chapter N".
 		if (newTitle !== (chapter.title ?? '')) {
-			// useUpdateChapter expects { id, data }; data.bookId drives list invalidation.
 			updateChapter({
-				id:   chapter.id,
-				data: {
-					bookId,
-					title:    newTitle,
-					subtitle: chapter.subtitle,
-					notes:    chapter.notes,
-				},
+				id:       chapter.id,
+				bookId,
+				title:    newTitle,
+				subtitle: chapter.subtitle,
+				notes:    chapter.notes,
 			})
 		}
 		endRename()

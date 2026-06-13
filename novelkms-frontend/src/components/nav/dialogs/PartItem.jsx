@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Collapse, InputBase, ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
+import { Box, Collapse, InputBase, ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
 import ExpandMoreIcon   from '@mui/icons-material/ExpandMore'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import BookmarksIcon    from '@mui/icons-material/Bookmarks'
@@ -9,7 +9,7 @@ import { usePartChapters, useUpdatePart } from '../../hooks/useParts'
 import ChapterItem          from './ChapterItem'
 import ChapterListZone      from './ChapterListZone'
 import { containerIds }     from '../../dnd/dndUtils'
-import { useNavContextMenu } from './NavContextMenuContext'
+import { useNavContextMenu } from './NavContextMenu'
 
 /**
  * PartItem — nav tree node for a Part.
@@ -33,15 +33,12 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 	const handleRenameCommit = () => {
 		const newTitle = (renameInputRef.current?.value ?? '').trim()
 		if (newTitle && newTitle !== part.title) {
-			// useUpdatePart expects { id, data }; onSuccess uses the returned part
-			// object for invalidation so bookId does not need to be in data.
 			updatePart({
-				id:   part.id,
-				data: {
-					title:    newTitle,
-					subtitle: part.subtitle,
-					notes:    part.notes,
-				},
+				id:       part.id,
+				bookId,
+				title:    newTitle,
+				subtitle: part.subtitle,
+				notes:    part.notes,
 			})
 		}
 		endRename()

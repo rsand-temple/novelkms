@@ -5,37 +5,37 @@ import {
 	Stack, Chip, Button, Select, MenuItem, FormControl,
 	InputLabel, FormControlLabel, Switch,
 } from '@mui/material';
-import { useScene, SCENE_KEYS }    from '../../hooks/useScenes';
+import { useScene, SCENE_KEYS } from '../../hooks/useScenes';
 import { useChapter, CHAPTER_KEYS } from '../../hooks/useChapters';
-import { usePart, PART_KEYS }       from '../../hooks/useParts';
+import { usePart, PART_KEYS } from '../../hooks/useParts';
 import { useBook, BOOK_KEYS, useUploadCoverImage, useDeleteCoverImage } from '../../hooks/useBooks';
-import { useProject }               from '../../hooks/useProjects';
-import { useUpdateProject, PROJECT_KEYS } from '../../hooks/useProjects';
+import { useProject } from '../../hooks/useProjects';
+import { useUpdateProject } from '../../hooks/useProjects';
 import {
 	useGlobalTemplate, useBookTemplate,
 	useResetGlobalTemplate, useDeleteBookTemplate,
 } from '../../hooks/useTemplates';
-import { scenesApi }   from '../../api/scenes';
+import { scenesApi } from '../../api/scenes';
 import { chaptersApi } from '../../api/chapters';
-import { partsApi }    from '../../api/parts';
-import { booksApi }    from '../../api/books';
+import { partsApi } from '../../api/parts';
+import { booksApi } from '../../api/books';
 
 // ── Page size presets ─────────────────────────────────────────────────────────
 
 const PAGE_SIZE_PRESETS = [
-	{ label: 'US Letter (8.5″ × 11″)',      value: 'LETTER',      width: 8.5,  height: 11.0  },
-	{ label: 'A4 (8.27″ × 11.69″)',         value: 'A4',          width: 8.27, height: 11.69 },
-	{ label: 'Trade Paperback (6″ × 9″)',    value: 'TRADE_PB',    width: 6.0,  height: 9.0   },
-	{ label: 'Mass Market (4.25″ × 6.87″)', value: 'MASS_MARKET', width: 4.25, height: 6.87  },
-	{ label: 'Hardback (6″ × 9″)',           value: 'HARDBACK',    width: 6.0,  height: 9.0   },
-	{ label: 'Custom',                       value: 'CUSTOM',      width: null, height: null  },
+	{ label: 'US Letter (8.5″ × 11″)', value: 'LETTER', width: 8.5, height: 11.0 },
+	{ label: 'A4 (8.27″ × 11.69″)', value: 'A4', width: 8.27, height: 11.69 },
+	{ label: 'Trade Paperback (6″ × 9″)', value: 'TRADE_PB', width: 6.0, height: 9.0 },
+	{ label: 'Mass Market (4.25″ × 6.87″)', value: 'MASS_MARKET', width: 4.25, height: 6.87 },
+	{ label: 'Hardback (6″ × 9″)', value: 'HARDBACK', width: 6.0, height: 9.0 },
+	{ label: 'Custom', value: 'CUSTOM', width: null, height: null },
 ]
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
 function SceneForm({ scene, sceneId, chapterId }) {
 	const qc = useQueryClient();
-	const [title,    setTitle]    = useState(scene.title    ?? '');
+	const [title, setTitle] = useState(scene.title ?? '');
 	const [synopsis, setSynopsis] = useState(scene.synopsis ?? '');
 
 	const { mutate: save, isPending } = useMutation({
@@ -72,16 +72,16 @@ function SceneProperties({ sceneId, chapterId }) {
 	const { data: scene, isLoading } = useScene(sceneId);
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!scene) return null;
-	return <SceneForm key={scene.id} scene={scene} sceneId={sceneId} chapterId={chapterId} />;
+	return <SceneForm key={`${scene.id}:${scene.title ?? ''}`} scene={scene} sceneId={sceneId} chapterId={chapterId} />;
 }
 
 // ── Chapter ───────────────────────────────────────────────────────────────────
 
 function ChapterForm({ chapter, chapterId, bookId }) {
 	const qc = useQueryClient();
-	const [title,    setTitle]    = useState(chapter.title    ?? '');
+	const [title, setTitle] = useState(chapter.title ?? '');
 	const [subtitle, setSubtitle] = useState(chapter.subtitle ?? '');
-	const [notes,    setNotes]    = useState(chapter.notes    ?? '');
+	const [notes, setNotes] = useState(chapter.notes ?? '');
 
 	const { mutate: save, isPending } = useMutation({
 		mutationFn: (patch) => chaptersApi.update(chapterId, patch),
@@ -120,16 +120,16 @@ function ChapterProperties({ chapterId, bookId }) {
 	const { data: chapter, isLoading } = useChapter(chapterId);
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!chapter) return null;
-	return <ChapterForm key={chapter.id} chapter={chapter} chapterId={chapterId} bookId={bookId} />;
+	return <ChapterForm key={`${chapter.id}:${chapter.title ?? ''}`} chapter={chapter} chapterId={chapterId} bookId={bookId} />;
 }
 
 // ── Part ──────────────────────────────────────────────────────────────────────
 
 function PartForm({ part, partId, bookId }) {
 	const qc = useQueryClient();
-	const [title,    setTitle]    = useState(part.title    ?? '');
+	const [title, setTitle] = useState(part.title ?? '');
 	const [subtitle, setSubtitle] = useState(part.subtitle ?? '');
-	const [notes,    setNotes]    = useState(part.notes    ?? '');
+	const [notes, setNotes] = useState(part.notes ?? '');
 
 	const { mutate: save, isPending } = useMutation({
 		mutationFn: (patch) => partsApi.update(partId, patch),
@@ -162,7 +162,7 @@ function PartProperties({ partId, bookId }) {
 	const { data: part, isLoading } = usePart(partId);
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!part) return null;
-	return <PartForm key={part.id} part={part} partId={partId} bookId={bookId} />;
+	return <PartForm key={`${part.id}:${part.title ?? ''}`} part={part} partId={partId} bookId={bookId} />;
 }
 
 // ── Book ──────────────────────────────────────────────────────────────────────
@@ -171,20 +171,20 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 	const qc = useQueryClient();
 
 	// Metadata
-	const [title,     setTitle]     = useState(book.title     ?? '');
-	const [subtitle,  setSubtitle]  = useState(book.subtitle  ?? '');
-	const [shortTitle,setShortTitle]= useState(book.shortTitle ?? '');
-	const [notes,     setNotes]     = useState(book.notes     ?? '');
+	const [title, setTitle] = useState(book.title ?? '');
+	const [subtitle, setSubtitle] = useState(book.subtitle ?? '');
+	const [shortTitle, setShortTitle] = useState(book.shortTitle ?? '');
+	const [notes, setNotes] = useState(book.notes ?? '');
 
 	// Page layout
-	const [pageLayoutEnabled,  setPageLayoutEnabled]  = useState(book.pageLayoutEnabled  ?? false);
-	const [pageSizePreset,     setPageSizePreset]     = useState(book.pageSizePreset     ?? 'LETTER');
-	const [pageWidthIn,        setPageWidthIn]        = useState(book.pageWidthIn        != null ? String(book.pageWidthIn)        : '');
-	const [pageHeightIn,       setPageHeightIn]       = useState(book.pageHeightIn       != null ? String(book.pageHeightIn)       : '');
-	const [pageMarginTopIn,    setPageMarginTopIn]    = useState(book.pageMarginTopIn    != null ? String(book.pageMarginTopIn)    : '1');
+	const [pageLayoutEnabled, setPageLayoutEnabled] = useState(book.pageLayoutEnabled ?? false);
+	const [pageSizePreset, setPageSizePreset] = useState(book.pageSizePreset ?? 'LETTER');
+	const [pageWidthIn, setPageWidthIn] = useState(book.pageWidthIn != null ? String(book.pageWidthIn) : '');
+	const [pageHeightIn, setPageHeightIn] = useState(book.pageHeightIn != null ? String(book.pageHeightIn) : '');
+	const [pageMarginTopIn, setPageMarginTopIn] = useState(book.pageMarginTopIn != null ? String(book.pageMarginTopIn) : '1');
 	const [pageMarginBottomIn, setPageMarginBottomIn] = useState(book.pageMarginBottomIn != null ? String(book.pageMarginBottomIn) : '1');
-	const [pageMarginInnerIn,  setPageMarginInnerIn]  = useState(book.pageMarginInnerIn  != null ? String(book.pageMarginInnerIn)  : '1.25');
-	const [pageMarginOuterIn,  setPageMarginOuterIn]  = useState(book.pageMarginOuterIn  != null ? String(book.pageMarginOuterIn)  : '1');
+	const [pageMarginInnerIn, setPageMarginInnerIn] = useState(book.pageMarginInnerIn != null ? String(book.pageMarginInnerIn) : '1.25');
+	const [pageMarginOuterIn, setPageMarginOuterIn] = useState(book.pageMarginOuterIn != null ? String(book.pageMarginOuterIn) : '1');
 
 	const { mutate: save, isPending } = useMutation({
 		mutationFn: (patch) => booksApi.update(bookId, patch),
@@ -235,12 +235,12 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 			title, subtitle, shortTitle, notes,
 			pageLayoutEnabled,
 			pageSizePreset,
-			pageWidthIn:        pageWidthIn        ? parseFloat(pageWidthIn)        : null,
-			pageHeightIn:       pageHeightIn       ? parseFloat(pageHeightIn)       : null,
-			pageMarginTopIn:    pageMarginTopIn    ? parseFloat(pageMarginTopIn)    : null,
+			pageWidthIn: pageWidthIn ? parseFloat(pageWidthIn) : null,
+			pageHeightIn: pageHeightIn ? parseFloat(pageHeightIn) : null,
+			pageMarginTopIn: pageMarginTopIn ? parseFloat(pageMarginTopIn) : null,
 			pageMarginBottomIn: pageMarginBottomIn ? parseFloat(pageMarginBottomIn) : null,
-			pageMarginInnerIn:  pageMarginInnerIn  ? parseFloat(pageMarginInnerIn)  : null,
-			pageMarginOuterIn:  pageMarginOuterIn  ? parseFloat(pageMarginOuterIn)  : null,
+			pageMarginInnerIn: pageMarginInnerIn ? parseFloat(pageMarginInnerIn) : null,
+			pageMarginOuterIn: pageMarginOuterIn ? parseFloat(pageMarginOuterIn) : null,
 		});
 	}
 
@@ -276,14 +276,14 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 						src={thumbnailUrl}
 						alt="Cover"
 						sx={{
-							maxWidth:    '100%',
-							maxHeight:   180,
-							objectFit:   'contain',
+							maxWidth: '100%',
+							maxHeight: 180,
+							objectFit: 'contain',
 							borderRadius: 1,
-							border:      '1px solid',
+							border: '1px solid',
 							borderColor: 'divider',
-							display:     'block',
-							mx:          'auto',
+							display: 'block',
+							mx: 'auto',
 						}}
 					/>
 				</Box>
@@ -429,17 +429,17 @@ function BookProperties({ bookId, projectId, selectTemplate }) {
 	const { data: book, isLoading } = useBook(bookId);
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!book) return null;
-	return <BookForm key={book.id} book={book} bookId={bookId} projectId={projectId} selectTemplate={selectTemplate} />;
+	return <BookForm key={`${book.id}:${book.title ?? ''}`} book={book} bookId={bookId} projectId={projectId} selectTemplate={selectTemplate} />;
 }
 
 // ── Project ───────────────────────────────────────────────────────────────────
 
 function ProjectForm({ project, projectId }) {
-	const [title,           setTitle]           = useState(project.title           ?? '');
-	const [description,     setDescription]     = useState(project.description     ?? '');
+	const [title, setTitle] = useState(project.title ?? '');
+	const [description, setDescription] = useState(project.description ?? '');
 	const [authorFirstName, setAuthorFirstName] = useState(project.authorFirstName ?? '');
-	const [authorLastName,  setAuthorLastName]  = useState(project.authorLastName  ?? '');
-	const [copyright,       setCopyright]       = useState(project.copyright       ?? '');
+	const [authorLastName, setAuthorLastName] = useState(project.authorLastName ?? '');
+	const [copyright, setCopyright] = useState(project.copyright ?? '');
 
 	const { mutate: save, isPending } = useUpdateProject();
 
@@ -480,33 +480,33 @@ function ProjectProperties({ projectId }) {
 	const { data: project, isLoading } = useProject(projectId);
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!project) return null;
-	return <ProjectForm key={project.id} project={project} projectId={projectId} />;
+	return <ProjectForm key={`${project.id}:${project.title ?? ''}`} project={project} projectId={projectId} />;
 }
 
 // ── Template ──────────────────────────────────────────────────────────────────
 
 function TemplateProperties({ selection, setSelection }) {
 	const { templateType, templateScope, bookId, projectId } = selection;
-	const isGlobal   = templateScope === 'global';
-	const typeLabel  = templateType === 'part' ? 'Part Page' : 'Cover Page';
+	const isGlobal = templateScope === 'global';
+	const typeLabel = templateType === 'part' ? 'Part Page' : 'Cover Page';
 	const scopeLabel = isGlobal ? 'Global default' : 'This book';
 
 	// Both hooks are always called; only the relevant one is enabled.
 	const { data: globalTpl } = useGlobalTemplate(templateType, isGlobal);
-	const { data: bookTpl }   = useBookTemplate(bookId, templateType, !isGlobal);
+	const { data: bookTpl } = useBookTemplate(bookId, templateType, !isGlobal);
 	const tpl = isGlobal ? globalTpl : bookTpl;
 	const isOverriding = !isGlobal && tpl?.scope === 'BOOK';
 
-	const resetGlobal    = useResetGlobalTemplate();
+	const resetGlobal = useResetGlobalTemplate();
 	const deleteOverride = useDeleteBookTemplate();
 
 	function handleClose() {
 		setSelection({
 			projectId: projectId ?? null,
-			bookId:    isGlobal ? null : (bookId ?? null),
-			partId:    null,
+			bookId: isGlobal ? null : (bookId ?? null),
+			partId: null,
 			chapterId: null,
-			sceneId:   null,
+			sceneId: null,
 		});
 	}
 

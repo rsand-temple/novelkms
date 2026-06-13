@@ -11,7 +11,7 @@ import PartItem             from './PartItem'
 import ChapterItem          from './ChapterItem'
 import ChapterListZone      from './ChapterListZone'
 import { containerIds }     from '../../dnd/dndUtils'
-import { useNavContextMenu } from './NavContextMenuContext'
+import { useNavContextMenu } from './NavContextMenu'
 
 export default function BookItem({ book, selection, setSelection }) {
 	const [open, setOpen] = useState(false)
@@ -39,24 +39,23 @@ export default function BookItem({ book, selection, setSelection }) {
 	const handleRenameCommit = () => {
 		const newTitle = (renameInputRef.current?.value ?? '').trim()
 		if (newTitle && newTitle !== book.title) {
-			// useUpdateBook expects { id, data }; data.projectId drives list invalidation.
+			// Pass all book fields so the PUT doesn't clear page-layout settings
+			// or other metadata. BookDao.update null-guards the NOT NULL margin cols.
 			updateBook({
-				id:   book.id,
-				data: {
-					projectId:          book.projectId,
-					title:              newTitle,
-					subtitle:           book.subtitle,
-					shortTitle:         book.shortTitle,
-					notes:              book.notes,
-					pageLayoutEnabled:  book.pageLayoutEnabled  ?? false,
-					pageSizePreset:     book.pageSizePreset     ?? 'LETTER',
-					pageWidthIn:        book.pageWidthIn,
-					pageHeightIn:       book.pageHeightIn,
-					pageMarginTopIn:    book.pageMarginTopIn,
-					pageMarginBottomIn: book.pageMarginBottomIn,
-					pageMarginInnerIn:  book.pageMarginInnerIn,
-					pageMarginOuterIn:  book.pageMarginOuterIn,
-				},
+				id:                 book.id,
+				projectId:          book.projectId,
+				title:              newTitle,
+				subtitle:           book.subtitle,
+				shortTitle:         book.shortTitle,
+				notes:              book.notes,
+				pageLayoutEnabled:  book.pageLayoutEnabled  ?? false,
+				pageSizePreset:     book.pageSizePreset     ?? 'LETTER',
+				pageWidthIn:        book.pageWidthIn,
+				pageHeightIn:       book.pageHeightIn,
+				pageMarginTopIn:    book.pageMarginTopIn,
+				pageMarginBottomIn: book.pageMarginBottomIn,
+				pageMarginInnerIn:  book.pageMarginInnerIn,
+				pageMarginOuterIn:  book.pageMarginOuterIn,
 			})
 		}
 		endRename()

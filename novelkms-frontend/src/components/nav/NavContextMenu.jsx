@@ -1,0 +1,386 @@
+import { useState, useCallback, useEffect } from 'react'
+import { Divider, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material'
+import ArrowUpwardIcon            from '@mui/icons-material/ArrowUpward'
+import ArrowDownwardIcon          from '@mui/icons-material/ArrowDownward'
+import DeleteIcon                 from '@mui/icons-material/Delete'
+import AddIcon                    from '@mui/icons-material/Add'
+import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
+
+import AddBookDialog          from './dialogs/AddBookDialog'
+import AddChapterDialog       from './dialogs/AddChapterDialog'
+import AddSceneDialog         from './dialogs/AddSceneDialog'
+import AddPartDialog          from './dialogs/AddPartDialog'
+import AddPartChapterDialog   from './dialogs/AddPartChapterDialog'
+import DeleteConfirmDialog    from './dialogs/DeleteConfirmDialog'
+
+import { useScenes,       useReorderScenes,       useDeleteScene   } from '../../hooks/useScenes'
+import { useChapters,     useReorderChapters,     useDeleteChapter } from '../../hooks/useChapters'
+import { useDeleteBook }                                              from '../../hooks/useBooks'
+import {
+	useParts, usePartChapters,
+	useReorderParts, useReorderPartChapters,
+	useDeletePart,
+} from '../../hooks/useParts'
+
+// ── Context ───────────────────────────────────────────────────────────────────
+
+import { NavContextMenuContext } from './NavContextMenuContext'
+
+// useNavContextMenu is exported from NavContextMenuContext.js — import it from
+// there in any component that needs to read rename state or open the menu.
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getDeleteContext(type, title) {
+	const q = title ? `\u201c${title}\u201d` : ''
+	switch (type) {
+		case 'scene':   return {
+			level: 'scene',
+			label: 'Delete Scene',
+			message: `Delete scene ${q}? This will permanently delete the scene and all its content. This cannot be undone.`,
+		}
+		case 'chapter': return {
+			level: 'chapter',
+			label: 'Delete Chapter',
+			message: `Delete chapter ${q}? This will permanently delete the chapter and all its scenes. This cannot be undone.`,
+		}
+		case 'part':    return {
+			level: 'part',
+			label: 'Delete Part',
+			message: `Delete part ${q}? The part will be removed but its chapters will be preserved and moved directly under the book. This cannot be undone.`,
+		}
+		case 'book':    return {
+			level: 'book',
+			label: 'Delete Book',
+			message: `Delete book ${q}? This will permanently delete the book and all its parts, chapters, and scenes. This cannot be undone.`,
+		}
+		default: return null
+	}
+}
+
+// ── Provider ──────────────────────────────────────────────────────────────────
+
+/**
+ * NavContextMenuProvider
+ *
+ * Wraps the nav tree and provides:
+ *  - openContextMenu(event, type, nodeData) — called by item onContextMenu handlers
+ *  - renamingId — the ID currently in inline-rename mode (string | null)
+ *  - startRename(id) — begin rename (also called by F2 listener)
+ *  - endRename()    — cancel rename without saving
+ *
+ * nodeData shape:
+ *   { id, title, projectId?, bookId?, partId?, chapterId? }
+ *
+ * navRef — a ref attached to the scrollable nav Box; F2 is only triggered when
+ * focus is within that element so it doesn't fire while the editor is active.
+ */
+export function NavContextMenuProvider({ children, selection, setSelection, navRef }) {
+
+	// ── Context menu position & target ────────────────────────────────────────
+	const [menuPos,  setMenuPos]  = useState(null)   // { mouseX, mouseY } | null
+	const [menuNode, setMenuNode] = useState(null)   // { type, id, title, ...ids } | null
+
+	// ── Rename state ──────────────────────────────────────────────────────────
+	const [renamingId, setRenamingId] = useState(null)
+
+	// ── Add-dialog visibility ─────────────────────────────────────────────────
+	const [deleteDialogOpen,      setDeleteDialogOpen]      = useState(false)
+	const [bookDialogOpen,        setBookDialogOpen]        = useState(false)
+	const [chapterDialogOpen,     setChapterDialogOpen]     = useState(false)
+	const [partDialogOpen,        setPartDialogOpen]        = useState(false)
+	const [partChapterDialogOpen, setPartChapterDialogOpen] = useState(false)
+	const [sceneDialogOpen,       setSceneDialogOpen]       = useState(false)
+
+	// ── Sibling lists for Move Up / Down ──────────────────────────────────────
+	// These queries hit the TanStack Query cache already populated by the nav
+	// tree, so they produce no extra network requests in the happy path.
+	// Each is conditionally enabled based on the right-clicked node type.
+	const { data: sceneSiblings      } = useScenes(
+		menuNode?.type === 'scene' ? menuNode.chapterId : null
+	)
+	const { data: directChapSiblings } = useChapters(
+		menuNode?.type === 'chapter' && !menuNode.partId ? menuNode.bookId : null
+	)
+	const { data: partChapSiblings   } = usePartChapters(
+		menuNode?.type === 'chapter' && menuNode.partId  ? menuNode.partId : null
+	)
+	const { data: partSiblings       } = useParts(
+		menuNode?.type === 'part' ? menuNode.bookId : null
+	)
+
+	const siblings =
+		menuNode?.type === 'scene'                              ? sceneSiblings
+		: menuNode?.type === 'chapter' && !menuNode.partId     ? directChapSiblings
+		: menuNode?.type === 'chapter' &&  menuNode.partId     ? partChapSiblings
+		: menuNode?.type === 'part'                            ? partSiblings
+		: null
+
+	const siblingIndex = siblings?.findIndex(s => String(s.id) === String(menuNode?.id)) ?? -1
+	const isFirst      = siblingIndex <= 0
+	const isLast       = !siblings || siblingIndex < 0 || siblingIndex >= siblings.length - 1
+	const canReorder   = menuNode?.type === 'scene' || menuNode?.type === 'chapter' || menuNode?.type === 'part'
+
+	// ── Mutations ─────────────────────────────────────────────────────────────
+	const { mutate: reorderScenes       } = useReorderScenes()
+	const { mutate: reorderChapters     } = useReorderChapters()
+	const { mutate: reorderPartChapters } = useReorderPartChapters()
+	const { mutate: reorderParts        } = useReorderParts()
+	const { mutate: deleteScene,   isPending: deletingScene   } = useDeleteScene()
+	const { mutate: deleteChapter, isPending: deletingChapter } = useDeleteChapter()
+	const { mutate: deletePart,    isPending: deletingPart    } = useDeletePart()
+	const { mutate: deleteBook,    isPending: deletingBook    } = useDeleteBook()
+	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook
+
+	// ── Public API ────────────────────────────────────────────────────────────
+
+	const openContextMenu = useCallback((event, nodeType, nodeData) => {
+		event.preventDefault()
+		event.stopPropagation()
+		setMenuPos({ mouseX: event.clientX, mouseY: event.clientY })
+		setMenuNode({ type: nodeType, ...nodeData })
+	}, [])
+
+	const closeMenu = useCallback(() => {
+		setMenuPos(null)
+		// Keep menuNode alive until dialogs close so their props don't flicker.
+		// Dialogs use menuNode.bookId / chapterId / etc. for their own IDs.
+	}, [])
+
+	const startRename = useCallback((id) => {
+		setRenamingId(String(id))
+		setMenuPos(null)
+	}, [])
+
+	const endRename = useCallback(() => setRenamingId(null), [])
+
+	// ── F2 key: trigger rename on currently selected nav node ─────────────────
+	useEffect(() => {
+		const handleKeyDown = (e) => {
+			if (e.key !== 'F2') return
+			// Only fire when focus is inside the nav tree, not in the editor.
+			if (!navRef?.current?.contains(document.activeElement)) return
+			const selectedId =
+				selection.sceneId   ?? selection.chapterId ?? selection.partId ??
+				selection.bookId    ?? selection.projectId  ?? null
+			if (selectedId) {
+				e.preventDefault()
+				startRename(selectedId)
+			}
+		}
+		document.addEventListener('keydown', handleKeyDown)
+		return () => document.removeEventListener('keydown', handleKeyDown)
+	}, [selection, startRename, navRef])
+
+	// ── Move up / down ────────────────────────────────────────────────────────
+
+	const dispatchReorder = (ids) => {
+		if (!menuNode) return
+		const { type, chapterId, partId, bookId } = menuNode
+		if      (type === 'scene')              reorderScenes({ chapterId, ids })
+		else if (type === 'chapter' && !partId) reorderChapters({ bookId, ids })
+		else if (type === 'chapter' &&  partId) reorderPartChapters({ partId, ids })
+		else if (type === 'part')               reorderParts({ bookId, ids })
+	}
+
+	const handleMoveUp = () => {
+		if (isFirst || !siblings) return
+		const ids = siblings.map(s => s.id)
+		;[ids[siblingIndex - 1], ids[siblingIndex]] = [ids[siblingIndex], ids[siblingIndex - 1]]
+		dispatchReorder(ids)
+		closeMenu()
+	}
+
+	const handleMoveDown = () => {
+		if (isLast || !siblings) return
+		const ids = siblings.map(s => s.id)
+		;[ids[siblingIndex], ids[siblingIndex + 1]] = [ids[siblingIndex + 1], ids[siblingIndex]]
+		dispatchReorder(ids)
+		closeMenu()
+	}
+
+	// ── Delete ────────────────────────────────────────────────────────────────
+
+	const deleteCtx = menuNode ? getDeleteContext(menuNode.type, menuNode.title) : null
+
+	const handleConfirmDelete = () => {
+		if (!menuNode || !deleteCtx) return
+		const { id, chapterId, bookId, projectId } = menuNode
+
+		if (deleteCtx.level === 'scene') {
+			deleteScene(
+				{ id, chapterId },
+				{ onSuccess: () => {
+					setSelection(s => ({ ...s, sceneId: null }))
+					setDeleteDialogOpen(false)
+				}},
+			)
+		} else if (deleteCtx.level === 'chapter') {
+			deleteChapter(
+				{ id, bookId },
+				{ onSuccess: () => {
+					setSelection(s => ({ ...s, chapterId: null, sceneId: null }))
+					setDeleteDialogOpen(false)
+				}},
+			)
+		} else if (deleteCtx.level === 'part') {
+			deletePart(
+				{ id, bookId },
+				{ onSuccess: () => {
+					setSelection(s => ({ ...s, partId: null, chapterId: null, sceneId: null }))
+					setDeleteDialogOpen(false)
+				}},
+			)
+		} else if (deleteCtx.level === 'book') {
+			deleteBook(
+				{ id, projectId },
+				{ onSuccess: () => {
+					setSelection(s => ({ ...s, bookId: null, partId: null, chapterId: null, sceneId: null }))
+					setDeleteDialogOpen(false)
+				}},
+			)
+		}
+	}
+
+	// ── Add sub-item ──────────────────────────────────────────────────────────
+
+	const handleAddScene = () => {
+		closeMenu()
+		setSceneDialogOpen(true)
+	}
+
+	// ── Derived menu flags ────────────────────────────────────────────────────
+
+	const isBookNode    = menuNode?.type === 'book'
+	const canDelete     = deleteCtx != null  // project delete not supported
+
+	// For the AddSceneDialog chapterId:
+	// - right-clicked a chapter → chapterId = menuNode.id
+	// - right-clicked a scene   → chapterId = menuNode.chapterId
+	const addSceneChapterId = menuNode?.type === 'chapter' ? menuNode.id : menuNode?.chapterId
+
+	// ── Render ────────────────────────────────────────────────────────────────
+
+	return (
+		<NavContextMenuContext.Provider value={{ openContextMenu, renamingId, startRename, endRename }}>
+			{children}
+
+			{/* ── Context menu ──────────────────────────────────────────────── */}
+			<Menu
+				open={Boolean(menuPos)}
+				onClose={closeMenu}
+				anchorReference="anchorPosition"
+				anchorPosition={
+					menuPos ? { top: menuPos.mouseY, left: menuPos.mouseX } : undefined
+				}
+				disableRestoreFocus
+			>
+				{/* Rename — always first */}
+				<MenuItem dense onClick={() => menuNode && startRename(menuNode.id)}>
+					<ListItemIcon>
+						<DriveFileRenameOutlineIcon fontSize="small" />
+					</ListItemIcon>
+					<ListItemText>Rename</ListItemText>
+				</MenuItem>
+
+				{/* Move Up / Move Down — only for orderable node types */}
+				{canReorder && <Divider />}
+				{canReorder && (
+					<MenuItem dense onClick={handleMoveUp} disabled={isFirst || siblingIndex < 0}>
+						<ListItemIcon><ArrowUpwardIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Move Up</ListItemText>
+					</MenuItem>
+				)}
+				{canReorder && (
+					<MenuItem dense onClick={handleMoveDown} disabled={isLast || siblingIndex < 0}>
+						<ListItemIcon><ArrowDownwardIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Move Down</ListItemText>
+					</MenuItem>
+				)}
+
+				{/* Add sub-item — context-sensitive */}
+				<Divider />
+
+				{menuNode?.type === 'project' && (
+					<MenuItem dense onClick={() => { closeMenu(); setBookDialogOpen(true) }}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Add Book</ListItemText>
+					</MenuItem>
+				)}
+				{isBookNode && (
+					<MenuItem dense onClick={() => { closeMenu(); setPartDialogOpen(true) }}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Add Part</ListItemText>
+					</MenuItem>
+				)}
+				{isBookNode && (
+					<MenuItem dense onClick={() => { closeMenu(); setChapterDialogOpen(true) }}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Add Chapter</ListItemText>
+					</MenuItem>
+				)}
+				{menuNode?.type === 'part' && (
+					<MenuItem dense onClick={() => { closeMenu(); setPartChapterDialogOpen(true) }}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Add Chapter</ListItemText>
+					</MenuItem>
+				)}
+				{(menuNode?.type === 'chapter' || menuNode?.type === 'scene') && (
+					<MenuItem dense onClick={handleAddScene}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Add Scene</ListItemText>
+					</MenuItem>
+				)}
+
+				{/* Delete — not available for project */}
+				{canDelete && <Divider />}
+				{canDelete && (
+					<MenuItem
+						dense
+						onClick={() => { closeMenu(); setDeleteDialogOpen(true) }}
+					>
+						<ListItemIcon><DeleteIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>{deleteCtx.label}</ListItemText>
+					</MenuItem>
+				)}
+			</Menu>
+
+			{/* ── Delete confirmation ────────────────────────────────────────── */}
+			<DeleteConfirmDialog
+				open={deleteDialogOpen}
+				onClose={() => setDeleteDialogOpen(false)}
+				onConfirm={handleConfirmDelete}
+				title={deleteCtx?.label ?? 'Delete'}
+				message={deleteCtx?.message ?? ''}
+				isPending={isDeleting}
+			/>
+
+			{/* ── Add dialogs ────────────────────────────────────────────────── */}
+			<AddBookDialog
+				open={bookDialogOpen}
+				onClose={() => setBookDialogOpen(false)}
+				projectId={menuNode?.type === 'project' ? menuNode.id : menuNode?.projectId}
+			/>
+			<AddPartDialog
+				open={partDialogOpen}
+				onClose={() => setPartDialogOpen(false)}
+				bookId={menuNode?.type === 'book' ? menuNode.id : menuNode?.bookId}
+			/>
+			<AddChapterDialog
+				open={chapterDialogOpen}
+				onClose={() => setChapterDialogOpen(false)}
+				bookId={menuNode?.type === 'book' ? menuNode.id : menuNode?.bookId}
+			/>
+			<AddPartChapterDialog
+				open={partChapterDialogOpen}
+				onClose={() => setPartChapterDialogOpen(false)}
+				partId={menuNode?.type === 'part' ? menuNode.id : menuNode?.partId}
+			/>
+			<AddSceneDialog
+				open={sceneDialogOpen}
+				onClose={() => setSceneDialogOpen(false)}
+				chapterId={addSceneChapterId}
+			/>
+		</NavContextMenuContext.Provider>
+	)
+}

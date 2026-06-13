@@ -6,7 +6,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useUpdateScene }    from '../../hooks/useScenes'
 import { containerIds }      from '../../dnd/dndUtils'
 import { useDndState }       from '../../dnd/DndStateContext'
-import { useNavContextMenu } from './NavContextMenuContext'
+import { useNavContextMenu } from './NavContextMenu'
 
 /**
  * SceneItem — nav tree leaf node for a Scene.
@@ -38,15 +38,11 @@ export default function SceneItem({ scene, chapterId, partId, selection, setSele
 	const handleRenameCommit = () => {
 		const newTitle = (renameInputRef.current?.value ?? '').trim()
 		if (newTitle !== (scene.title ?? '')) {
-			// useUpdateScene expects { id, data } — chapterId must be inside data
-			// so onSuccess can invalidate SCENE_KEYS.byChapter(data.chapterId).
 			updateScene({
-				id:   scene.id,
-				data: {
-					chapterId,
-					title:    newTitle,
-					synopsis: scene.synopsis ?? '',
-				},
+				id:       scene.id,
+				chapterId,
+				title:    newTitle,
+				synopsis: scene.synopsis ?? '',
 			})
 		}
 		endRename()
