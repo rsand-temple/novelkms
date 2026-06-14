@@ -5,6 +5,7 @@ import ArrowDownwardIcon          from '@mui/icons-material/ArrowDownward'
 import DeleteIcon                 from '@mui/icons-material/Delete'
 import AddIcon                    from '@mui/icons-material/Add'
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
+import FileDownloadIcon           from '@mui/icons-material/FileDownload'
 
 import AddBookDialog          from './dialogs/AddBookDialog'
 import AddChapterDialog       from './dialogs/AddChapterDialog'
@@ -12,6 +13,7 @@ import AddSceneDialog         from './dialogs/AddSceneDialog'
 import AddPartDialog          from './dialogs/AddPartDialog'
 import AddPartChapterDialog   from './dialogs/AddPartChapterDialog'
 import DeleteConfirmDialog    from './dialogs/DeleteConfirmDialog'
+import ExportDialog          from './dialogs/ExportDialog'
 
 import { useScenes,       useReorderScenes,       useDeleteScene   } from '../../hooks/useScenes'
 import { useChapters,     useReorderChapters,     useDeleteChapter } from '../../hooks/useChapters'
@@ -25,6 +27,8 @@ import {
 // ── Context ───────────────────────────────────────────────────────────────────
 
 import { NavContextMenuContext } from './NavContextMenuContext'
+
+import { exportApi } from '../../api/export'
 
 // useNavContextMenu is exported from NavContextMenuContext.js — import it from
 // there in any component that needs to read rename state or open the menu.
@@ -86,6 +90,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 
 	// ── Add-dialog visibility ─────────────────────────────────────────────────
 	const [deleteDialogOpen,      setDeleteDialogOpen]      = useState(false)
+	const [exportDialogOpen,      setExportDialogOpen]      = useState(false)
 	const [bookDialogOpen,        setBookDialogOpen]        = useState(false)
 	const [chapterDialogOpen,     setChapterDialogOpen]     = useState(false)
 	const [partDialogOpen,        setPartDialogOpen]        = useState(false)
@@ -254,6 +259,19 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const isBookNode    = menuNode?.type === 'book'
 	const canDelete     = deleteCtx != null  // project delete not supported
 
+	// Export URL — derived from the right-clicked node type and id.
+	// null for project nodes (no export scope for the whole project).
+	const exportUrl = (() => {
+		if (!menuNode) return null
+		switch (menuNode.type) {
+			case 'book':    return exportApi.bookDocxUrl(menuNode.id)
+			case 'part':    return exportApi.partDocxUrl(menuNode.id)
+			case 'chapter': return exportApi.chapterDocxUrl(menuNode.id)
+			case 'scene':   return exportApi.sceneDocxUrl(menuNode.id)
+			default:        return null
+		}
+	})()
+
 	// For the AddSceneDialog chapterId:
 	// - right-clicked a chapter → chapterId = menuNode.id
 	// - right-clicked a scene   → chapterId = menuNode.chapterId
@@ -332,6 +350,15 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
+				{/* Export as Word — not available for project */}
+				{exportUrl && <Divider />}
+				{exportUrl && (
+					<MenuItem dense onClick={() => { setExportDialogOpen(true); closeMenu() }}>
+						<ListItemIcon><FileDownloadIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Export as Word (.docx)</ListItemText>
+					</MenuItem>
+				)}
+
 				{/* Delete — not available for project */}
 				{canDelete && <Divider />}
 				{canDelete && (
@@ -353,6 +380,14 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				title={deleteCtx?.label ?? 'Delete'}
 				message={deleteCtx?.message ?? ''}
 				isPending={isDeleting}
+			/>
+
+			{/* ── Export dialog ───────────────────────────────────────────────── */}
+			<ExportDialog
+				open={exportDialogOpen}
+				onClose={() => setExportDialogOpen(false)}
+				url={exportUrl}
+				suggestedName={menuNode?.title?.trim() || menuNode?.type || 'export'}
 			/>
 
 			{/* ── Add dialogs ────────────────────────────────────────────────── */}

@@ -3,12 +3,15 @@ import {
 	Box, AppBar, Toolbar, Typography, Button, Menu, MenuItem,
 } from '@mui/material'
 import DescriptionIcon from '@mui/icons-material/Description'
+import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import FileUploadIcon from '@mui/icons-material/FileUpload'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import NavPanel from './components/layout/NavPanel'
 import EditorPanel from './components/layout/EditorPanel'
 import PropertiesPanel from './components/layout/PropertiesPanel'
 import ImportDialog from './components/nav/dialogs/ImportDialog'
+import ExportDialog from './components/nav/dialogs/ExportDialog'
+import { exportApi } from './api/export'
 
 const NAV_WIDTH = 280
 const PROPS_WIDTH = 280
@@ -27,6 +30,8 @@ export default function App() {
 	const [selection, setSel] = useState(EMPTY_SELECTION)
 	const [tplAnchor, setTplAnchor] = useState(null)
 	const [importAnchor, setImportAnchor] = useState(null)
+	const [exportAnchor, setExportAnchor] = useState(null)
+	const [exportDialog, setExportDialog] = useState({ open: false, url: null, suggestedName: '' })
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
 
 	// Any manuscript selection (nav tree, toolbar, properties) clears template
@@ -78,6 +83,11 @@ export default function App() {
 		selectTemplate({ type, scope: 'global' })
 	}
 
+	const doExport = (url, suggestedName) => {
+		setExportAnchor(null)
+		setExportDialog({ open: true, url, suggestedName })
+	}
+
 	const openImportDialog = () => {
 		setImportAnchor(null)
 		setImportDialogOpen(true)
@@ -93,6 +103,42 @@ export default function App() {
 					</Typography>
 
 					<Box sx={{ flexGrow: 1 }} />
+
+					{/* Export menu */}
+					<Button
+						color="inherit"
+						size="small"
+						startIcon={<FileDownloadIcon fontSize="small" />}
+						endIcon={<ArrowDropDownIcon />}
+						onClick={(e) => setExportAnchor(e.currentTarget)}
+						sx={{ mr: 1 }}
+					>
+						Export
+					</Button>
+					<Menu anchorEl={exportAnchor} open={!!exportAnchor} onClose={() => setExportAnchor(null)}>
+						{selection.bookId ? [
+							<MenuItem key="book" onClick={() => doExport(exportApi.bookDocxUrl(selection.bookId), 'Book')}>
+								Book (.docx)
+							</MenuItem>,
+							selection.partId && (
+								<MenuItem key="part" onClick={() => doExport(exportApi.partDocxUrl(selection.partId), 'Part')}>
+									This Part (.docx)
+								</MenuItem>
+							),
+							selection.chapterId && (
+								<MenuItem key="chapter" onClick={() => doExport(exportApi.chapterDocxUrl(selection.chapterId), 'Chapter')}>
+									This Chapter (.docx)
+								</MenuItem>
+							),
+							selection.sceneId && (
+								<MenuItem key="scene" onClick={() => doExport(exportApi.sceneDocxUrl(selection.sceneId), 'Scene')}>
+									This Scene (.docx)
+								</MenuItem>
+							),
+						] : (
+							<MenuItem disabled>Select a book to export</MenuItem>
+						)}
+					</Menu>
 
 					{/* Import menu */}
 					<Button
@@ -177,6 +223,14 @@ export default function App() {
 				onClose={() => setImportDialogOpen(false)}
 				projectId={selection.projectId}
 				onSuccess={handleImportSuccess}
+			/>
+
+			{/* Export dialog — rendered at root level so it is never clipped */}
+			<ExportDialog
+				open={exportDialog.open}
+				onClose={() => setExportDialog(d => ({ ...d, open: false }))}
+				url={exportDialog.url}
+				suggestedName={exportDialog.suggestedName}
 			/>
 
 		</Box>

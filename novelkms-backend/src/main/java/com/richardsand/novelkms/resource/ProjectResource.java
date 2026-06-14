@@ -2,6 +2,7 @@ package com.richardsand.novelkms.resource;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
@@ -29,7 +30,7 @@ import lombok.ToString;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class ProjectResource {
-    private static Logger logger = LoggerFactory.getLogger(ProjectResource.class);
+    private static Logger    logger = LoggerFactory.getLogger(ProjectResource.class);
     private final ProjectDao projectDao;
 
     @Inject
@@ -61,6 +62,12 @@ public class ProjectResource {
         public String authorLastName;
         @JsonProperty
         public String copyright;
+        @JsonProperty
+        public String displayName;
+        @JsonProperty
+        public String emailAddress;
+        @JsonProperty
+        public String phoneNumber;
     }
 
     // -------------------------------------------------------------------------
@@ -114,10 +121,36 @@ public class ProjectResource {
                     .entity("title is required").build();
         }
         try {
-            return projectDao.update(id, req.title, req.description,
-                            req.authorFirstName, req.authorLastName, req.copyright)
+            Project project = Project.builder()
+                    .id(id)
+                    .title(req.title)
+                    .description(req.description)
+                    .authorFirstName(req.authorFirstName)
+                    .authorLastName(req.authorLastName)
+                    .copyright(req.copyright)
+                    .displayName(req.displayName)
+                    .emailAddress(req.emailAddress)
+                    .phoneNumber(req.phoneNumber)
+                    .build();
+            return projectDao.update(project)
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
+        } catch (SQLException sqle) {
+            return serverError(sqle);
+        }
+    }
+
+    /**
+     * Returns the total word count across all scenes in every book belonging
+     * to this project. Used by the project properties panel and the WORDS
+     * template token during export.
+     */
+    @GET
+    @Path("/projects/{id}/word-count")
+    public Response getProjectWordCount(@PathParam("id") UUID id) {
+        try {
+            int count = projectDao.getTotalWordCount(id);
+            return Response.ok(Map.of("wordCount", count)).build();
         } catch (SQLException sqle) {
             return serverError(sqle);
         }

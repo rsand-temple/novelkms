@@ -48,6 +48,10 @@ const FONT_SIZES = [
 	{ label: '20', value: '1.25rem' },
 	{ label: '22', value: '1.375rem' },
 	{ label: '24', value: '1.5rem' },
+	{ label: '28', value: '1.75rem' },
+	{ label: '32', value: '2rem' },
+	{ label: '36', value: '2.25rem' },
+	{ label: '40', value: '2.5rem' },
 ]
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -82,7 +86,7 @@ function resolveParaAttrs(editor) {
 // ── sub-components ─────────────────────────────────────────────────────────────
 
 /** Compact Select with no underline, suitable for embedding in a toolbar. */
-function ToolbarSelect({ value, onChange, children, sx }) {
+function ToolbarSelect({ value, onChange, children, sx, disabled }) {
 	return (
 		<Select
 			value={value}
@@ -90,6 +94,7 @@ function ToolbarSelect({ value, onChange, children, sx }) {
 			variant="standard"
 			disableUnderline
 			size="small"
+			disabled={disabled}
 			sx={{ fontSize: '0.8rem', ...sx }}
 			// Prevent the editor from losing focus when the dropdown opens
 			onMouseDown={e => e.preventDefault()}
@@ -144,7 +149,7 @@ function VDivider() {
  *   onTogglePreview   — () => void — toggles the preview
  */
 export default function EditorToolbar({
-	editor, settings, onSettingsChange, onSceneBreak, isSaving,
+	editor, settings = {}, onSettingsChange, onSceneBreak, isSaving,
 	templateMode = false, tokenOptions = [], onInsertToken,
 	previewActive = false, onTogglePreview,
 	styleSheet = [],
@@ -202,6 +207,10 @@ export default function EditorToolbar({
 		const entry = styleSheet.find(s => s.styleKey === state.currentStyle)
 		return entry?.definition ?? null
 	}, [styleSheet, state.currentStyle])
+
+	// All formatting controls are disabled while preview is showing — the editor
+	// is non-editable in that mode so every command would silently do nothing.
+	const formatDisabled = previewActive
 
 	// ── paragraph-attribute helpers ──────────────────────────────────────────
 
@@ -267,7 +276,7 @@ export default function EditorToolbar({
 
 	function handleFontFamilyChange(val) {
 		// null = inherit project default (no inline override)
-		const attrVal = val === settings.fontFamily ? null : val
+		const attrVal = val === settings?.fontFamily ? null : val
 		applyParaPatch({ fontFamily: attrVal })
 	}
 
@@ -276,12 +285,19 @@ export default function EditorToolbar({
 		// A selected field (or any atom) is sized inline via the FontSize mark —
 		// this works whether the field sits in a paragraph or a heading.
 		if (isNodeSelection) {
-			if (val === settings.fontSize) editor.chain().focus().unsetFontSize().run()
+			if (val === settings?.fontSize) editor.chain().focus().unsetFontSize().run()
 			else editor.chain().focus().setFontSize(val).run()
 			return
 		}
-		const attrVal = val === settings.fontSize ? null : val
-		editor.chain().focus().updateAttributes('paragraph', { fontSize: attrVal }).run()
+		const attrVal = val === settings?.fontSize ? null : val
+		// In heading nodes (common in templates) StyledParagraph attributes are not
+		// available. Fall back to the FontSize inline mark, which works on any node.
+		if (HEADING_KEYS.includes(state.currentStyle)) {
+			if (attrVal === null) editor.chain().focus().unsetFontSize().run()
+			else editor.chain().focus().setFontSize(attrVal).run()
+		} else {
+			editor.chain().focus().updateAttributes('paragraph', { fontSize: attrVal }).run()
+		}
 	}
 
 	function handleIndent() {
@@ -330,22 +346,18 @@ export default function EditorToolbar({
 
 	// Display values: inline mark > paragraph override > style definition > project default
 	const displayFontFamily =
-		state.paraFontFamily ||  // inline paragraph override
-		currentStyleDef?.fontFamily ||  // style definition (e.g. Courier New for 'report')
-		settings.fontFamily ||
+		state.paraFontFamily ||
+		currentStyleDef?.fontFamily ||
+		settings?.fontFamily ||
 		FONT_FAMILIES[0].value
-	// Only use the style definition's fontSize when it exactly matches a toolbar
-	// option — otherwise fall through to the project default.  Backend definitions
-	// may store font sizes in a unit format (pt, em, px) that differs from the rem
-	// values in FONT_SIZES, causing the Select to show blank instead of a label.
 	const styleDefFontSize = FONT_SIZES.some(f => f.value === currentStyleDef?.fontSize)
 		? currentStyleDef.fontSize
 		: null
 	const displayFontSize =
-		state.markFontSize ||  // inline FontSize mark (token fields)
-		state.paraFontSize ||  // inline paragraph override
-		styleDefFontSize ||  // style definition (only when a known toolbar value)
-		settings.fontSize ||  // project default
+		state.markFontSize ||
+		state.paraFontSize ||
+		styleDefFontSize ||
+		settings?.fontSize ||
 		FONT_SIZES[3].value
 	// Bold / italic: depressed when the inline mark is active OR when the
 	// resolved style definition declares that property.
@@ -368,6 +380,7 @@ export default function EditorToolbar({
 					value={state.currentStyle || 'normal'}
 					onChange={handleStyleChange}
 					sx={{ minWidth: 132 }}
+					disabled={formatDisabled}
 				>
 					{STYLE_ORDER.flatMap((key) => {
 						const item = (
@@ -394,6 +407,7 @@ export default function EditorToolbar({
 					value={displayFontFamily}
 					onChange={handleFontFamilyChange}
 					sx={{ minWidth: 100 }}
+					disabled={formatDisabled}
 				>
 					{FONT_FAMILIES.map(f => (
 						<MenuItem key={f.value} value={f.value} sx={{ fontFamily: f.value, fontSize: '0.85rem' }}>
@@ -407,6 +421,7 @@ export default function EditorToolbar({
 					value={displayFontSize}
 					onChange={handleFontSizeChange}
 					sx={{ minWidth: 52 }}
+					disabled={formatDisabled}
 				>
 					{FONT_SIZES.map(s => (
 						<MenuItem key={s.value} value={s.value} sx={{ fontSize: '0.85rem' }}>{s.label}</MenuItem>
@@ -418,18 +433,21 @@ export default function EditorToolbar({
 				{/* Bold / Italic / Underline */}
 				<TBtn title="Bold (Ctrl+B)"
 					active={effectiveBold}
+					disabled={formatDisabled}
 					onClick={() => editor?.chain().focus().toggleBold().run()}
 				>
 					<FormatBoldIcon fontSize="small" />
 				</TBtn>
 				<TBtn title="Italic (Ctrl+I)"
 					active={effectiveItalic}
+					disabled={formatDisabled}
 					onClick={() => editor?.chain().focus().toggleItalic().run()}
 				>
 					<FormatItalicIcon fontSize="small" />
 				</TBtn>
 				<TBtn title="Underline (Ctrl+U)"
 					active={state.isUnderline}
+					disabled={formatDisabled}
 					onClick={() => editor?.chain().focus().toggleUnderline().run()}
 				>
 					<FormatUnderlinedIcon fontSize="small" />
@@ -494,18 +512,21 @@ export default function EditorToolbar({
 				{/* Lists */}
 				<TBtn title="Bullet list"
 					active={state.isBulletList}
+					disabled={formatDisabled}
 					onClick={() => editor?.chain().focus().toggleBulletList().run()}
 				>
 					<FormatListBulletedIcon fontSize="small" />
 				</TBtn>
 				<TBtn title="Numbered list"
 					active={state.isOrderedList}
+					disabled={formatDisabled}
 					onClick={() => editor?.chain().focus().toggleOrderedList().run()}
 				>
 					<FormatListNumberedIcon fontSize="small" />
 				</TBtn>
 				<TBtn title="Block quote"
 					active={state.isBlockquote}
+					disabled={formatDisabled}
 					onClick={() => editor?.chain().focus().toggleBlockquote().run()}
 				>
 					<FormatQuoteIcon fontSize="small" />
@@ -514,10 +535,10 @@ export default function EditorToolbar({
 				<VDivider />
 
 				{/* Block indent / outdent */}
-				<TBtn title="Increase indent" onClick={handleIndent} disabled={!isPara}>
+				<TBtn title="Increase indent" onClick={handleIndent} disabled={formatDisabled || !isPara}>
 					<FormatIndentIncreaseIcon fontSize="small" />
 				</TBtn>
-				<TBtn title="Decrease indent" onClick={handleOutdent} disabled={!isPara}>
+				<TBtn title="Decrease indent" onClick={handleOutdent} disabled={formatDisabled || !isPara}>
 					<FormatIndentDecreaseIcon fontSize="small" />
 				</TBtn>
 
@@ -527,7 +548,7 @@ export default function EditorToolbar({
 						size="small"
 						onClick={handleFirstLineIndentToggle}
 						color={firstLineOverriddenOff ? 'primary' : 'default'}
-						disabled={!isPara}
+						disabled={formatDisabled || !isPara}
 						onMouseDown={e => e.preventDefault()}
 						sx={{ fontSize: '0.85rem', fontWeight: 700, px: 0.75 }}
 					>
@@ -540,18 +561,21 @@ export default function EditorToolbar({
 				{/* Text align */}
 				<TBtn title="Align left"
 					active={state.textAlign === 'left' || !state.textAlign}
+					disabled={formatDisabled}
 					onClick={() => editor?.chain().focus().setTextAlign('left').run()}
 				>
 					<FormatAlignLeftIcon fontSize="small" />
 				</TBtn>
 				<TBtn title="Align center"
 					active={state.textAlign === 'center'}
+					disabled={formatDisabled}
 					onClick={() => editor?.chain().focus().setTextAlign('center').run()}
 				>
 					<FormatAlignCenterIcon fontSize="small" />
 				</TBtn>
 				<TBtn title="Align right"
 					active={state.textAlign === 'right'}
+					disabled={formatDisabled}
 					onClick={() => editor?.chain().focus().setTextAlign('right').run()}
 				>
 					<FormatAlignRightIcon fontSize="small" />

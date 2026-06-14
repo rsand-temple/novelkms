@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
 	Box, Typography, TextField, Divider, CircularProgress,
 	Stack, Chip, Button, Select, MenuItem, FormControl,
@@ -19,6 +19,7 @@ import { scenesApi } from '../../api/scenes';
 import { chaptersApi } from '../../api/chapters';
 import { partsApi } from '../../api/parts';
 import { booksApi } from '../../api/books';
+import client from '../../api/client';
 
 // ── Page size presets ─────────────────────────────────────────────────────────
 
@@ -441,13 +442,28 @@ function BookProperties({ bookId, projectId, selectTemplate }) {
 // ── Project ───────────────────────────────────────────────────────────────────
 
 function ProjectForm({ project, projectId }) {
-	const [title, setTitle] = useState(project.title ?? '');
-	const [description, setDescription] = useState(project.description ?? '');
-	const [authorFirstName, setAuthorFirstName] = useState(project.authorFirstName ?? '');
-	const [authorLastName, setAuthorLastName] = useState(project.authorLastName ?? '');
-	const [copyright, setCopyright] = useState(project.copyright ?? '');
+	const [title, setTitle]               = useState(project.title           ?? '')
+	const [description, setDescription]   = useState(project.description     ?? '')
+	const [authorFirstName, setAuthorFirstName] = useState(project.authorFirstName ?? '')
+	const [authorLastName, setAuthorLastName]   = useState(project.authorLastName  ?? '')
+	const [displayName, setDisplayName]   = useState(project.displayName     ?? '')
+	const [copyright, setCopyright]       = useState(project.copyright       ?? '')
+	const [emailAddress, setEmailAddress] = useState(project.emailAddress    ?? '')
+	const [phoneNumber, setPhoneNumber]   = useState(project.phoneNumber     ?? '')
 
-	const { mutate: save, isPending } = useUpdateProject();
+	const { mutate: save, isPending } = useUpdateProject()
+
+	// Total word count — fetched separately; non-editable.
+	const { data: wcData } = useQuery({
+		queryKey: ['projects', projectId, 'word-count'],
+		queryFn: async () => {
+			const res = await client.get(`/projects/${projectId}/word-count`)
+			return res.data
+		},
+		enabled: !!projectId,
+		staleTime: 60_000,
+	})
+	const totalWords = wcData?.wordCount ?? null
 
 	return (
 		<Stack spacing={2} sx={{ p: 2 }}>
@@ -468,18 +484,51 @@ function ProjectForm({ project, projectId }) {
 				<TextField label="Last Name" size="small" fullWidth
 					value={authorLastName} onChange={(e) => setAuthorLastName(e.target.value)} />
 			</Stack>
+			<TextField label="Display Name" size="small" fullWidth
+				value={displayName} onChange={(e) => setDisplayName(e.target.value)}
+				helperText="Resolves the Display Name field token on cover pages" />
 			<TextField label="Copyright" size="small" fullWidth
 				value={copyright} onChange={(e) => setCopyright(e.target.value)}
 				helperText="Resolves the Copyright field token (e.g. © 2026 Your Name)" />
 
+			<Divider />
+			<Typography variant="caption" color="text.secondary"
+				sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+				Contact
+			</Typography>
+			<TextField label="Email Address" size="small" fullWidth
+				value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} />
+			<TextField label="Phone Number" size="small" fullWidth
+				value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+
+			{totalWords !== null && (
+				<>
+					<Divider />
+					<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+						<Typography variant="caption" color="text.secondary">
+							Total words
+						</Typography>
+						<Chip label={totalWords.toLocaleString()} size="small" variant="outlined" />
+					</Box>
+				</>
+			)}
+
 			<Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
 				<Button size="small" variant="contained" disabled={isPending}
-					onClick={() => save({ id: projectId, data: { title, description, authorFirstName, authorLastName, copyright } })}>
+					onClick={() => save({
+						id: projectId,
+						data: {
+							title, description,
+							authorFirstName, authorLastName,
+							displayName, copyright,
+							emailAddress, phoneNumber,
+						},
+					})}>
 					Save
 				</Button>
 			</Box>
 		</Stack>
-	);
+	)
 }
 
 function ProjectProperties({ projectId }) {

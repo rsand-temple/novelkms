@@ -259,6 +259,10 @@ export default function EditorPanel({
 						saved = await templatesApi.updateGlobal(type, html);
 						loadedTemplateKeyRef.current = templateKey(saved);
 						queryClient.invalidateQueries({ queryKey: TEMPLATE_KEYS.global(type) });
+						// Any book without its own override resolves to the global template.
+						// Invalidate all cached book-template queries so BookCoverPreview and
+						// PartPagePreview pick up the change immediately.
+						queryClient.invalidateQueries({ queryKey: ['templates', 'book'] });
 					} else {
 						saved = await templatesApi.upsertBook(bookIdRef.current, type, html);
 						loadedTemplateKeyRef.current = templateKey(saved);

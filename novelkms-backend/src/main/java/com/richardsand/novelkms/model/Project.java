@@ -39,6 +39,18 @@ public class Project {
     @JsonProperty
     private String copyright;
 
+    /** How the author's name appears on cover pages and correspondence (resolves DISPLAY_NAME token). */
+    @JsonProperty
+    private String displayName;
+
+    /** Author e-mail address (resolves EMAIL token). */
+    @JsonProperty
+    private String emailAddress;
+
+    /** Author phone number (resolves PHONE token). */
+    @JsonProperty
+    private String phoneNumber;
+
     @JsonProperty
     private Instant createdAt;
 

@@ -48,6 +48,10 @@ export default function ProjectItem({ project, selection, setSelection }) {
 					description:     project.description     ?? '',
 					authorFirstName: project.authorFirstName ?? '',
 					authorLastName:  project.authorLastName  ?? '',
+					copyright:       project.copyright       ?? '',
+					displayName:     project.displayName     ?? '',
+					emailAddress:    project.emailAddress    ?? '',
+					phoneNumber:     project.phoneNumber     ?? '',
 				},
 			})
 		}

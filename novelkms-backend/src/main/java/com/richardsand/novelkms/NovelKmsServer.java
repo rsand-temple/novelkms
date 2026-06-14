@@ -21,12 +21,14 @@ import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterResource;
+import com.richardsand.novelkms.resource.ExportResource;
 import com.richardsand.novelkms.resource.ImportResource;
 import com.richardsand.novelkms.resource.PartResource;
 import com.richardsand.novelkms.resource.ProjectResource;
 import com.richardsand.novelkms.resource.SceneResource;
 import com.richardsand.novelkms.resource.StyleResource;
 import com.richardsand.novelkms.resource.TemplateResource;
+import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 
 import io.dropwizard.core.Application;
@@ -84,7 +86,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 .dataSource(jdbcUrl, adminUser, adminPwd)
                 .locations("classpath:db/migration/" + ((isPostgres) ? "postgresql" : "h2"))
                 .load();
-        //flyway.repair();
+        // flyway.repair();
         flyway.migrate();
 
         // DAOs
@@ -98,6 +100,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
 
         // Services
         ImportService importService = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
+        ExportService exportService = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao);
 
         // Multipart support for file uploads
         env.jersey().register(MultiPartFeature.class);
@@ -105,6 +108,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         // Resources
         env.jersey().register(BookResource.class);
         env.jersey().register(ChapterResource.class);
+        env.jersey().register(ExportResource.class);
         env.jersey().register(ImportResource.class);
         env.jersey().register(PartResource.class);
         env.jersey().register(ProjectResource.class);
@@ -131,6 +135,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(templateDao).to(TemplateDao.class);
                 bind(styleDao).to(StyleDao.class);
                 bind(importService).to(ImportService.class);
+                bind(exportService).to(ExportService.class);
             }
         });
 

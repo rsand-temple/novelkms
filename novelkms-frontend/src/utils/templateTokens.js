@@ -11,7 +11,11 @@ export const TOKEN_LABELS = {
 	SHORT_TITLE: 'Short Title',
 	AUTHOR_FULL_NAME: 'Author Full Name',
 	AUTHOR_LAST_NAME: 'Author Last Name',
+	DISPLAY_NAME: 'Display Name',
 	COPYRIGHT: 'Copyright',
+	EMAIL: 'Email Address',
+	PHONE: 'Phone Number',
+	WORDS: 'Word Count',
 	PART_NUMBER: 'Part Number',
 	PART_TITLE: 'Part Title',
 	PART_SUBTITLE: 'Part Subtitle',
@@ -19,7 +23,7 @@ export const TOKEN_LABELS = {
 
 // Tokens offered in the Insert-field menu, per template type.
 export const TOKENS_BY_TYPE = {
-	cover: ['TITLE', 'SUBTITLE', 'SHORT_TITLE', 'AUTHOR_FULL_NAME', 'AUTHOR_LAST_NAME', 'COPYRIGHT'],
+	cover: ['TITLE', 'SUBTITLE', 'SHORT_TITLE', 'AUTHOR_FULL_NAME', 'AUTHOR_LAST_NAME', 'DISPLAY_NAME', 'COPYRIGHT', 'EMAIL', 'PHONE', 'WORDS'],
 	part: ['PART_NUMBER', 'PART_TITLE', 'PART_SUBTITLE', 'TITLE', 'AUTHOR_FULL_NAME', 'AUTHOR_LAST_NAME', 'COPYRIGHT'],
 }
 
@@ -37,7 +41,11 @@ export const SAMPLE_VALUES = {
 	SHORT_TITLE: 'Alone Man',
 	AUTHOR_FULL_NAME: 'Richard Sand',
 	AUTHOR_LAST_NAME: 'Sand',
+	DISPLAY_NAME: 'Richard Sand',
 	COPYRIGHT: '© 2026 Richard Sand',
+	EMAIL: 'author@example.com',
+	PHONE: '(215) 555-0100',
+	WORDS: '80,000',
 	PART_NUMBER: 'II',
 	PART_TITLE: 'The Gathering Storm',
 	PART_SUBTITLE: 'In which it begins',
@@ -71,7 +79,11 @@ function realValues(book, project) {
 		SHORT_TITLE: book?.shortTitle || null,
 		AUTHOR_FULL_NAME: full || null,
 		AUTHOR_LAST_NAME: project?.authorLastName || null,
+		DISPLAY_NAME: project?.displayName || null,
 		COPYRIGHT: project?.copyright || null,
+		EMAIL: project?.emailAddress || null,
+		PHONE: project?.phoneNumber || null,
+		WORDS: null,   // computed server-side; shows sample in preview
 		PART_NUMBER: null,
 		PART_TITLE: null,
 		PART_SUBTITLE: null,
@@ -143,6 +155,18 @@ export function resolveValuesForPart({ part, partNumber, book, project }) {
 				break
 			case 'AUTHOR_LAST_NAME':
 				out[token] = project?.authorLastName || SAMPLE_VALUES.AUTHOR_LAST_NAME
+				break
+			case 'DISPLAY_NAME':
+				out[token] = project?.displayName || SAMPLE_VALUES.DISPLAY_NAME
+				break
+			case 'EMAIL':
+				out[token] = project?.emailAddress || SAMPLE_VALUES.EMAIL
+				break
+			case 'PHONE':
+				out[token] = project?.phoneNumber || SAMPLE_VALUES.PHONE
+				break
+			case 'WORDS':
+				out[token] = SAMPLE_VALUES.WORDS   // always sample in part template preview
 				break
 			case 'COPYRIGHT':
 				out[token] = project?.copyright || SAMPLE_VALUES.COPYRIGHT

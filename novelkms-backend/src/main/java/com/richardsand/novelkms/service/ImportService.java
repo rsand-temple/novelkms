@@ -133,8 +133,22 @@ public class ImportService {
                         boolean firstBlank = p.getAuthorFirstName() == null || p.getAuthorFirstName().isBlank();
                         boolean lastBlank  = p.getAuthorLastName() == null || p.getAuthorLastName().isBlank();
                         if (firstBlank && lastBlank) {
-                            projectDao.update(projectId, p.getTitle(), p.getDescription(),
-                                    coverPage.authorFirst, coverPage.authorLast, p.getCopyright());
+                            // Build a new Project with the extracted author values;
+                            // all other fields are preserved from the existing row.
+                            // (Passing the original `p` to update() was a bug — it
+                            // wrote back null/blank author names, discarding the extract.)
+                            Project updated = Project.builder()
+                                    .id(p.getId())
+                                    .title(p.getTitle())
+                                    .description(p.getDescription())
+                                    .authorFirstName(coverPage.authorFirst)
+                                    .authorLastName(coverPage.authorLast)
+                                    .copyright(p.getCopyright())
+                                    .displayName(p.getDisplayName())
+                                    .emailAddress(p.getEmailAddress())
+                                    .phoneNumber(p.getPhoneNumber())
+                                    .build();
+                            projectDao.update(updated);
                             result.authorUpdated = true;
                             logger.info("DOCX import: project author set to '{} {}'",
                                     coverPage.authorFirst, coverPage.authorLast);

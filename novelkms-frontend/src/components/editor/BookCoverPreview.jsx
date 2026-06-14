@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
 import { Box, Typography } from '@mui/material'
 
-import { useBookTemplate }  from '../../hooks/useTemplates'
-import { useBookStyles }    from '../../hooks/useStyles'
+import { useBookTemplate, useDeleteBookTemplate } from '../../hooks/useTemplates'
+import { useBookStyles } from '../../hooks/useStyles'
 import { resolveValues, renderPreviewHtml } from '../../utils/templateTokens'
-import { buildStyleSx }     from '../../utils/styles'
-import { booksApi }         from '../../api/books'
+import { buildStyleSx } from '../../utils/styles'
+import { booksApi } from '../../api/books'
 
 /**
  * BookCoverPreview
@@ -30,8 +30,12 @@ import { booksApi }         from '../../api/books'
  *   settings  — project settings from useProjectSettings()
  */
 export default function BookCoverPreview({ bookId, book, project, pageConfig, settings }) {
-	const { data: coverTemplate } = useBookTemplate(bookId, 'COVER', !!bookId)
-	const { data: styleSheet }    = useBookStyles(bookId, !!bookId)
+	const { data: coverTemplate } = useBookTemplate(bookId, 'cover', !!bookId)
+	const { data: styleSheet } = useBookStyles(bookId, !!bookId)
+
+	// True when this book has its own cover template that shadows the global.
+	const isOverriding = coverTemplate?.scope === 'BOOK'
+	const { mutate: resetToGlobal, isPending: isResetting } = useDeleteBookTemplate()
 
 	// Resolve template tokens against real book/project data.
 	const values = useMemo(
@@ -54,26 +58,26 @@ export default function BookCoverPreview({ bookId, book, project, pageConfig, se
 
 	// Shared page "paper" style — white rectangle at the book's exact dimensions.
 	const paperSx = {
-		width:      pageConfig.widthPx,
-		height:     pageConfig.heightPx,
-		bgcolor:    'background.paper',
+		width: pageConfig.widthPx,
+		height: pageConfig.heightPx,
+		bgcolor: 'background.paper',
 		flexShrink: 0,
-		boxShadow:  3,
-		overflow:   'hidden',
-		position:   'relative',
+		boxShadow: 3,
+		overflow: 'hidden',
+		position: 'relative',
 	}
 
 	return (
 		<Box
 			sx={{
-				flex:           1,
-				overflowY:      'auto',
-				bgcolor:        'grey.400',
-				display:        'flex',
-				flexDirection:  'column',
-				alignItems:     'center',
-				gap:            4,
-				py:             4,
+				flex: 1,
+				overflowY: 'auto',
+				bgcolor: 'grey.400',
+				display: 'flex',
+				flexDirection: 'column',
+				alignItems: 'center',
+				gap: 4,
+				py: 4,
 			}}
 		>
 			{/* ── Page 1: Cover image (full bleed) ─────────────────────────── */}
@@ -84,26 +88,26 @@ export default function BookCoverPreview({ bookId, book, project, pageConfig, se
 						src={imageUrl}
 						alt="Book cover"
 						sx={{
-							position:   'absolute',
-							top:        0,
-							left:       0,
-							width:      '100%',
-							height:     '100%',
-							objectFit:  'cover',
-							display:    'block',
+							position: 'absolute',
+							top: 0,
+							left: 0,
+							width: '100%',
+							height: '100%',
+							objectFit: 'cover',
+							display: 'block',
 						}}
 					/>
 				) : (
 					<Box
 						sx={{
-							width:           '100%',
-							height:          '100%',
-							display:         'flex',
-							flexDirection:   'column',
-							alignItems:      'center',
-							justifyContent:  'center',
-							gap:             1,
-							color:           'text.disabled',
+							width: '100%',
+							height: '100%',
+							display: 'flex',
+							flexDirection: 'column',
+							alignItems: 'center',
+							justifyContent: 'center',
+							gap: 1,
+							color: 'text.disabled',
 						}}
 					>
 						<Typography variant="body2">No cover image</Typography>
@@ -126,19 +130,19 @@ export default function BookCoverPreview({ bookId, book, project, pageConfig, se
 
 					// Project settings as CSS variables so style definitions can
 					// reference them, matching the live editor's rendering context.
-					'--nkms-font-family':   settings.fontFamily,
-					'--nkms-font-size':     settings.fontSize,
-					'--nkms-line-height':   settings.lineHeight,
-					'--nkms-text-indent':   '0px',   // cover pages: no first-line indent
+					'--nkms-font-family': settings.fontFamily,
+					'--nkms-font-size': settings.fontSize,
+					'--nkms-line-height': settings.lineHeight,
+					'--nkms-text-indent': '0px',   // cover pages: no first-line indent
 					'--nkms-spacing-after': settings.spacingAfter,
 
 					'& p': {
-						textIndent:   'var(--nkms-text-indent)',
+						textIndent: 'var(--nkms-text-indent)',
 						marginBottom: 'var(--nkms-spacing-after)',
-						marginTop:    0,
-						fontFamily:   'var(--nkms-font-family)',
-						fontSize:     'var(--nkms-font-size)',
-						lineHeight:   'var(--nkms-line-height)',
+						marginTop: 0,
+						fontFamily: 'var(--nkms-font-family)',
+						fontSize: 'var(--nkms-font-size)',
+						lineHeight: 'var(--nkms-line-height)',
 					},
 					'& h1': { fontSize: '1.6rem', fontWeight: 700, mt: 2, mb: 0.5 },
 					'& h2': { fontSize: '1.3rem', fontWeight: 700, mt: 2, mb: 0.5 },
@@ -148,6 +152,53 @@ export default function BookCoverPreview({ bookId, book, project, pageConfig, se
 					...styleSx,
 				}}
 			>
+				{/* Override badge — visible whenever this book has its own cover
+				    template that shadows the global. Clicking resets to global. */}
+				{isOverriding && (
+					<Box
+						sx={{
+							position: 'absolute',
+							top: 8,
+							left: 0,
+							right: 0,
+							display: 'flex',
+							justifyContent: 'center',
+							zIndex: 1,
+							pointerEvents: 'none',
+						}}
+					>
+						<Box
+							sx={{
+								display: 'flex',
+								alignItems: 'center',
+								gap: 1,
+								bgcolor: 'warning.main',
+								color: 'warning.contrastText',
+								px: 1.5,
+								py: 0.5,
+								borderRadius: 1,
+								pointerEvents: 'auto',
+							}}
+						>
+							<Typography variant="caption" sx={{ color: 'inherit' }}>
+								Book-level template override is active.
+							</Typography>
+							<Typography
+								variant="caption"
+								onClick={() => !isResetting && resetToGlobal({ bookId, type: 'cover' })}
+								sx={{
+									color: 'inherit',
+									textDecoration: 'underline',
+									cursor: isResetting ? 'default' : 'pointer',
+									opacity: isResetting ? 0.6 : 1,
+								}}
+							>
+								{isResetting ? 'Resetting…' : 'Reset to global →'}
+							</Typography>
+						</Box>
+					</Box>
+				)}
+
 				<Box
 					className="tiptap"
 					dangerouslySetInnerHTML={{ __html: previewHtml || '<p></p>' }}
