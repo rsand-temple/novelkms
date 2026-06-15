@@ -22,7 +22,7 @@ import { useProject } from '../../hooks/useProjects';
 import { useGlobalStyles, useBookStyles } from '../../hooks/useStyles';
 import { scenesApi } from '../../api/scenes';
 import { templatesApi } from '../../api/templates';
-import { resolveValues, renderPreviewHtml, tokensForType } from '../../utils/templateTokens';
+import { resolveValues, renderPreviewHtml, tokensForType } from '../../utils/tokenUtils';
 import { buildStyleSx } from '../../utils/styles';
 import { derivePageConfig } from '../../utils/pageConfig';
 import EditorToolbar from '../editor/EditorToolbar';
@@ -259,10 +259,6 @@ export default function EditorPanel({
 						saved = await templatesApi.updateGlobal(type, html);
 						loadedTemplateKeyRef.current = templateKey(saved);
 						queryClient.invalidateQueries({ queryKey: TEMPLATE_KEYS.global(type) });
-						// Any book without its own override resolves to the global template.
-						// Invalidate all cached book-template queries so BookCoverPreview and
-						// PartPagePreview pick up the change immediately.
-						queryClient.invalidateQueries({ queryKey: ['templates', 'book'] });
 					} else {
 						saved = await templatesApi.upsertBook(bookIdRef.current, type, html);
 						loadedTemplateKeyRef.current = templateKey(saved);
@@ -470,7 +466,6 @@ export default function EditorPanel({
 				onInsertToken={handleInsertToken}
 				previewActive={previewActive}
 				onTogglePreview={handleTogglePreview}
-				styleSheet={styleSheet}
 			/>
 
 			{/* ── Content area ─────────────────────────────────────────────── */}

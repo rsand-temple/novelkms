@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
 import { Box, Typography } from '@mui/material'
 
-import { usePart, useParts }        from '../../hooks/useParts'
-import { useBookTemplate }           from '../../hooks/useTemplates'
-import { useBookStyles }             from '../../hooks/useStyles'
-import { resolveValuesForPart, renderPreviewHtml } from '../../utils/templateTokens'
-import { buildStyleSx }              from '../../utils/styles'
+import { usePart, useParts } from '../../hooks/useParts'
+import { useBookTemplate } from '../../hooks/useTemplates'
+import { useBookStyles } from '../../hooks/useStyles'
+import { resolveValuesForPart, renderPreviewHtml } from '../../utils/tokenUtils'
+import { buildStyleSx } from '../../utils/styles'
 
 /**
  * PartPagePreview
@@ -42,7 +42,7 @@ export default function PartPagePreview({ partId, bookId, book, project, pageCon
 	}, [parts, partId])
 
 	const { data: partTemplate } = useBookTemplate(bookId, 'PART', !!bookId)
-	const { data: styleSheet }   = useBookStyles(bookId, !!bookId)
+	const { data: styleSheet } = useBookStyles(bookId, !!bookId)
 
 	const values = useMemo(
 		() => resolveValuesForPart({ part, partNumber, book, project }),
@@ -59,26 +59,26 @@ export default function PartPagePreview({ partId, bookId, book, project, pageCon
 	return (
 		<Box
 			sx={{
-				flex:           1,
-				overflowY:      'auto',
-				bgcolor:        'grey.400',
-				display:        'flex',
-				flexDirection:  'column',
-				alignItems:     'center',
-				gap:            4,
-				py:             4,
+				flex: 1,
+				overflowY: 'auto',
+				bgcolor: 'grey.400',
+				display: 'flex',
+				flexDirection: 'column',
+				alignItems: 'center',
+				gap: 4,
+				py: 4,
 			}}
 		>
 			{/* Single page — part template with tokens resolved */}
 			<Box
 				sx={{
-					width:      pageConfig.widthPx,
-					height:     pageConfig.heightPx,
-					bgcolor:    'background.paper',
+					width: pageConfig.widthPx,
+					height: pageConfig.heightPx,
+					bgcolor: 'background.paper',
 					flexShrink: 0,
-					boxShadow:  3,
-					overflow:   'hidden',
-					position:   'relative',
+					boxShadow: 3,
+					overflow: 'hidden',
+					position: 'relative',
 
 					// Margins applied; part pages carry no running header/footer.
 					pt: `${pageConfig.marginTopPx}px`,
@@ -88,19 +88,19 @@ export default function PartPagePreview({ partId, bookId, book, project, pageCon
 
 					// Project settings as CSS variables — matches the live editor's
 					// rendering context so the preview is visually identical.
-					'--nkms-font-family':   settings.fontFamily,
-					'--nkms-font-size':     settings.fontSize,
-					'--nkms-line-height':   settings.lineHeight,
-					'--nkms-text-indent':   '0px',  // part pages: no first-line indent
+					'--nkms-font-family': settings.fontFamily,
+					'--nkms-font-size': settings.fontSize,
+					'--nkms-line-height': settings.lineHeight,
+					'--nkms-text-indent': '0px',  // part pages: no first-line indent
 					'--nkms-spacing-after': settings.spacingAfter,
 
 					'& p': {
-						textIndent:   'var(--nkms-text-indent)',
+						textIndent: 'var(--nkms-text-indent)',
 						marginBottom: 'var(--nkms-spacing-after)',
-						marginTop:    0,
-						fontFamily:   'var(--nkms-font-family)',
-						fontSize:     'var(--nkms-font-size)',
-						lineHeight:   'var(--nkms-line-height)',
+						marginTop: 0,
+						fontFamily: 'var(--nkms-font-family)',
+						fontSize: 'var(--nkms-font-size)',
+						lineHeight: 'var(--nkms-line-height)',
 					},
 					'& h1': { fontSize: '1.6rem', fontWeight: 700, mt: 2, mb: 0.5 },
 					'& h2': { fontSize: '1.3rem', fontWeight: 700, mt: 2, mb: 0.5 },
@@ -118,14 +118,14 @@ export default function PartPagePreview({ partId, bookId, book, project, pageCon
 				) : (
 					<Box
 						sx={{
-							width:          '100%',
-							height:         '100%',
-							display:        'flex',
-							flexDirection:  'column',
-							alignItems:     'center',
+							width: '100%',
+							height: '100%',
+							display: 'flex',
+							flexDirection: 'column',
+							alignItems: 'center',
 							justifyContent: 'center',
-							color:          'text.disabled',
-							gap:            1,
+							color: 'text.disabled',
+							gap: 1,
 						}}
 					>
 						<Typography variant="body2">No part template defined</Typography>

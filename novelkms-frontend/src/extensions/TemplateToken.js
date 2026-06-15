@@ -1,5 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core'
-import { TOKEN_LABELS } from '../utils/templateTokens'
+import { TOKEN_LABELS } from '../utils/tokenUtils'
 
 /**
  * TemplateToken — an atomic inline node representing a field placeholder in a

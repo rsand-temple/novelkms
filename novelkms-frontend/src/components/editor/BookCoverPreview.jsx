@@ -1,11 +1,13 @@
 import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Box, Typography } from '@mui/material'
 
-import { useBookTemplate, useDeleteBookTemplate } from '../../hooks/useTemplates'
+import { useBookTemplate } from '../../hooks/useTemplates'
 import { useBookStyles } from '../../hooks/useStyles'
-import { resolveValues, renderPreviewHtml } from '../../utils/templateTokens'
+import { resolveValues, renderPreviewHtml } from '../../utils/tokenUtils'
 import { buildStyleSx } from '../../utils/styles'
 import { booksApi } from '../../api/books'
+import client from '../../api/client'
 
 /**
  * BookCoverPreview
@@ -30,17 +32,22 @@ import { booksApi } from '../../api/books'
  *   settings  — project settings from useProjectSettings()
  */
 export default function BookCoverPreview({ bookId, book, project, pageConfig, settings }) {
-	const { data: coverTemplate } = useBookTemplate(bookId, 'cover', !!bookId)
+	const { data: coverTemplate } = useBookTemplate(bookId, 'COVER', !!bookId)
 	const { data: styleSheet } = useBookStyles(bookId, !!bookId)
 
-	// True when this book has its own cover template that shadows the global.
-	const isOverriding = coverTemplate?.scope === 'BOOK'
-	const { mutate: resetToGlobal, isPending: isResetting } = useDeleteBookTemplate()
+	// Fetch the total project word count so the WORDS token resolves correctly
+	// in the cover template preview (e.g. "About 87,432 words").
+	const { data: wordCountData } = useQuery({
+		queryKey: ['projects', project?.id, 'word-count'],
+		queryFn: () => client.get(`/projects/${project.id}/word-count`).then(r => r.data),
+		enabled: !!project?.id,
+	})
+	const wordCount = wordCountData?.wordCount ?? null
 
 	// Resolve template tokens against real book/project data.
 	const values = useMemo(
-		() => resolveValues({ scope: 'book', book, project }),
-		[book, project]
+		() => resolveValues({ scope: 'book', book, project, wordCount }),
+		[book, project, wordCount]
 	)
 
 	const previewHtml = useMemo(
@@ -152,53 +159,6 @@ export default function BookCoverPreview({ bookId, book, project, pageConfig, se
 					...styleSx,
 				}}
 			>
-				{/* Override badge — visible whenever this book has its own cover
-				    template that shadows the global. Clicking resets to global. */}
-				{isOverriding && (
-					<Box
-						sx={{
-							position: 'absolute',
-							top: 8,
-							left: 0,
-							right: 0,
-							display: 'flex',
-							justifyContent: 'center',
-							zIndex: 1,
-							pointerEvents: 'none',
-						}}
-					>
-						<Box
-							sx={{
-								display: 'flex',
-								alignItems: 'center',
-								gap: 1,
-								bgcolor: 'warning.main',
-								color: 'warning.contrastText',
-								px: 1.5,
-								py: 0.5,
-								borderRadius: 1,
-								pointerEvents: 'auto',
-							}}
-						>
-							<Typography variant="caption" sx={{ color: 'inherit' }}>
-								Book-level template override is active.
-							</Typography>
-							<Typography
-								variant="caption"
-								onClick={() => !isResetting && resetToGlobal({ bookId, type: 'cover' })}
-								sx={{
-									color: 'inherit',
-									textDecoration: 'underline',
-									cursor: isResetting ? 'default' : 'pointer',
-									opacity: isResetting ? 0.6 : 1,
-								}}
-							>
-								{isResetting ? 'Resetting…' : 'Reset to global →'}
-							</Typography>
-						</Box>
-					</Box>
-				)}
-
 				<Box
 					className="tiptap"
 					dangerouslySetInnerHTML={{ __html: previewHtml || '<p></p>' }}

@@ -54,6 +54,15 @@ const FONT_SIZES = [
 	{ label: '40', value: '2.5rem' },
 ]
 
+const SPACING_PRESETS = [
+	{ label: 'Default', value: '' },
+	{ label: '0 pt',    value: '0pt' },
+	{ label: '6 pt',    value: '6pt' },
+	{ label: '12 pt',   value: '12pt' },
+	{ label: '18 pt',   value: '18pt' },
+	{ label: '24 pt',   value: '24pt' },
+]
+
 // ── helpers ────────────────────────────────────────────────────────────────────
 
 function parseEm(val) {
@@ -186,6 +195,8 @@ export default function EditorToolbar({
 				paraFontSize: paraAttrs.fontSize ?? null,
 				paraIndent: paraAttrs.indent ?? null,
 				paraFirstLineIndent: paraAttrs.firstLineIndent,
+				paraSpacingBefore: paraAttrs.spacingBefore ?? null,
+				paraSpacingAfter:  paraAttrs.spacingAfter  ?? null,
 				// Inline FontSize mark (used for field-level sizing)
 				markFontSize: e.getAttributes('fontSize')?.size ?? null,
 				textAlign: paraAttrs.textAlign ?? 'left',
@@ -316,6 +327,14 @@ export default function EditorToolbar({
 		applyParaPatch({ firstLineIndent: isOverriddenOff ? null : '0' })
 	}
 
+	function handleSpacingBeforeChange(val) {
+		applyParaPatch({ spacingBefore: val === '' ? null : val })
+	}
+
+	function handleSpacingAfterChange(val) {
+		applyParaPatch({ spacingAfter: val === '' ? null : val })
+	}
+
 	function handleInsertTokenClick(token) {
 		onInsertToken?.(token)
 		setFieldAnchor(null)
@@ -364,6 +383,12 @@ export default function EditorToolbar({
 	const effectiveBold = state.isBold || (currentStyleDef?.bold ?? false)
 	const effectiveItalic = state.isItalic || (currentStyleDef?.italic ?? false)
 	const firstLineOverriddenOff = state.paraFirstLineIndent === '0'
+
+	// Spacing before/after: show the inline override value, or '' (Default) when
+	// none is set (meaning the paragraph inherits from the style definition or
+	// DocSettings global).
+	const displaySpacingBefore = state.paraSpacingBefore || ''
+	const displaySpacingAfter  = state.paraSpacingAfter  || ''
 
 	const showFieldMenu = templateMode && tokenOptions.length > 0
 
@@ -580,6 +605,55 @@ export default function EditorToolbar({
 				>
 					<FormatAlignRightIcon fontSize="small" />
 				</TBtn>
+
+				<VDivider />
+
+				{/* Space before / after paragraph — inline override; 'Default' clears
+				    the override and defers to the paragraph style definition or the
+				    project-level DocSettings global. Only active on paragraph nodes
+				    (not headings, which use native TipTap heading nodes). */}
+				<Tooltip title="Space before paragraph" disableInteractive>
+					<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+						<Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', lineHeight: 1, userSelect: 'none' }}>↑</Typography>
+						<ToolbarSelect
+							value={displaySpacingBefore}
+							onChange={handleSpacingBeforeChange}
+							sx={{ minWidth: 72 }}
+							disabled={formatDisabled || !isPara}
+						>
+							{SPACING_PRESETS.map(p => (
+								<MenuItem
+									key={p.value === '' ? '__default' : p.value}
+									value={p.value}
+									sx={{ fontSize: '0.85rem' }}
+								>
+									{p.label}
+								</MenuItem>
+							))}
+						</ToolbarSelect>
+					</Box>
+				</Tooltip>
+				<Tooltip title="Space after paragraph" disableInteractive>
+					<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+						<Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', lineHeight: 1, userSelect: 'none' }}>↓</Typography>
+						<ToolbarSelect
+							value={displaySpacingAfter}
+							onChange={handleSpacingAfterChange}
+							sx={{ minWidth: 72 }}
+							disabled={formatDisabled || !isPara}
+						>
+							{SPACING_PRESETS.map(p => (
+								<MenuItem
+									key={p.value === '' ? '__default' : p.value}
+									value={p.value}
+									sx={{ fontSize: '0.85rem' }}
+								>
+									{p.label}
+								</MenuItem>
+							))}
+						</ToolbarSelect>
+					</Box>
+				</Tooltip>
 
 				<VDivider />
 
