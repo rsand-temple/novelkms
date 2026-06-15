@@ -3,7 +3,7 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<artifactId>novelkms-frontend</artifactId>
-	<name>Novel Authoring Knowledge Management System - Backend</name>
+	<name>Novel Authoring Knowledge Management System - Frontend</name>
 	<parent>
 		<groupId>com.richardsand.novelkms</groupId>
 		<artifactId>novelkms-parent</artifactId>
