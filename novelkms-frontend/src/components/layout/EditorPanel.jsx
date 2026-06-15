@@ -374,6 +374,10 @@ export default function EditorPanel({
 						saved = await templatesApi.updateGlobal(type, html);
 						loadedTemplateKeyRef.current = templateKey(saved);
 						queryClient.invalidateQueries({ queryKey: TEMPLATE_KEYS.global(type) });
+						// Books with no BOOK override resolve to the global via resolveForBook.
+						// Invalidate all cached book-template entries so BookCoverPreview and
+						// PartPagePreview re-fetch and reflect the updated global immediately.
+						queryClient.invalidateQueries({ queryKey: ['templates', 'book'] });
 					} else {
 						saved = await templatesApi.upsertBook(bookIdRef.current, type, html);
 						loadedTemplateKeyRef.current = templateKey(saved);
@@ -528,7 +532,7 @@ export default function EditorPanel({
 	}, [editor, search.open, search.query, search.matchCase, search.activeIndex, search.totalCount, templateMode]);
 
 	const { registerEditorActions } = search;
-	
+
 	useEffect(() => {
 		if (!editor) return;
 

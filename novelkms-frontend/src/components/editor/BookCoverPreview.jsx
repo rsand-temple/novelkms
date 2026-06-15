@@ -1,8 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Box, Typography } from '@mui/material'
+import { Alert, Box, Button, Typography } from '@mui/material'
 
-import { useBookTemplate } from '../../hooks/useTemplates'
+import { useBookTemplate, useDeleteBookTemplate } from '../../hooks/useTemplates'
 import { useBookStyles } from '../../hooks/useStyles'
 import { resolveValues, renderPreviewHtml } from '../../utils/tokenUtils'
 import { buildStyleSx } from '../../utils/styles'
@@ -21,6 +21,12 @@ import client from '../../api/client'
  *             data, read-only.  Margins are applied; no running header/footer
  *             (cover pages are never paginated in standard publishing).
  *
+ * An amber warning badge appears between the two pages when the book has a
+ * BOOK-scope template override (meaning it is no longer inheriting from the
+ * global cover template).  A "Reset to global" button in the badge deletes the
+ * BOOK override so the book reverts to the global default.  A two-step
+ * confirmation flow prevents accidental resets.
+ *
  * Shown when the user clicks a book in the nav tree and the book has page
  * layout enabled, with no chapter/scene/template active.
  *
@@ -32,8 +38,21 @@ import client from '../../api/client'
  *   settings  — project settings from useProjectSettings()
  */
 export default function BookCoverPreview({ bookId, book, project, pageConfig, settings, embedded = false }) {
-	const { data: coverTemplate } = useBookTemplate(bookId, 'COVER', !!bookId)
+	const { data: coverTemplate } = useBookTemplate(bookId, 'cover', !!bookId)
 	const { data: styleSheet } = useBookStyles(bookId, !!bookId)
+	const { mutate: deleteBookTemplate, isPending: isResetting } = useDeleteBookTemplate()
+
+	// Two-step confirmation: first click shows a confirm prompt in the badge;
+	// second click (Confirm) fires the mutation.  Navigating away or cancelling
+	// resets the flow.
+	const [confirmingReset, setConfirmingReset] = useState(false)
+
+	const handleResetClick = () => setConfirmingReset(true)
+	const handleResetCancel = () => setConfirmingReset(false)
+	const handleResetConfirm = () => {
+		deleteBookTemplate({ bookId, type: 'cover' })
+		setConfirmingReset(false)
+	}
 
 	// Fetch the total project word count so the WORDS token resolves correctly
 	// in the cover template preview (e.g. "About 87,432 words").
@@ -73,6 +92,11 @@ export default function BookCoverPreview({ bookId, book, project, pageConfig, se
 		overflow: 'hidden',
 		position: 'relative',
 	}
+
+	// Whether this book is using a book-specific override (vs the global default).
+	// scope is 'BOOK' when an override row exists; 'GLOBAL' when resolveForBook
+	// fell back to the global template.
+	const hasBookOverride = coverTemplate?.scope === 'BOOK'
 
 	return (
 		<Box
@@ -124,6 +148,66 @@ export default function BookCoverPreview({ bookId, book, project, pageConfig, se
 					</Box>
 				)}
 			</Box>
+
+			{/* ── Override detection badge ──────────────────────────────────── */}
+			{/*
+			    Shown when the book has a BOOK-scope template that is shadowing
+			    the global.  This makes the otherwise-invisible fork discoverable
+			    and provides a one-click (confirmed) path back to the global.
+
+			    Not shown when scope === 'GLOBAL' — that is the normal/default
+			    state and needs no annotation.
+			*/}
+			{hasBookOverride && (
+				<Box sx={{ width: pageConfig.widthPx }}>
+					{!confirmingReset ? (
+						<Alert
+							severity="warning"
+							action={
+								<Button
+									size="small"
+									color="inherit"
+									disabled={isResetting}
+									onClick={handleResetClick}
+								>
+									Reset to global →
+								</Button>
+							}
+						>
+							This book has a template override — edits here are book-specific
+							and won't affect other books. The global cover template is not
+							used for this book.
+						</Alert>
+					) : (
+						<Alert
+							severity="error"
+							action={
+								<Box sx={{ display: 'flex', gap: 1 }}>
+									<Button
+										size="small"
+										color="inherit"
+										onClick={handleResetCancel}
+									>
+										Cancel
+									</Button>
+									<Button
+										size="small"
+										color="inherit"
+										disabled={isResetting}
+										onClick={handleResetConfirm}
+										sx={{ fontWeight: 700 }}
+									>
+										Delete override
+									</Button>
+								</Box>
+							}
+						>
+							Delete this book's template override? The global cover template
+							will be used instead, and any book-specific edits will be lost.
+						</Alert>
+					)}
+				</Box>
+			)}
 
 			{/* ── Page 2: Cover template (read-only, tokens resolved) ───────── */}
 			<Box
