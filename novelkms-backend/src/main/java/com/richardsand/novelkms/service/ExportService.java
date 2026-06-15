@@ -4,18 +4,21 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
-import java.util.Base64;
-import java.util.List;
-import java.util.UUID;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Base64;
+import java.util.List;
+import java.util.UUID;
+
 import javax.imageio.ImageIO;
 
 import org.apache.poi.util.Units;
+import org.apache.poi.wp.usermodel.HeaderFooterType;
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment;
 import org.apache.poi.xwpf.usermodel.UnderlinePatterns;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFHeader;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
 import org.jsoup.Jsoup;
@@ -26,11 +29,12 @@ import org.jsoup.select.Elements;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTBody;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTDocument1;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTInd;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageMar;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageSz;
-import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSectPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSpacing;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STFldCharType;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.STLineSpacingRule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,8 +42,8 @@ import org.slf4j.LoggerFactory;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.PartDao;
-import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.ProjectDao;
+import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.model.Book;
 import com.richardsand.novelkms.model.Chapter;
@@ -124,8 +128,9 @@ public class ExportService {
      * in display order, each chapter on its own page.
      */
     public ExportMeta exportBook(UUID bookId) throws Exception {
-        Book   book     = requireBook(bookId);
-        double contentW = contentWidthIn(book);
+        Book    book     = requireBook(bookId);
+        Project project  = loadProject(book);
+        double  contentW = contentWidthIn(book);
 
         XWPFDocument doc      = createDocument(book);
         boolean      pbNeeded = false;
@@ -137,14 +142,16 @@ public class ExportService {
         }
 
         // Cover template (title page) — always rendered immediately after cover image.
-        // Uses pageBreakBefore so the title page is on its own page with no blank
-        // intermediary paragraph.
         appendCoverTemplate(doc, book, contentW, pbNeeded);
-        pbNeeded = true;
+
+        // Section break ends the "cover" section (no header reference → no header on
+        // cover image page or title page). The default "nextPage" section type means
+        // the first main-content paragraph begins at the top of a fresh page without
+        // needing an additional pageBreakBefore on the heading.
+        addCoverSectionBreak(doc);
+        pbNeeded = false;
 
         // Parts (each with their chapters) then any direct-book chapters.
-        // Page breaks live on the heading paragraph (<w:pageBreakBefore/>) rather
-        // than as separate empty paragraphs — avoids blank page when cover fills page 1.
         List<Part>    parts          = partDao.findByBookId(bookId);
         List<Chapter> directChapters = chapterDao.findByBookId(bookId);
 
@@ -166,6 +173,11 @@ public class ExportService {
             }
         }
 
+        // Running header is attached to the document-level sectPr (= section 2).
+        // It therefore appears on every page of the main content but NOT on the
+        // cover pages (which belong to the section that ended at addCoverSectionBreak).
+        addRunningHeader(doc, book, project);
+
         String filename = docxFilename(book, null);
         return new ExportMeta(toBytes(doc), filename);
     }
@@ -174,16 +186,19 @@ public class ExportService {
      * Exports a single part: part heading, then its chapters in order.
      */
     public ExportMeta exportPart(UUID partId) throws Exception {
-        Part   part     = requirePart(partId);
-        Book   book     = requireBook(part.getBookId());
-        double contentW = contentWidthIn(book);
+        Part    part     = requirePart(partId);
+        Book    book     = requireBook(part.getBookId());
+        Project project  = loadProject(book);
+        double  contentW = contentWidthIn(book);
 
         XWPFDocument doc = createDocument(book);
-        appendPartHeading(doc, part, false); // first element — no break before
+        appendPartHeading(doc, part, false);
 
         for (Chapter ch : chapterDao.findByPartId(partId)) {
-            appendChapterContent(doc, ch, true, contentW); // always break after part heading
+            appendChapterContent(doc, ch, true, contentW);
         }
+
+        addRunningHeader(doc, book, project);
 
         String partLabel = (part.getTitle() != null && !part.getTitle().isBlank())
                 ? part.getTitle()
@@ -198,10 +213,13 @@ public class ExportService {
     public ExportMeta exportChapter(UUID chapterId) throws Exception {
         Chapter chapter  = requireChapter(chapterId);
         Book    book     = requireBook(chapter.getBookId());
+        Project project  = loadProject(book);
         double  contentW = contentWidthIn(book);
 
         XWPFDocument doc = createDocument(book);
-        appendChapterContent(doc, chapter, false, contentW); // first element — no break before
+        appendChapterContent(doc, chapter, false, contentW);
+
+        addRunningHeader(doc, book, project);
 
         String chLabel  = (chapter.getTitle() != null && !chapter.getTitle().isBlank())
                 ? chapter.getTitle()
@@ -217,15 +235,125 @@ public class ExportService {
         Scene   scene   = requireScene(sceneId);
         Chapter chapter = requireChapter(scene.getChapterId());
         Book    book    = requireBook(chapter.getBookId());
+        Project project = loadProject(book);
 
         XWPFDocument doc = createDocument(book);
         convertHtml(doc, scene.getContent(), contentWidthIn(book));
+
+        addRunningHeader(doc, book, project);
 
         String sceneLabel = (scene.getTitle() != null && !scene.getTitle().isBlank())
                 ? scene.getTitle()
                 : null;
         String filename   = docxFilename(book, sceneLabel);
         return new ExportMeta(toBytes(doc), filename);
+    }
+
+    // =========================================================================
+    // Running header + cover section break
+    // =========================================================================
+
+    /**
+     * Loads the project that owns this book, returning null on failure.
+     * Used by header generation; the header degrades gracefully when project
+     * data is unavailable.
+     */
+    private Project loadProject(Book book) {
+        if (book.getProjectId() == null)
+            return null;
+        try {
+            return projectDao.findById(book.getProjectId()).orElse(null);
+        } catch (Exception e) {
+            logger.warn("Could not load project for export header: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Attaches a manuscript running header to the document-level sectPr.
+     *
+     * <p>
+     * Format: {@code Last Name / Short Title / page-number} right-justified.
+     * The page number is a live {@code PAGE} field so Word updates it on each
+     * page. Any component that is null or blank is omitted gracefully.
+     *
+     * <p>
+     * The header is referenced from the document's <em>last</em> sectPr
+     * (the document-level one), so it applies to every page in the final
+     * section of the document. When {@link #addCoverSectionBreak} has been
+     * called first, the cover pages live in a prior section that has no header
+     * reference, giving exactly the "skip cover pages" behaviour required.
+     */
+    private void addRunningHeader(XWPFDocument doc, Book book, Project project) {
+        String lastName   = (project != null && project.getAuthorLastName() != null)
+                ? project.getAuthorLastName().trim()
+                : "";
+        String shortTitle = (book.getShortTitle() != null && !book.getShortTitle().isBlank())
+                ? book.getShortTitle().trim()
+                : (book.getTitle() != null ? book.getTitle().trim() : "");
+
+        // Build the static prefix — everything before the page-number field.
+        StringBuilder prefix = new StringBuilder();
+        if (!lastName.isEmpty())
+            prefix.append(lastName);
+        if (!shortTitle.isEmpty()) {
+            if (prefix.length() > 0)
+                prefix.append(" / ");
+            prefix.append(shortTitle);
+        }
+        if (prefix.length() > 0)
+            prefix.append(" / ");
+
+        XWPFHeader    header = doc.createHeader(HeaderFooterType.DEFAULT);
+        XWPFParagraph para   = header.getParagraphs().isEmpty()
+                ? header.createParagraph()
+                : header.getParagraphs().get(0);
+        para.setAlignment(ParagraphAlignment.RIGHT);
+
+        // Static text prefix ("Last Name / Short Title / ")
+        if (prefix.length() > 0) {
+            XWPFRun r = para.createRun();
+            r.setFontFamily(DEFAULT_FONT);
+            r.setFontSize(DEFAULT_SIZE_PT);
+            r.setText(prefix.toString());
+        }
+
+        // Live PAGE field: <w:fldChar type="begin"/> <w:instrText> PAGE </w:instrText>
+        // <w:fldChar type="end"/>
+        XWPFRun r1 = para.createRun();
+        r1.getCTR().addNewFldChar().setFldCharType(STFldCharType.BEGIN);
+
+        XWPFRun r2 = para.createRun();
+        r2.getCTR().addNewInstrText().setStringValue(" PAGE \\* MERGEFORMAT ");
+
+        XWPFRun r3 = para.createRun();
+        r3.getCTR().addNewFldChar().setFldCharType(STFldCharType.END);
+    }
+
+    /**
+     * Inserts the section-break paragraph that ends the "cover" section.
+     *
+     * <p>
+     * In OOXML, a section break is represented by embedding a
+     * {@code <w:sectPr>} inside a paragraph's {@code <w:pPr>}. The embedded
+     * sectPr carries no {@code <w:headerReference>} element, so all pages in
+     * this section (cover image + title page) render with no header.
+     *
+     * <p>
+     * The section type defaults to {@code nextPage} in Word when no explicit
+     * type is set, which means the first paragraph of the following section
+     * (the first part or chapter heading) begins on a fresh page automatically —
+     * no separate {@code pageBreakBefore} attribute is needed on that heading.
+     */
+    private void addCoverSectionBreak(XWPFDocument doc) {
+        XWPFParagraph para = doc.createParagraph();
+        CTPPr         pPr  = ppr(para);
+        // Minimise the visual footprint of this paragraph on the title page.
+        CTSpacing sp = spacing(pPr);
+        sp.setBefore(BigInteger.ZERO);
+        sp.setAfter(BigInteger.ZERO);
+        // The embedded sectPr with no headerReference = no header in the cover section.
+        pPr.addNewSectPr();
     }
 
     // =========================================================================
@@ -396,14 +524,14 @@ public class ExportService {
         try {
             if (book.getProjectId() != null) {
                 project = projectDao.findById(book.getProjectId()).orElse(null);
-                words = bookDao.getTotalWordCount(book.getId());
+                words = projectDao.getTotalWordCount(book.getProjectId());
             }
         } catch (Exception e) {
             logger.warn("Could not load project for token resolution: {}", e.getMessage());
         }
 
         final Project proj     = project;
-        final String  wordsStr = words > 0 ? formatWordsForCover(words) : null;
+        final String  wordsStr = words > 0 ? String.format("%,d", words) : null;
 
         org.jsoup.nodes.Document jsoup = Jsoup.parseBodyFragment(html);
         for (Element span : jsoup.select("span[data-token]")) {
@@ -981,17 +1109,6 @@ public class ExportService {
         }
         sb.append('-').append(fileTimestamp()).append(".docx");
         return sb.toString();
-    }
-
-    /**
-     * Formats a word count for the cover page: rounds to the nearest 500 and
-     * prefixes with "About " (standard manuscript submission convention).
-     * Matches the formatWordCount() function in tokenUtils.js.
-     * Example: 76,432 → "About 76,500"
-     */
-    private static String formatWordsForCover(int words) {
-        long rounded = Math.round(words / 500.0) * 500;
-        return String.format("About %,d", rounded);
     }
 
     private String toRoman(int n) {
