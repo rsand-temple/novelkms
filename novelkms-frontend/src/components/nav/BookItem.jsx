@@ -12,9 +12,12 @@ import ChapterItem          from './ChapterItem'
 import ChapterListZone      from './ChapterListZone'
 import { containerIds }     from '../../dnd/dndUtils'
 import { useNavContextMenu } from './NavContextMenuContext'
+import { useSearch } from '../../search/SearchContext'
 
 export default function BookItem({ book, selection, setSelection }) {
 	const [open, setOpen] = useState(false)
+	const search = useSearch()
+	const matchCount = search.counts.book[book.id] ?? 0
 
 	// Auto-open when this book is externally navigated to (e.g. from ProjectShelf).
 	const [prevSelBookId, setPrevSelBookId] = useState(selection.bookId)
@@ -103,7 +106,7 @@ export default function BookItem({ book, selection, setSelection }) {
 				selected={isSelected}
 				onClick={handleClick}
 				onContextMenu={handleContextMenu}
-				sx={{ pl: 4 }}
+				sx={{ pl: 4, ...(matchCount > 0 && { bgcolor: 'warning.light' }) }}
 			>
 				<ListItemIcon
 					sx={{ minWidth: 28, cursor: 'pointer' }}
@@ -135,6 +138,7 @@ export default function BookItem({ book, selection, setSelection }) {
 				) : (
 					<ListItemText
 						primary={book.title}
+						secondary={matchCount > 0 ? `${matchCount} matches` : null}
 						slotProps={{ primary: { variant: 'body2', sx: { fontWeight: 500 } } }}
 					/>
 				)}

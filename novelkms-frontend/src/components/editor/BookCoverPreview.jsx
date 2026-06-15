@@ -31,7 +31,7 @@ import client from '../../api/client'
  *   pageConfig — derived from derivePageConfig(book); never null here
  *   settings  — project settings from useProjectSettings()
  */
-export default function BookCoverPreview({ bookId, book, project, pageConfig, settings }) {
+export default function BookCoverPreview({ bookId, book, project, pageConfig, settings, embedded = false }) {
 	const { data: coverTemplate } = useBookTemplate(bookId, 'COVER', !!bookId)
 	const { data: styleSheet } = useBookStyles(bookId, !!bookId)
 
@@ -77,9 +77,9 @@ export default function BookCoverPreview({ bookId, book, project, pageConfig, se
 	return (
 		<Box
 			sx={{
-				flex: 1,
-				overflowY: 'auto',
-				bgcolor: 'grey.400',
+				flex: embedded ? '0 0 auto' : 1,
+				overflowY: embedded ? 'visible' : 'auto',
+				bgcolor: embedded ? 'transparent' : 'grey.400',
 				display: 'flex',
 				flexDirection: 'column',
 				alignItems: 'center',

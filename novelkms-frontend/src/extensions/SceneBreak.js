@@ -20,9 +20,16 @@ export const SceneBreak = Node.create({
 	name: 'sceneBreak',
 	group: 'block',
 	atom: true, // Cannot be entered or split by the cursor
+	selectable: false,
+	draggable: false,
 
 	addAttributes() {
 		return {
+			locked: {
+				default: false,
+				parseHTML: el => el.getAttribute('data-locked') === 'true',
+				renderHTML: attrs => attrs.locked ? { 'data-locked': 'true' } : {},
+			},
 			sceneId: {
 				default: null,
 				parseHTML: el => el.getAttribute('data-scene-after') || null,
@@ -38,6 +45,7 @@ export const SceneBreak = Node.create({
 				tag: 'hr',
 				getAttrs: el => ({
 					sceneId: el.getAttribute('data-scene-after') || null,
+					locked: el.getAttribute('data-locked') === 'true',
 				}),
 			},
 		]

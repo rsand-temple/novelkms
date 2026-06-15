@@ -26,7 +26,7 @@ import { buildStyleSx } from '../../utils/styles'
  *   pageConfig — derived from derivePageConfig(book); never null here
  *   settings  — project settings from useProjectSettings()
  */
-export default function PartPagePreview({ partId, bookId, book, project, pageConfig, settings }) {
+export default function PartPagePreview({ partId, bookId, book, project, pageConfig, settings, embedded = false }) {
 	// Individual part record for title/subtitle tokens.
 	const { data: part } = usePart(partId)
 
@@ -59,9 +59,9 @@ export default function PartPagePreview({ partId, bookId, book, project, pageCon
 	return (
 		<Box
 			sx={{
-				flex: 1,
-				overflowY: 'auto',
-				bgcolor: 'grey.400',
+				flex: embedded ? '0 0 auto' : 1,
+				overflowY: embedded ? 'visible' : 'auto',
+				bgcolor: embedded ? 'transparent' : 'grey.400',
 				display: 'flex',
 				flexDirection: 'column',
 				alignItems: 'center',

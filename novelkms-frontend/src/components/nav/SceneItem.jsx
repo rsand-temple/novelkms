@@ -7,6 +7,7 @@ import { useUpdateScene }    from '../../hooks/useScenes'
 import { containerIds }      from '../../dnd/dndUtils'
 import { useDndState }       from '../../dnd/DndStateContext'
 import { useNavContextMenu } from './NavContextMenuContext'
+import { useSearch } from '../../search/SearchContext'
 
 /**
  * SceneItem — nav tree leaf node for a Scene.
@@ -21,6 +22,8 @@ import { useNavContextMenu } from './NavContextMenuContext'
  */
 export default function SceneItem({ scene, chapterId, partId, selection, setSelection, depth = 0 }) {
 	const isSelected = selection.sceneId === scene.id
+	const search = useSearch()
+	const matchCount = search.counts.scene[scene.id] ?? 0
 
 	// ── Drop indicator ────────────────────────────────────────────────────────
 	const dragState      = useDndState()
@@ -116,6 +119,7 @@ export default function SceneItem({ scene, chapterId, partId, selection, setSele
 			onContextMenu={handleContextMenu}
 			sx={{
 				pl: 10 + depth * 3,
+				...(matchCount > 0 && { bgcolor: 'warning.light' }),
 				...(showTopLine    && { boxShadow: theme => `inset 0  2px 0 ${theme.palette.primary.main}` }),
 				...(showBottomLine && { boxShadow: theme => `inset 0 -2px 0 ${theme.palette.primary.main}` }),
 			}}
@@ -147,6 +151,7 @@ export default function SceneItem({ scene, chapterId, partId, selection, setSele
 			) : (
 				<ListItemText
 					primary={scene.title}
+					secondary={matchCount > 0 ? `${matchCount} matches` : null}
 					slotProps={{ primary: { variant: 'body2' } }}
 				/>
 			)}

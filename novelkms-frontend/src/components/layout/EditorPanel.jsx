@@ -12,9 +12,12 @@ import { Box, Typography, CircularProgress } from '@mui/material';
 import { StyledParagraph } from '../../extensions/StyledParagraph';
 import { FontSize } from '../../extensions/FontSize';
 import { SceneBreak } from '../../extensions/SceneBreak';
+import { DraftHeading } from '../../extensions/DraftHeading';
 import { TemplateToken } from '../../extensions/TemplateToken';
+import { SearchHighlight, searchHighlightKey } from '../../extensions/SearchHighlight';
 import { useProjectSettings } from '../../hooks/useProjectSettings';
 import { useScenes, useScene, useDeleteScene, SCENE_KEYS } from '../../hooks/useScenes';
+import { useDraftDocument, flattenDraftScenes } from '../../hooks/useDraftDocument';
 import { useChapter } from '../../hooks/useChapters';
 import { useGlobalTemplate, useBookTemplate, TEMPLATE_KEYS } from '../../hooks/useTemplates';
 import { useBook } from '../../hooks/useBooks';
@@ -27,6 +30,9 @@ import { resolveValues, renderPreviewHtml, tokensForType } from '../../utils/tok
 import { buildStyleSx } from '../../utils/styles';
 import { derivePageConfig } from '../../utils/pageConfig';
 import EditorToolbar from '../editor/EditorToolbar';
+import SearchBar from '../search/SearchBar';
+import { useSearch } from '../../search/SearchContext';
+import { countHtmlOccurrences } from '../../search/searchUtils';
 import BookCoverPreview from '../editor/BookCoverPreview';
 import PartPagePreview from '../editor/PartPagePreview';
 import ProjectShelf from '../editor/ProjectShelf';
@@ -48,20 +54,66 @@ const DEFAULT_PAGE_CONFIG = {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function buildCombinedHTML(scenes) {
+function escapeAttr(value) {
+	return String(value ?? '')
+		.replaceAll('&', '&amp;')
+		.replaceAll('"', '&quot;')
+		.replaceAll('<', '&lt;')
+		.replaceAll('>', '&gt;');
+}
+
+function headingHtml(kind, entityId, title, subtitle = '') {
+	return `<div data-draft-heading="${kind}" data-entity-id="${escapeAttr(entityId)}" data-title="${escapeAttr(title)}" data-subtitle="${escapeAttr(subtitle)}"></div>`;
+}
+
+function buildCombinedHTML(scenes, draft = null) {
 	if (!scenes?.length) return '';
-	return scenes.map((scene, i) => {
-		const content = scene.content || '<p></p>';
-		if (i < scenes.length - 1) {
-			return content + `<hr data-scene-after="${scenes[i + 1].id}">`;
+
+	if (!draft?.groups) {
+		return scenes.map((scene, i) => {
+			const content = scene.content || '<p></p>';
+			if (i < scenes.length - 1) {
+				return content + `<hr data-scene-after="${scenes[i + 1].id}">`;
+			}
+			return content;
+		}).join('');
+	}
+
+	let html = '';
+	let firstScene = true;
+	for (const group of draft.groups) {
+		if (group.part) {
+			const partTitle = group.part.title?.trim() || `Part ${group.part.partNumber ?? ''}`.trim();
+			html += headingHtml('part', group.part.id, partTitle, group.part.subtitle?.trim() || '');
 		}
-		return content;
-	}).join('');
+		for (const chapter of group.chapters || []) {
+			const chapterTitle = chapter.title?.trim() || `Chapter ${chapter.chapterNumber ?? ''}`.trim();
+			const chapterScenes = chapter.scenes || [];
+			if (!chapterScenes.length) {
+				html += headingHtml('chapter', chapter.id, chapterTitle, chapter.subtitle?.trim() || '');
+				continue;
+			}
+			if (!firstScene) html += `<hr data-scene-after="${chapterScenes[0].id}" data-locked="true">`;
+			html += headingHtml('chapter', chapter.id, chapterTitle, chapter.subtitle?.trim() || '');
+			chapterScenes.forEach((scene, index) => {
+				html += scene.content || '<p></p>';
+				if (index < chapterScenes.length - 1) {
+					html += `<hr data-scene-after="${chapterScenes[index + 1].id}" data-locked="true">`;
+				}
+				firstScene = false;
+			});
+		}
+	}
+	return html;
+}
+
+function stripDraftHeadings(html) {
+	return html.replace(/<div[^>]*data-draft-heading="[^"]+"[^>]*>[\s\S]*?<\/div>/gi, '');
 }
 
 function parseSceneChunks(html, firstSceneId) {
 	const chunks = [];
-	const re = /<hr[^>]+data-scene-after="([^"]+)"[^>]*\/?>/gi;
+	const re = /<hr[^>]+data-scene-after="([^"]+)"[^>]*\/?>(?:<\/hr>)?/gi;
 	let lastIndex = 0;
 	let currentSceneId = firstSceneId;
 	let match;
@@ -69,14 +121,14 @@ function parseSceneChunks(html, firstSceneId) {
 	while ((match = re.exec(html)) !== null) {
 		chunks.push({
 			sceneId: currentSceneId,
-			content: html.slice(lastIndex, match.index).trim() || '<p></p>',
+			content: stripDraftHeadings(html.slice(lastIndex, match.index)).trim() || '<p></p>',
 		});
 		currentSceneId = match[1];
 		lastIndex = match.index + match[0].length;
 	}
 	chunks.push({
 		sceneId: currentSceneId,
-		content: html.slice(lastIndex).trim() || '<p></p>',
+		content: stripDraftHeadings(html.slice(lastIndex)).trim() || '<p></p>',
 	});
 
 	return chunks;
@@ -145,11 +197,15 @@ export default function EditorPanel({
 }) {
 	const { settings, updateSettings } = useProjectSettings(projectId);
 	const queryClient = useQueryClient();
+	const search = useSearch();
 
 	// ── Mode flags ────────────────────────────────────────────────────────────
 	const templateMode = !!templateType;
 	const singleSceneMode = !templateMode && !!sceneId;
 	const multiSceneMode = !templateMode && !singleSceneMode && !!chapterId;
+	const partDraftMode = !templateMode && !chapterId && !sceneId && !!partId && !!bookId;
+	const bookDraftMode = !templateMode && !partId && !chapterId && !sceneId && !!bookId;
+	const aggregateDraftMode = partDraftMode || bookDraftMode;
 
 	const isGlobalTpl = templateMode && templateScope === 'global';
 	const isBookTpl = templateMode && templateScope === 'book';
@@ -187,6 +243,11 @@ export default function EditorPanel({
 	// ── Scene / template data ─────────────────────────────────────────────────
 	const { data: scenes, isLoading: scenesLoading } = useScenes(multiSceneMode ? chapterId : null);
 	const { data: singleScene, isLoading: singleSceneLoading } = useScene(singleSceneMode ? sceneId : null);
+	const { data: draftDocument, isLoading: draftLoading } = useDraftDocument({
+		bookId, partId, enabled: aggregateDraftMode,
+	});
+	const draftScenes = useMemo(() => flattenDraftScenes(draftDocument), [draftDocument]);
+	const activeScenes = aggregateDraftMode ? draftScenes : scenes;
 
 	const { data: globalTpl, isLoading: globalTplLoading } = useGlobalTemplate(templateType, isGlobalTpl);
 	const { data: bookTpl, isLoading: bookTplLoading } = useBookTemplate(bookId, templateType, isBookTpl);
@@ -214,13 +275,6 @@ export default function EditorPanel({
 		staleTime: 60_000,
 	});
 
-	const { data: partWordCount } = useQuery({
-		queryKey: ['parts', partId, 'word-count'],
-		queryFn: () => client.get(`/parts/${partId}/word-count`).then(r => r.data.wordCount),
-		enabled: partPageMode && !!partId,
-		staleTime: 60_000,
-	});
-
 	// Words contributed by the chapter heading (title + subtitle) displayed above
 	// the editor in multi-scene mode. These are outside the TipTap document so
 	// CharacterCount cannot see them; we add them to the live count manually.
@@ -231,18 +285,17 @@ export default function EditorPanel({
 		return countWords(title) + countWords(subtitle);
 	}, [multiSceneMode, chapterData]);
 
-	// wordCountOverride: non-null in book/part preview modes only.
 	// In editor modes (chapter/scene/template) the toolbar uses its live TipTap
 	// count (+ headingWordCount offset in chapter mode).
-	const toolbarWordCountOverride = bookCoverMode ? (bookWordCount ?? null)
-		: partPageMode ? (partWordCount ?? null)
-			: null;
+	const toolbarWordCountOverride = null;
 
 	const isLoading = templateMode
 		? templateLoading
 		: singleSceneMode
 			? singleSceneLoading
-			: scenesLoading;
+			: aggregateDraftMode
+				? draftLoading
+				: scenesLoading;
 
 	const { mutate: deleteScene } = useDeleteScene();
 
@@ -268,6 +321,10 @@ export default function EditorPanel({
 	const scheduleSaveRef = useRef(null);
 	const chapterIdRef = useRef(chapterId);
 	const editorRef = useRef(null);
+	const searchRef = useRef(search);
+	const aggregateDraftModeRef = useRef(aggregateDraftMode);
+	const expectedSceneIdsRef = useRef([]);
+	const activeScenesRef = useRef([]);
 
 	useEffect(() => { chapterIdRef.current = chapterId; }, [chapterId]);
 	useEffect(() => { singleSceneModeRef.current = singleSceneMode; }, [singleSceneMode]);
@@ -276,8 +333,14 @@ export default function EditorPanel({
 	useEffect(() => { templateTypeRef.current = templateType; }, [templateType]);
 	useEffect(() => { bookIdRef.current = bookId; }, [bookId]);
 	useEffect(() => { sceneIdRef.current = sceneId; }, [sceneId]);
+	useEffect(() => { searchRef.current = search; }, [search]);
+	useEffect(() => { aggregateDraftModeRef.current = aggregateDraftMode; }, [aggregateDraftMode]);
+	useEffect(() => {
+		expectedSceneIdsRef.current = (activeScenes || []).map(s => s.id);
+		activeScenesRef.current = activeScenes || [];
+	}, [activeScenes]);
 
-	useEffect(() => { if (scenes?.length) firstSceneIdRef.current = scenes[0].id; }, [scenes]);
+	useEffect(() => { if (activeScenes?.length) firstSceneIdRef.current = activeScenes[0].id; }, [activeScenes]);
 
 	useEffect(() => {
 		if (singleSceneMode) {
@@ -295,7 +358,7 @@ export default function EditorPanel({
 		loadedSceneOrderRef.current = '';
 		loadedSceneIdRef.current = null;
 		prevSceneBreakIdsRef.current = [];
-	}, [templateMode, templateType, templateScope, bookId]);
+	}, [templateMode, templateType, templateScope, bookId, partId]);
 
 	// ── save ─────────────────────────────────────────────────────────────────
 
@@ -333,6 +396,14 @@ export default function EditorPanel({
 					if (!firstId) return;
 					const chunks = parseSceneChunks(html, firstId);
 					if (!chunks.length) return;
+					const expectedIds = expectedSceneIdsRef.current;
+					if (aggregateDraftModeRef.current) {
+						const actualIds = chunks.map(c => c.sceneId);
+						if (actualIds.length !== expectedIds.length || actualIds.some((id, i) => id !== expectedIds[i])) {
+							console.error('[EditorPanel] Draft scene boundaries changed; save aborted to protect scene ownership.');
+							return;
+						}
+					}
 					// Count words per chunk from the HTML — TipTap's CharacterCount
 					// only gives a total for the whole document, not per-scene.
 					// countWords() uses the same /\S+/g algorithm TipTap uses internally,
@@ -362,6 +433,7 @@ export default function EditorPanel({
 			StyledParagraph,
 			FontSize,
 			SceneBreak,
+			DraftHeading,
 			TemplateToken,
 			Underline,
 			TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'left' }),
@@ -372,10 +444,11 @@ export default function EditorPanel({
 			ResizableImage,
 			Placeholder.configure({ placeholder: 'Begin your scene…' }),
 			CharacterCount,
+			SearchHighlight,
 		],
 		content: '',
 		onUpdate: ({ editor }) => {
-			if (!singleSceneModeRef.current && !templateModeRef.current) {
+			if (!singleSceneModeRef.current && !templateModeRef.current && !aggregateDraftModeRef.current) {
 				const currentIds = getDocSceneBreakIds(editor);
 				const prevIds = prevSceneBreakIdsRef.current;
 				const removedIds = prevIds.filter(id => !currentIds.includes(id));
@@ -387,7 +460,31 @@ export default function EditorPanel({
 				}
 				prevSceneBreakIdsRef.current = currentIds;
 			}
-			scheduleSaveRef.current?.(editor.getHTML());
+			const currentHtml = editor.getHTML();
+			const liveSearch = searchRef.current;
+			if (liveSearch.open && liveSearch.query && !templateModeRef.current) {
+				if (singleSceneModeRef.current) {
+					const sid = sceneIdRef.current;
+					if (sid) {
+						const count = searchHighlightKey.getState(editor.state)?.matches?.length ?? 0;
+						liveSearch.updateLiveSceneCount(sid, count, {
+							chapterId: chapterIdRef.current,
+							partId, bookId, title: singleScene?.title || 'Untitled Scene',
+						});
+					}
+				} else if (firstSceneIdRef.current) {
+					const chunks = parseSceneChunks(currentHtml, firstSceneIdRef.current);
+					chunks.forEach(chunk => {
+						const source = activeScenesRef.current.find(item => item.id === chunk.sceneId);
+						liveSearch.updateLiveSceneCount(
+							chunk.sceneId,
+							countHtmlOccurrences(chunk.content, liveSearch.query, liveSearch.matchCase),
+							{ chapterId: chapterIdRef.current, partId, bookId, title: source?.title || 'Untitled Scene' },
+						);
+					});
+				}
+			}
+			scheduleSaveRef.current?.(currentHtml);
 		},
 		editorProps: {
 			attributes: {
@@ -406,6 +503,48 @@ export default function EditorPanel({
 	});
 
 	useEffect(() => { editorRef.current = editor; }, [editor]);
+
+	// Keep the transient ProseMirror search decorations synchronized with the
+	// shared search bar. Decorations never enter the stored HTML.
+	useEffect(() => {
+		if (!editor) return;
+		if (!search.open || !search.query || templateMode) {
+			editor.commands.clearSearch();
+			return;
+		}
+		// Search navigation must never change the manuscript selection. In
+		// chapter mode the editor contains every scene in the chapter, so the
+		// provider's flattened match index is already the correct document-wide
+		// index. In single-scene mode it is likewise local to that scene.
+		const editorMatchIndex = search.activeIndex >= 0 ? search.activeIndex : 0;
+		editor.commands.setSearch({
+			query: search.query,
+			matchCase: search.matchCase,
+			activeIndex: editorMatchIndex,
+		});
+		if (search.totalCount > 0) {
+			requestAnimationFrame(() => editor.commands.scrollToSearchMatch(editorMatchIndex));
+		}
+	}, [editor, search.open, search.query, search.matchCase, search.activeIndex, search.totalCount, templateMode]);
+
+	const { registerEditorActions } = search;
+	
+	useEffect(() => {
+		if (!editor) return;
+
+		registerEditorActions({
+			next: () => editor.commands.goToNextSearchMatch(),
+			previous: () => editor.commands.goToPreviousSearchMatch(),
+			replaceCurrent: (replacement) =>
+				editor.commands.replaceCurrentSearchMatch(replacement),
+			replaceAll: (replacement) =>
+				editor.commands.replaceAllSearchMatches(replacement),
+		});
+
+		return () => {
+			registerEditorActions(null);
+		};
+	}, [editor, registerEditorActions]);
 
 	// ── scene break insertion ─────────────────────────────────────────────────
 
@@ -473,29 +612,33 @@ export default function EditorPanel({
 			return;
 		}
 
-		if (!scenes) return;
+		const contentScenes = aggregateDraftMode ? activeScenes : scenes;
+		if (!contentScenes) return;
 
-		const newOrder = scenes.map(s => s.id).join(',');
-		const chapterChanged = loadedChapterIdRef.current !== chapterId;
+		const newOrder = contentScenes.map(s => s.id).join(',');
+		const scopeKey = aggregateDraftMode
+			? `${partDraftMode ? 'part' : 'book'}:${partId || bookId}`
+			: `chapter:${chapterId}`;
+		const scopeChanged = loadedChapterIdRef.current !== scopeKey;
 		const orderChanged = newOrder !== loadedSceneOrderRef.current;
 
-		if (!chapterChanged && !orderChanged) return;
-		if (chapterChanged && saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+		if (!scopeChanged && !orderChanged) return;
+		if (scopeChanged && saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
 
-		if (scenes.length === 0) {
-			loadedChapterIdRef.current = chapterId;
+		if (contentScenes.length === 0) {
+			loadedChapterIdRef.current = scopeKey;
 			loadedSceneOrderRef.current = '';
 			prevSceneBreakIdsRef.current = [];
 			editor.commands.setContent('', false);
 			return;
 		}
 
-		const html = buildCombinedHTML(scenes);
-		prevSceneBreakIdsRef.current = scenes.slice(1).map(s => s.id);
-		loadedChapterIdRef.current = chapterId;
+		const html = buildCombinedHTML(contentScenes, aggregateDraftMode ? draftDocument : null);
+		prevSceneBreakIdsRef.current = contentScenes.slice(1).map(s => s.id);
+		loadedChapterIdRef.current = scopeKey;
 		loadedSceneOrderRef.current = newOrder;
 		editor.commands.setContent(html, false);
-	}, [editor, scenes, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template]);
+	}, [editor, scenes, activeScenes, draftDocument, aggregateDraftMode, partDraftMode, partId, bookId, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template]);
 
 	useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
@@ -507,7 +650,7 @@ export default function EditorPanel({
 	// Toolbar gets a live editor reference only when actually editing;
 	// preview and shelf modes pass null so the gear icon stays accessible
 	// but formatting controls are inactive.
-	const toolbarEditor = (inPagePreviewMode || projectShelfMode) ? null : editor;
+	const toolbarEditor = projectShelfMode ? null : editor;
 
 	const chapterHeadingTitle = chapterData
 		? (chapterData.title?.trim() || `Chapter ${chapterData.chapterNumber}`)
@@ -521,7 +664,7 @@ export default function EditorPanel({
 				editor={toolbarEditor}
 				settings={settings}
 				onSettingsChange={updateSettings}
-				onSceneBreak={(singleSceneMode || templateMode || inPagePreviewMode || projectShelfMode) ? null : handleSceneBreak}
+				onSceneBreak={(singleSceneMode || templateMode || aggregateDraftMode || projectShelfMode) ? null : handleSceneBreak}
 				isSaving={isSaving}
 				templateMode={templateMode}
 				tokenOptions={tokenOptions}
@@ -532,26 +675,11 @@ export default function EditorPanel({
 				headingWordCount={multiSceneMode ? chapterHeadingWords : 0}
 			/>
 
+			<SearchBar />
+
 			{/* ── Content area ─────────────────────────────────────────────── */}
 
-			{bookCoverMode ? (
-				<BookCoverPreview
-					bookId={bookId}
-					book={previewPageBook}
-					project={previewPageProject}
-					pageConfig={effectivePageConfig}
-					settings={settings}
-				/>
-			) : partPageMode ? (
-				<PartPagePreview
-					partId={partId}
-					bookId={bookId}
-					book={previewPageBook}
-					project={previewPageProject}
-					pageConfig={effectivePageConfig}
-					settings={settings}
-				/>
-			) : projectShelfMode ? (
+			{projectShelfMode ? (
 				<ProjectShelf
 					projectId={projectId}
 					onSelectBook={onSelectBook}
@@ -626,11 +754,47 @@ export default function EditorPanel({
 						'& .tiptap h2': { fontSize: '1.3rem', fontWeight: 700, mt: 2, mb: 0.5 },
 						'& .tiptap h3': { fontSize: '1.1rem', fontWeight: 600, mt: 1.5, mb: 0.5 },
 						'& .tiptap ul, & .tiptap ol': { pl: 3 },
+						'& .nkms-search-match': { bgcolor: 'warning.light', borderRadius: '2px' },
+						'& .nkms-search-active': { bgcolor: 'warning.main', outline: '2px solid', outlineColor: 'warning.dark' },
+						'& .nkms-draft-heading': {
+							minHeight: '1.5em',
+							maxWidth: '72ch', mx: 'auto', px: 1, textAlign: 'center',
+							userSelect: 'none', color: 'text.primary',
+						},
+						'& .nkms-draft-heading-part': { mt: 10, mb: 7 },
+						'& .nkms-draft-heading-chapter': { mt: 7, mb: 5 },
+						'& .nkms-draft-heading::before': { display: 'block', content: 'attr(data-title)', fontWeight: 700 },
+						'& .nkms-draft-heading::after': { display: 'block', content: 'attr(data-subtitle)', mt: 0.75, fontSize: '1.1rem', fontStyle: 'italic', color: 'text.secondary' },
+						'& .nkms-draft-heading[data-subtitle=""]::after': { display: 'none' },
+						'& .nkms-draft-heading-part::before': { fontSize: '2rem' },
+						'& .nkms-draft-heading-chapter::before': { fontSize: '1.75rem' },
 
 						...styleSx,
 					}}
 				>
-					<Box sx={{ display: showEditorPreview ? 'none' : 'block' }}>
+					{bookDraftMode && (
+						<BookCoverPreview
+							bookId={bookId}
+							book={previewPageBook}
+							project={previewPageProject}
+							pageConfig={effectivePageConfig}
+							settings={settings}
+							embedded
+						/>
+					)}
+					{partDraftMode && (
+						<PartPagePreview
+							partId={partId}
+							bookId={bookId}
+							book={previewPageBook}
+							project={previewPageProject}
+							pageConfig={effectivePageConfig}
+							settings={settings}
+							embedded
+						/>
+					)}
+
+					<Box sx={{ display: showEditorPreview ? 'none' : 'block', mt: aggregateDraftMode ? 6 : 0 }}>
 
 						{multiSceneMode && chapterHeadingTitle && (
 							<Box

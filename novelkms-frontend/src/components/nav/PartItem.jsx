@@ -10,6 +10,7 @@ import ChapterItem from './ChapterItem'
 import ChapterListZone from './ChapterListZone'
 import { containerIds } from '../../dnd/dndUtils'
 import { useNavContextMenu } from './NavContextMenuContext'
+import { useSearch } from '../../search/SearchContext'
 
 // ── Roman numeral helper ─────────────────────────────────────────────────────
 // Converts a positive integer to a Roman numeral string (I, II, III, …).
@@ -38,6 +39,8 @@ const toRoman = (n) => {
  */
 export default function PartItem({ part, bookId, selection, setSelection }) {
 	const [open, setOpen] = useState(false)
+	const search = useSearch()
+	const matchCount = search.counts.part[part.id] ?? 0
 	const { data: chapters } = usePartChapters(open ? part.id : null)
 
 	const isSelected = selection.partId === part.id && !selection.chapterId
@@ -132,7 +135,7 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 				selected={isSelected}
 				onClick={handleClick}
 				onContextMenu={handleContextMenu}
-				sx={{ pl: 7 }}
+				sx={{ pl: 7, ...(matchCount > 0 && { bgcolor: 'warning.light' }) }}
 				{...(isRenaming ? {} : listeners)}
 			>
 				<ListItemIcon
@@ -165,6 +168,7 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 				) : (
 					<ListItemText
 						primary={displayTitle}
+						secondary={matchCount > 0 ? `${matchCount} matches` : null}
 						slotProps={{ primary: { variant: 'body2', sx: { fontStyle: 'italic' } } }}
 					/>
 				)}

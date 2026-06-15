@@ -7,9 +7,12 @@ import { useBooks }          from '../../hooks/useBooks'
 import { useUpdateProject }  from '../../hooks/useProjects'
 import BookItem              from './BookItem'
 import { useNavContextMenu } from './NavContextMenuContext'
+import { useSearch } from '../../search/SearchContext'
 
 export default function ProjectItem({ project, selection, setSelection }) {
 	const [open, setOpen] = useState(false)
+	const search = useSearch()
+	const matchCount = selection.projectId === project.id ? search.totalCount : 0
 	const { data: books } = useBooks(open ? project.id : null)
 
 	const isSelected = selection.projectId === project.id && !selection.bookId
@@ -89,7 +92,7 @@ export default function ProjectItem({ project, selection, setSelection }) {
 				selected={isSelected}
 				onClick={handleClick}
 				onContextMenu={handleContextMenu}
-				sx={{ pl: 1 }}
+				sx={{ pl: 1, ...(matchCount > 0 && { bgcolor: 'warning.light' }) }}
 			>
 				<ListItemIcon
 					sx={{ minWidth: 28, cursor: 'pointer' }}
@@ -121,6 +124,7 @@ export default function ProjectItem({ project, selection, setSelection }) {
 				) : (
 					<ListItemText
 						primary={project.title}
+						secondary={matchCount > 0 ? `${matchCount} matches` : null}
 						slotProps={{ primary: { variant: 'body2', sx: { fontWeight: 600 } } }}
 					/>
 				)}

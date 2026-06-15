@@ -12,6 +12,7 @@ import PropertiesPanel from './components/layout/PropertiesPanel'
 import ImportDialog from './components/nav/dialogs/ImportDialog'
 import ExportDialog from './components/nav/dialogs/ExportDialog'
 import { exportApi } from './api/export'
+import { SearchProvider } from './search/SearchProvider'
 
 const NAV_WIDTH = 280
 const PROPS_WIDTH = 280
@@ -94,6 +95,7 @@ export default function App() {
 	}
 
 	return (
+		<SearchProvider selection={selection}>
 		<Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
 			<AppBar position="static" elevation={1}>
@@ -234,5 +236,6 @@ export default function App() {
 			/>
 
 		</Box>
+		</SearchProvider>
 	)
 }

@@ -72,6 +72,67 @@ public class SceneDao {
     }
 
     // -------------------------------------------------------------------------
+    // Search support
+    // -------------------------------------------------------------------------
+
+    /**
+     * Lightweight scene row used by SearchService: scene id, its chapter and
+     * (nullable) part, plus the raw content HTML. Rows are returned in
+     * manuscript reading order so the frontend can walk matches next/previous
+     * across the whole book without re-sorting.
+     */
+    public record SceneContentRow(UUID sceneId, UUID chapterId, UUID partId, String content) {
+    }
+
+    /**
+     * Returns every scene in the book, in manuscript reading order, with the
+     * content HTML needed for full-text search.
+     *
+     * Ordering mirrors ChapterDao's chapter-numbering CTE — chapters inside
+     * parts first (ordered by part display_order then chapter display_order),
+     * then direct-book chapters — and is then extended with scene.display_order
+     * so scenes within a chapter come back in author order. The trailing
+     * s.title is a stable tie-breaker, matching findByChapterId.
+     *
+     * Note: this selects scene content for the entire book, which may be large
+     * when scenes embed base64 images. Acceptable for single-user search;
+     * revisit if it becomes a bottleneck (e.g. a stored plain-text shadow
+     * column, or chunked/paged search).
+     */
+    public List<SceneContentRow> findContentForBook(UUID bookId) throws SQLException {
+        String sql = "SELECT s.id AS scene_id, s.chapter_id, c.part_id, s.content " +
+                "FROM scene s " +
+                "JOIN chapter c ON s.chapter_id = c.id " +
+                "LEFT JOIN part p ON c.part_id = p.id " +
+                "WHERE c.book_id = ? " +
+                "ORDER BY " +
+                "  CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END, " +
+                "  p.display_order, " +
+                "  c.display_order, " +
+                "  s.display_order, " +
+                "  s.title";
+
+        List<SceneContentRow> result = new ArrayList<>();
+        try (Connection conn = ds.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setObject(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    UUID sceneId   = rs.getObject("scene_id", UUID.class);
+                    UUID chapterId = rs.getObject("chapter_id", UUID.class);
+                    // part_id is nullable; mirror ChapterDao's getString + fromString
+                    // approach rather than getObject(UUID.class) on a null column.
+                    String rawPartId = rs.getString("part_id");
+                    UUID   partId    = rawPartId != null ? UUID.fromString(rawPartId) : null;
+                    String content   = rs.getString("content");
+                    result.add(new SceneContentRow(sceneId, chapterId, partId, content));
+                }
+            }
+        }
+        return result;
+    }
+
+    // -------------------------------------------------------------------------
     // Mutations
     // -------------------------------------------------------------------------
 

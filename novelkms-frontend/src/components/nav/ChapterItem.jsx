@@ -10,6 +10,7 @@ import { useUpdateChapter }  from '../../hooks/useChapters'
 import SceneItem             from './SceneItem'
 import { containerIds }      from '../../dnd/dndUtils'
 import { useNavContextMenu } from './NavContextMenuContext'
+import { useSearch } from '../../search/SearchContext'
 
 /**
  * ChapterItem — nav tree node for a Chapter.
@@ -23,6 +24,8 @@ import { useNavContextMenu } from './NavContextMenuContext'
  */
 export default function ChapterItem({ chapter, bookId, partId, selection, setSelection, depth = 0 }) {
 	const [open, setOpen] = useState(false)
+	const search = useSearch()
+	const matchCount = search.counts.chapter[chapter.id] ?? 0
 	const { data: scenes } = useScenes(open ? chapter.id : null)
 
 	const isSelected = selection.chapterId === chapter.id && !selection.sceneId
@@ -131,7 +134,7 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 				selected={isSelected}
 				onClick={handleClick}
 				onContextMenu={handleContextMenu}
-				sx={{ pl: 7 + depth * 3 }}
+				sx={{ pl: 7 + depth * 3, ...(matchCount > 0 && { bgcolor: 'warning.light' }) }}
 				// Gate DnD listeners off during rename to prevent drag initiation
 				// while the user is typing in the InputBase.
 				{...(isRenaming ? {} : listeners)}
@@ -168,6 +171,7 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 				) : (
 					<ListItemText
 						primary={displayTitle}
+						secondary={matchCount > 0 ? `${matchCount} matches` : null}
 						slotProps={{ primary: { variant: 'body2' } }}
 					/>
 				)}
