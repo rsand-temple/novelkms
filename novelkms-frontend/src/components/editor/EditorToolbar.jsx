@@ -56,11 +56,11 @@ const FONT_SIZES = [
 
 const SPACING_PRESETS = [
 	{ label: 'Default', value: '' },
-	{ label: '0 pt',    value: '0pt' },
-	{ label: '6 pt',    value: '6pt' },
-	{ label: '12 pt',   value: '12pt' },
-	{ label: '18 pt',   value: '18pt' },
-	{ label: '24 pt',   value: '24pt' },
+	{ label: '0 pt', value: '0pt' },
+	{ label: '6 pt', value: '6pt' },
+	{ label: '12 pt', value: '12pt' },
+	{ label: '18 pt', value: '18pt' },
+	{ label: '24 pt', value: '24pt' },
 ]
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -71,12 +71,6 @@ function parseEm(val) {
 	return m ? parseFloat(m[1]) : 0
 }
 
-/**
- * When a TemplateToken atom is clicked it becomes a NodeSelection, so
- * getAttributes('paragraph') returns {} (the selection is *on* the token, not
- * inside its parent block). Walk up from $from to the nearest ancestor
- * paragraph and return its attrs so the toolbar still displays correctly.
- */
 function resolveParaAttrs(editor) {
 	if (!editor) return {}
 	const { selection } = editor.state
@@ -94,7 +88,6 @@ function resolveParaAttrs(editor) {
 
 // ── sub-components ─────────────────────────────────────────────────────────────
 
-/** Compact Select with no underline, suitable for embedding in a toolbar. */
 function ToolbarSelect({ value, onChange, children, sx, disabled }) {
 	return (
 		<Select
@@ -105,7 +98,6 @@ function ToolbarSelect({ value, onChange, children, sx, disabled }) {
 			size="small"
 			disabled={disabled}
 			sx={{ fontSize: '0.8rem', ...sx }}
-			// Prevent the editor from losing focus when the dropdown opens
 			onMouseDown={e => e.preventDefault()}
 		>
 			{children}
@@ -113,7 +105,6 @@ function ToolbarSelect({ value, onChange, children, sx, disabled }) {
 	)
 }
 
-/** Icon button that highlights when active, with optional tooltip. */
 function TBtn({ title, onClick, active, children, disabled }) {
 	return (
 		<Tooltip title={title} disableInteractive>
@@ -123,7 +114,6 @@ function TBtn({ title, onClick, active, children, disabled }) {
 					onClick={onClick}
 					color={active ? 'primary' : 'default'}
 					disabled={disabled}
-					// Keep editor focus
 					onMouseDown={e => e.preventDefault()}
 					sx={active ? {
 						bgcolor: 'action.selected',
@@ -156,22 +146,25 @@ function VDivider() {
  *   onInsertToken     — (token) => void — inserts a TemplateToken at the cursor
  *   previewActive     — boolean — true when the resolved preview is showing
  *   onTogglePreview   — () => void — toggles the preview
+ *   styleSheet        — resolved style definitions array
+ *   wordCountOverride — number | null — when set, displayed instead of TipTap's live
+ *                       count; used for book/part preview modes where there is no editor
+ *   headingWordCount  — number — extra words from chapter/part headings not in the
+ *                       TipTap document; added to the live count in chapter mode
  */
 export default function EditorToolbar({
 	editor, settings = {}, onSettingsChange, onSceneBreak, isSaving,
 	templateMode = false, tokenOptions = [], onInsertToken,
 	previewActive = false, onTogglePreview,
 	styleSheet = [],
+	wordCountOverride = null,
+	headingWordCount = 0,
 }) {
 	const [settingsAnchor, setSettingsAnchor] = useState(null)
 	const [fieldAnchor, setFieldAnchor] = useState(null)
 
-	// Hidden file input for image insertion. Triggered via ref so we avoid the
-	// MUI Button component="label" nesting edge cases (same pattern as cover image
-	// upload in PropertiesPanel).
 	const imageInputRef = useRef(null)
 
-	// useEditorState re-renders this component reactively when editor state changes.
 	const state = useEditorState({
 		editor,
 		selector: ctx => {
@@ -196,8 +189,7 @@ export default function EditorToolbar({
 				paraIndent: paraAttrs.indent ?? null,
 				paraFirstLineIndent: paraAttrs.firstLineIndent,
 				paraSpacingBefore: paraAttrs.spacingBefore ?? null,
-				paraSpacingAfter:  paraAttrs.spacingAfter  ?? null,
-				// Inline FontSize mark (used for field-level sizing)
+				paraSpacingAfter: paraAttrs.spacingAfter ?? null,
 				markFontSize: e.getAttributes('fontSize')?.size ?? null,
 				textAlign: paraAttrs.textAlign ?? 'left',
 				wordCount: e.storage?.characterCount?.words?.() ?? 0,
@@ -206,31 +198,30 @@ export default function EditorToolbar({
 	}) ?? {}
 
 	const isPara = !HEADING_KEYS.includes(state.currentStyle)
-
-	// Is a field (or any atom) currently selected?
 	const isNodeSelection = editor ? editor.state.selection instanceof NodeSelection : false
 
-	// Look up the resolved definition for the paragraph style at the cursor.
-	// This is used to reflect style-level font / bold / italic in the toolbar
-	// even when no inline paragraph override is present.
 	const currentStyleDef = useMemo(() => {
 		if (!Array.isArray(styleSheet) || !state.currentStyle) return null
 		const entry = styleSheet.find(s => s.styleKey === state.currentStyle)
 		return entry?.definition ?? null
 	}, [styleSheet, state.currentStyle])
 
-	// All formatting controls are disabled while preview is showing — the editor
-	// is non-editable in that mode so every command would silently do nothing.
 	const formatDisabled = previewActive
+
+	// ── word count display ────────────────────────────────────────────────────
+	//
+	// Priority:
+	//   wordCountOverride — for book/part preview modes (no live editor; value
+	//     fetched from GET /api/books/{id}/word-count or /api/parts/{id}/word-count)
+	//   state.wordCount + headingWordCount — for chapter/scene editor modes;
+	//     headingWordCount adds the chapter title/subtitle words that live outside
+	//     the TipTap document
+	const displayWordCount = wordCountOverride != null
+		? wordCountOverride
+		: (state.wordCount ?? 0) + (headingWordCount ?? 0)
 
 	// ── paragraph-attribute helpers ──────────────────────────────────────────
 
-	/**
-	 * Set attributes on the paragraph that contains the current selection,
-	 * resolving the parent paragraph directly. Works under a NodeSelection
-	 * (e.g. a selected field) where updateAttributes('paragraph') finds nothing.
-	 * Returns false if there is no paragraph ancestor (e.g. a field in a heading).
-	 */
 	function setParagraphAttrs(patch) {
 		if (!editor) return false
 		const { state: s } = editor
@@ -248,11 +239,6 @@ export default function EditorToolbar({
 		return false
 	}
 
-	/**
-	 * Apply a paragraph-attribute patch. For ordinary text selections this uses
-	 * the standard updateAttributes path (unchanged behavior, handles multi-
-	 * paragraph ranges). For a NodeSelection it resolves the parent paragraph.
-	 */
 	function applyParaPatch(patch) {
 		if (!editor) return
 		if (isNodeSelection) {
@@ -272,8 +258,6 @@ export default function EditorToolbar({
 			chain.setHeading({ level }).run()
 			return
 		}
-		// A paragraph style (normal or a block style). Applying a style clears
-		// manual paragraph-level format overrides so the definition shows cleanly.
 		const styleKey = val === 'normal' ? null : val
 		chain
 			.setParagraph()
@@ -286,23 +270,18 @@ export default function EditorToolbar({
 	}
 
 	function handleFontFamilyChange(val) {
-		// null = inherit project default (no inline override)
 		const attrVal = val === settings?.fontFamily ? null : val
 		applyParaPatch({ fontFamily: attrVal })
 	}
 
 	function handleFontSizeChange(val) {
 		if (!editor) return
-		// A selected field (or any atom) is sized inline via the FontSize mark —
-		// this works whether the field sits in a paragraph or a heading.
 		if (isNodeSelection) {
 			if (val === settings?.fontSize) editor.chain().focus().unsetFontSize().run()
 			else editor.chain().focus().setFontSize(val).run()
 			return
 		}
 		const attrVal = val === settings?.fontSize ? null : val
-		// In heading nodes (common in templates) StyledParagraph attributes are not
-		// available. Fall back to the FontSize inline mark, which works on any node.
 		if (HEADING_KEYS.includes(state.currentStyle)) {
 			if (attrVal === null) editor.chain().focus().unsetFontSize().run()
 			else editor.chain().focus().setFontSize(attrVal).run()
@@ -340,19 +319,10 @@ export default function EditorToolbar({
 		setFieldAnchor(null)
 	}
 
-	/**
-	 * Called when the user selects a file from the hidden image input.
-	 * Reads the file as a base64 data URL and inserts an Image node at the
-	 * current cursor position. The data URL is stored verbatim in the scene
-	 * content HTML — no separate image endpoint is used.
-	 */
 	function handleImageFileSelected(e) {
 		const file = e.target.files?.[0]
 		if (!file || !editor) return
-
-		// Reset the input so the same file can be re-selected after removal.
 		e.target.value = ''
-
 		const reader = new FileReader()
 		reader.onload = (ev) => {
 			const src = ev.target.result
@@ -378,17 +348,12 @@ export default function EditorToolbar({
 		styleDefFontSize ||
 		settings?.fontSize ||
 		FONT_SIZES[3].value
-	// Bold / italic: depressed when the inline mark is active OR when the
-	// resolved style definition declares that property.
 	const effectiveBold = state.isBold || (currentStyleDef?.bold ?? false)
 	const effectiveItalic = state.isItalic || (currentStyleDef?.italic ?? false)
 	const firstLineOverriddenOff = state.paraFirstLineIndent === '0'
 
-	// Spacing before/after: show the inline override value, or '' (Default) when
-	// none is set (meaning the paragraph inherits from the style definition or
-	// DocSettings global).
 	const displaySpacingBefore = state.paraSpacingBefore || ''
-	const displaySpacingAfter  = state.paraSpacingAfter  || ''
+	const displaySpacingAfter = state.paraSpacingAfter || ''
 
 	const showFieldMenu = templateMode && tokenOptions.length > 0
 
@@ -420,7 +385,6 @@ export default function EditorToolbar({
 								{STYLE_LABELS[key]}
 							</MenuItem>
 						)
-						// Separate the heading group from the paragraph styles.
 						return key === 'h3' ? [item, <Divider key="style-div" sx={{ my: 0.5 }} />] : [item]
 					})}
 				</ToolbarSelect>
@@ -478,10 +442,9 @@ export default function EditorToolbar({
 					<FormatUnderlinedIcon fontSize="small" />
 				</TBtn>
 
-				{/* Right group — ml:auto pushes it right; flexShrink:0 prevents clipping */}
+				{/* Right group */}
 				<Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
 
-					{/* Insert field (template mode only) */}
 					{showFieldMenu && (
 						<>
 							<TBtn
@@ -510,7 +473,6 @@ export default function EditorToolbar({
 						</>
 					)}
 
-					{/* Preview toggle (template mode only) */}
 					{templateMode && (
 						<TBtn
 							title={previewActive ? 'Back to editing' : 'Preview with sample values'}
@@ -522,7 +484,6 @@ export default function EditorToolbar({
 					)}
 
 					<VDivider />
-					{/* Doc settings */}
 					<TBtn title="Document settings"
 						onClick={e => setSettingsAnchor(e.currentTarget)}
 					>
@@ -531,7 +492,7 @@ export default function EditorToolbar({
 				</Box>
 			</Toolbar>
 
-			{/* ── Row 2: lists / indent / align / scene break / image ───────── */}
+			{/* ── Row 2: lists / indent / align / scene break / image / word count ── */}
 			<Toolbar variant="dense" disableGutters sx={{ px: 1, gap: 0.25, minHeight: 34, borderTop: 1, borderColor: 'divider' }}>
 
 				{/* Lists */}
@@ -608,10 +569,7 @@ export default function EditorToolbar({
 
 				<VDivider />
 
-				{/* Space before / after paragraph — inline override; 'Default' clears
-				    the override and defers to the paragraph style definition or the
-				    project-level DocSettings global. Only active on paragraph nodes
-				    (not headings, which use native TipTap heading nodes). */}
+				{/* Space before / after paragraph */}
 				<Tooltip title="Space before paragraph" disableInteractive>
 					<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
 						<Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', lineHeight: 1, userSelect: 'none' }}>↑</Typography>
@@ -668,10 +626,7 @@ export default function EditorToolbar({
 
 				<VDivider />
 
-				{/* Insert image — triggers a hidden file input via ref.
-				    Disabled when the editor is not active (page preview modes,
-				    template preview). Base64 data URL is embedded directly in
-				    scene/template content HTML; no image storage endpoint is used. */}
+				{/* Insert image */}
 				<TBtn
 					title="Insert image"
 					onClick={() => imageInputRef.current?.click()}
@@ -687,11 +642,15 @@ export default function EditorToolbar({
 					onChange={handleImageFileSelected}
 				/>
 
-				{/* Word count + save indicator pushed right */}
+				{/* Word count + save indicator pushed right.
+				    displayWordCount is context-sensitive:
+				      book/part preview modes → fetched total from API (wordCountOverride)
+				      chapter mode           → TipTap live count + heading word count
+				      scene mode             → TipTap live count only */}
 				<Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
 					{isSaving && <CircularProgress size={12} />}
 					<Typography variant="caption" color="text.secondary">
-						{state.wordCount ?? 0} words
+						{displayWordCount.toLocaleString('en-US')} words
 					</Typography>
 				</Box>
 			</Toolbar>

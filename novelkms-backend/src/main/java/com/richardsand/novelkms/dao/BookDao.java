@@ -118,11 +118,6 @@ public class BookDao {
     // Cover image
     // -------------------------------------------------------------------------
 
-    /**
-     * Returns the raw cover image bytes and MIME type for the given book, or
-     * empty if the book does not exist or has no cover image.
-     * This is the only method that reads the cover_image column.
-     */
     public Optional<CoverImage> getCoverImage(UUID id) throws SQLException {
         String sql = "SELECT cover_image, cover_image_mime_type FROM book WHERE id = ?";
         try (Connection c = ds.getConnection();
@@ -137,12 +132,6 @@ public class BookDao {
         }
     }
 
-    /**
-     * Stores a cover image for the given book and updates updated_at so that
-     * cache-busted image URLs (e.g. ?t={updatedAt}) automatically invalidate.
-     *
-     * @return true if the book was found and the image saved, false otherwise.
-     */
     public boolean setCoverImage(UUID id, byte[] data, String mimeType) throws SQLException {
         String sql = """
                 UPDATE book
@@ -159,11 +148,6 @@ public class BookDao {
         }
     }
 
-    /**
-     * Removes the cover image for the given book and updates updated_at.
-     *
-     * @return true if the book was found, false otherwise.
-     */
     public boolean deleteCoverImage(UUID id) throws SQLException {
         String sql = """
                 UPDATE book
@@ -182,11 +166,6 @@ public class BookDao {
     // Import metadata
     // -------------------------------------------------------------------------
 
-    /**
-     * Records the provenance of an imported book. Called once by the import
-     * pipeline immediately after book creation; never called by normal edits.
-     * Updates updated_at so that downstream caches invalidate correctly.
-     */
     public void setImportMetadata(UUID id, String importedFrom, Instant importedAt) throws SQLException {
         String sql = """
                 UPDATE book
@@ -264,10 +243,8 @@ public class BookDao {
             ps.setString(4, notes);
             ps.setBoolean(5, pageLayoutEnabled);
             ps.setString(6, pageSizePreset != null ? pageSizePreset : "LETTER");
-            ps.setObject(7, pageWidthIn);  // nullable — CUSTOM presets only
-            ps.setObject(8, pageHeightIn); // nullable — CUSTOM presets only
-            // Margin columns are NOT NULL in the schema — default when the
-            // caller omits them (e.g. a metadata-only update from the UI).
+            ps.setObject(7, pageWidthIn);
+            ps.setObject(8, pageHeightIn);
             ps.setDouble(9,  pageMarginTopIn    != null ? pageMarginTopIn    : DEFAULT_MARGIN_TOP);
             ps.setDouble(10, pageMarginBottomIn != null ? pageMarginBottomIn : DEFAULT_MARGIN_BOTTOM);
             ps.setDouble(11, pageMarginInnerIn  != null ? pageMarginInnerIn  : DEFAULT_MARGIN_INNER);
@@ -292,10 +269,73 @@ public class BookDao {
     }
 
     // -------------------------------------------------------------------------
+    // Word count
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the total manuscript word count for a single book, including:
+     *   - scene.word_count for every scene in the book
+     *   - words in every chapter title/subtitle (blank title = 2 words for "Chapter N")
+     *   - words in every part title/subtitle (blank title = 2 words for "Part I")
+     *
+     * Used by GET /api/books/{id}/word-count (status bar when book is selected)
+     * and by ExportService for the WORDS token in DOCX export.
+     */
+    public int getTotalWordCount(UUID bookId) throws SQLException {
+        int total = 0;
+
+        // 1. Scene content
+        String sceneSql = """
+                SELECT COALESCE(SUM(s.word_count), 0)
+                FROM scene s
+                JOIN chapter ch ON ch.id = s.chapter_id
+                WHERE ch.book_id = ?
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sceneSql)) {
+            ps.setObject(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) total += rs.getInt(1);
+            }
+        }
+
+        // 2. Chapter heading words — blank title counts as 2 ("Chapter N")
+        String chapterSql = "SELECT title, subtitle FROM chapter WHERE book_id = ?";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(chapterSql)) {
+            ps.setObject(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String t = rs.getString("title");
+                    String s = rs.getString("subtitle");
+                    total += (t == null || t.isBlank()) ? 2 : countPlainTextWords(t);
+                    total += countPlainTextWords(s);
+                }
+            }
+        }
+
+        // 3. Part heading words — blank title counts as 2 ("Part I")
+        String partSql = "SELECT title, subtitle FROM part WHERE book_id = ?";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(partSql)) {
+            ps.setObject(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String t = rs.getString("title");
+                    String s = rs.getString("subtitle");
+                    total += (t == null || t.isBlank()) ? 2 : countPlainTextWords(t);
+                    total += countPlainTextWords(s);
+                }
+            }
+        }
+
+        return total;
+    }
+
+    // -------------------------------------------------------------------------
     // Ordering
     // -------------------------------------------------------------------------
 
-    /** Appends to the end of the current list within the parent project. */
     private int nextDisplayOrder(UUID projectId) throws SQLException {
         String sql = "SELECT COALESCE(MAX(display_order), -1) + 1 FROM book WHERE project_id = ?";
         try (Connection c = ds.getConnection();
@@ -305,5 +345,23 @@ public class BookDao {
                 return rs.next() ? rs.getInt(1) : 0;
             }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    private static int countPlainTextWords(String text) {
+        if (text == null || text.isBlank()) return 0;
+        int     count  = 0;
+        boolean inWord = false;
+        for (int i = 0; i < text.length(); i++) {
+            if (!Character.isWhitespace(text.charAt(i))) {
+                if (!inWord) { count++; inWord = true; }
+            } else {
+                inWord = false;
+            }
+        }
+        return count;
     }
 }

@@ -22,8 +22,14 @@ export const scenesApi = {
 		return response.data
 	},
 
-	updateContent: async (id, content) => {
-		const response = await client.put(`/scenes/${id}/content`, { content })
+	/**
+	 * Saves scene content and its word count.
+	 * wordCount must be supplied by the caller — the server stores it verbatim.
+	 * In single-scene mode the caller uses TipTap's CharacterCount.words();
+	 * in multi-scene mode the caller counts words from each HTML chunk directly.
+	 */
+	updateContent: async (id, content, wordCount = 0) => {
+		const response = await client.put(`/scenes/${id}/content`, { content, wordCount })
 		return response.data
 	},
 
@@ -38,6 +44,6 @@ export const scenesApi = {
 	reorderInChapter: async (chapterId, ids) => {
 		await client.put(`/chapters/${chapterId}/scenes/reorder`, { ids })
 	},
-	
+
 	moveScene: (id, body) => client.put(`/scenes/${id}/move`, body),
 }

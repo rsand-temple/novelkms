@@ -46,8 +46,6 @@ public class PartDao {
     // -------------------------------------------------------------------------
 
     public List<Part> findByBookId(UUID bookId) throws SQLException {
-        // ROW_NUMBER() over display_order gives the 1-based part number within
-        // the book, matching the order the nav tree renders them.
         String     sql    = """
                 WITH numbered AS (
                     SELECT *,
@@ -71,8 +69,6 @@ public class PartDao {
     }
 
     public Optional<Part> findById(UUID id) throws SQLException {
-        // Scope ROW_NUMBER() to the part's own book via scalar subquery,
-        // matching the approach used in ChapterDao.findById().
         String sql = """
                 WITH numbered AS (
                     SELECT *,
@@ -116,7 +112,6 @@ public class PartDao {
             ps.setTimestamp(8, Timestamp.from(now));
             ps.executeUpdate();
         }
-        // displayOrder is 0-based count of existing parts, so partNumber = displayOrder + 1
         return Part.builder()
                 .id(id).bookId(bookId).title(title).subtitle(subtitle)
                 .displayOrder(displayOrder).notes(notes)
@@ -186,6 +181,73 @@ public class PartDao {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Word count
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the total word count for a single part, including:
+     *   - the part's own title/subtitle words (blank title = 2 for "Part I")
+     *   - scene.word_count for every scene in every chapter in this part
+     *   - words in every chapter title/subtitle in this part (blank = 2 for "Chapter N")
+     *
+     * Used by GET /api/parts/{id}/word-count (status bar when a part is selected).
+     */
+    public int getTotalWordCount(UUID partId) throws SQLException {
+        int total = 0;
+
+        // 1. Part's own heading words
+        String partSql = "SELECT title, subtitle FROM part WHERE id = ?";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(partSql)) {
+            ps.setObject(1, partId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String t = rs.getString("title");
+                    String s = rs.getString("subtitle");
+                    total += (t == null || t.isBlank()) ? 2 : countPlainTextWords(t);
+                    total += countPlainTextWords(s);
+                }
+            }
+        }
+
+        // 2. Scene content for chapters in this part
+        String sceneSql = """
+                SELECT COALESCE(SUM(s.word_count), 0)
+                FROM scene s
+                JOIN chapter ch ON ch.id = s.chapter_id
+                WHERE ch.part_id = ?
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sceneSql)) {
+            ps.setObject(1, partId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) total += rs.getInt(1);
+            }
+        }
+
+        // 3. Chapter heading words for chapters in this part
+        String chapterSql = "SELECT title, subtitle FROM chapter WHERE part_id = ?";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(chapterSql)) {
+            ps.setObject(1, partId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String t = rs.getString("title");
+                    String s = rs.getString("subtitle");
+                    total += (t == null || t.isBlank()) ? 2 : countPlainTextWords(t);
+                    total += countPlainTextWords(s);
+                }
+            }
+        }
+
+        return total;
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
     private int nextDisplayOrder(UUID bookId) throws SQLException {
         String sql = "SELECT COALESCE(MAX(display_order), -1) + 1 FROM part WHERE book_id = ?";
         try (Connection c = ds.getConnection();
@@ -195,5 +257,19 @@ public class PartDao {
                 return rs.next() ? rs.getInt(1) : 0;
             }
         }
+    }
+
+    private static int countPlainTextWords(String text) {
+        if (text == null || text.isBlank()) return 0;
+        int     count  = 0;
+        boolean inWord = false;
+        for (int i = 0; i < text.length(); i++) {
+            if (!Character.isWhitespace(text.charAt(i))) {
+                if (!inWord) { count++; inWord = true; }
+            } else {
+                inWord = false;
+            }
+        }
+        return count;
     }
 }

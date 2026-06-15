@@ -3,6 +3,7 @@ package com.richardsand.novelkms.resource;
 import java.sql.SQLException;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -29,7 +30,7 @@ import jakarta.ws.rs.core.Response;
 @Consumes(MediaType.APPLICATION_JSON)
 public class BookResource {
     private static final Logger logger = LoggerFactory.getLogger(BookResource.class);
-    private final BookDao bookDao;
+    private final BookDao       bookDao;
 
     @Inject
     public BookResource(BookDao bookDao) {
@@ -41,35 +42,48 @@ public class BookResource {
     // -------------------------------------------------------------------------
 
     public static class CreateRequest {
-        @JsonProperty public String title;
-        @JsonProperty public String subtitle;
-        @JsonProperty public String shortTitle;
-        @JsonProperty public String notes;
+        @JsonProperty
+        public String title;
+        @JsonProperty
+        public String subtitle;
+        @JsonProperty
+        public String shortTitle;
+        @JsonProperty
+        public String notes;
     }
 
     public static class UpdateRequest {
-        @JsonProperty public String  title;
-        @JsonProperty public String  subtitle;
-        @JsonProperty public String  shortTitle;
-        @JsonProperty public String  notes;
-        @JsonProperty public Boolean pageLayoutEnabled;
-        @JsonProperty public String  pageSizePreset;
-        @JsonProperty public Double  pageWidthIn;
-        @JsonProperty public Double  pageHeightIn;
-        @JsonProperty public Double  pageMarginTopIn;
-        @JsonProperty public Double  pageMarginBottomIn;
-        @JsonProperty public Double  pageMarginInnerIn;
-        @JsonProperty public Double  pageMarginOuterIn;
+        @JsonProperty
+        public String  title;
+        @JsonProperty
+        public String  subtitle;
+        @JsonProperty
+        public String  shortTitle;
+        @JsonProperty
+        public String  notes;
+        @JsonProperty
+        public Boolean pageLayoutEnabled;
+        @JsonProperty
+        public String  pageSizePreset;
+        @JsonProperty
+        public Double  pageWidthIn;
+        @JsonProperty
+        public Double  pageHeightIn;
+        @JsonProperty
+        public Double  pageMarginTopIn;
+        @JsonProperty
+        public Double  pageMarginBottomIn;
+        @JsonProperty
+        public Double  pageMarginInnerIn;
+        @JsonProperty
+        public Double  pageMarginOuterIn;
     }
 
-    /**
-     * Body for cover-image upload.
-     * imageData — base64-encoded raw image bytes.
-     * mimeType  — e.g. "image/jpeg", "image/png", "image/webp".
-     */
     public static class CoverImageRequest {
-        @JsonProperty public String imageData;
-        @JsonProperty public String mimeType;
+        @JsonProperty
+        public String imageData;
+        @JsonProperty
+        public String mimeType;
     }
 
     // -------------------------------------------------------------------------
@@ -123,13 +137,13 @@ public class BookResource {
         }
         try {
             return bookDao.update(
-                            id,
-                            req.title, req.subtitle, req.shortTitle, req.notes,
-                            req.pageLayoutEnabled != null && req.pageLayoutEnabled,
-                            req.pageSizePreset,
-                            req.pageWidthIn, req.pageHeightIn,
-                            req.pageMarginTopIn, req.pageMarginBottomIn,
-                            req.pageMarginInnerIn, req.pageMarginOuterIn)
+                    id,
+                    req.title, req.subtitle, req.shortTitle, req.notes,
+                    req.pageLayoutEnabled != null && req.pageLayoutEnabled,
+                    req.pageSizePreset,
+                    req.pageWidthIn, req.pageHeightIn,
+                    req.pageMarginTopIn, req.pageMarginBottomIn,
+                    req.pageMarginInnerIn, req.pageMarginOuterIn)
                     .map(b -> Response.ok(b).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {
@@ -150,13 +164,31 @@ public class BookResource {
     }
 
     // -------------------------------------------------------------------------
-    // Cover image
+    // Word count
     // -------------------------------------------------------------------------
 
     /**
-     * Returns the raw cover image bytes with the correct Content-Type header.
-     * The method-level @Produces overrides the class-level JSON default.
+     * Returns the total word count for a book including scene content,
+     * chapter headings, and part headings. Used by the editor status bar
+     * when the book is selected and by the WORDS template token.
+     *
+     * Returns { "wordCount": N }
      */
+    @GET
+    @Path("/books/{id}/word-count")
+    public Response getWordCount(@PathParam("id") UUID id) {
+        try {
+            int count = bookDao.getTotalWordCount(id);
+            return Response.ok(Map.of("wordCount", count)).build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Cover image
+    // -------------------------------------------------------------------------
+
     @GET
     @Path("/books/{id}/cover-image")
     @Produces(MediaType.WILDCARD)
@@ -170,11 +202,6 @@ public class BookResource {
         }
     }
 
-    /**
-     * Stores or replaces the cover image for a book.
-     * Accepts { "imageData": "<base64>", "mimeType": "image/jpeg" }.
-     * Returns 204 on success, 404 if the book does not exist.
-     */
     @PUT
     @Path("/books/{id}/cover-image")
     public Response setCoverImage(@PathParam("id") UUID id, CoverImageRequest req) {
@@ -187,7 +214,7 @@ public class BookResource {
                     .entity("mimeType must be an image type (e.g. image/jpeg)").build();
         }
         try {
-            byte[] bytes = Base64.getDecoder().decode(req.imageData);
+            byte[]  bytes = Base64.getDecoder().decode(req.imageData);
             boolean found = bookDao.setCoverImage(id, bytes, req.mimeType);
             return found
                     ? Response.noContent().build()
@@ -200,10 +227,6 @@ public class BookResource {
         }
     }
 
-    /**
-     * Removes the cover image from a book.
-     * Returns 204 on success, 404 if the book does not exist.
-     */
     @DELETE
     @Path("/books/{id}/cover-image")
     public Response deleteCoverImage(@PathParam("id") UUID id) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -18,6 +18,7 @@ import { useScenes, useScene, useDeleteScene, SCENE_KEYS } from '../../hooks/use
 import { useChapter } from '../../hooks/useChapters';
 import { useGlobalTemplate, useBookTemplate, TEMPLATE_KEYS } from '../../hooks/useTemplates';
 import { useBook } from '../../hooks/useBooks';
+import client from '../../api/client';
 import { useProject } from '../../hooks/useProjects';
 import { useGlobalStyles, useBookStyles } from '../../hooks/useStyles';
 import { scenesApi } from '../../api/scenes';
@@ -94,6 +95,19 @@ function getDocSceneBreakIds(editor) {
 function templateKey(t) {
 	if (!t) return null;
 	return `${t.scope}:${t.templateType}:${t.bookId ?? ''}:${t.updatedAt}`;
+}
+
+/**
+ * Counts words in an HTML string by stripping tags and splitting on whitespace.
+ * Used for per-scene word counts in multi-scene mode where only the raw HTML
+ * chunk is available (not a TipTap editor instance).
+ * Uses /\S+/g matching to stay consistent with TipTap's CharacterCount.words().
+ */
+function countWords(html) {
+	if (!html) return 0;
+	const text = html.replace(/<[^>]+>/g, ' ');
+	const matches = text.match(/\S+/g);
+	return matches ? matches.length : 0;
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -186,6 +200,44 @@ export default function EditorPanel({
 	const { data: globalStyleSheet } = useGlobalStyles(!bookId);
 	const styleSheet = bookId ? bookStyleSheet : globalStyleSheet;
 
+	// ── Context-sensitive word count ──────────────────────────────────────────
+	// Book mode: fetch total from API (includes chapter/part headings).
+	// Part mode: fetch total from API (includes part + chapter headings).
+	// Chapter mode: TipTap live count + heading words computed below.
+	// Scene mode: TipTap live count only.
+	const { data: bookWordCount } = useQuery({
+		queryKey: ['books', bookId, 'word-count'],
+		queryFn: () => client.get(`/books/${bookId}/word-count`).then(r => r.data.wordCount),
+		// Enabled for book cover preview (status bar) and book-scope template mode
+		// (WORDS token in template editor preview).
+		enabled: !!bookId && (bookCoverMode || templateMode),
+		staleTime: 60_000,
+	});
+
+	const { data: partWordCount } = useQuery({
+		queryKey: ['parts', partId, 'word-count'],
+		queryFn: () => client.get(`/parts/${partId}/word-count`).then(r => r.data.wordCount),
+		enabled: partPageMode && !!partId,
+		staleTime: 60_000,
+	});
+
+	// Words contributed by the chapter heading (title + subtitle) displayed above
+	// the editor in multi-scene mode. These are outside the TipTap document so
+	// CharacterCount cannot see them; we add them to the live count manually.
+	const chapterHeadingWords = useMemo(() => {
+		if (!multiSceneMode || !chapterData) return 0;
+		const title = chapterData.title?.trim() || `Chapter ${chapterData.chapterNumber}`;
+		const subtitle = chapterData.subtitle?.trim() || '';
+		return countWords(title) + countWords(subtitle);
+	}, [multiSceneMode, chapterData]);
+
+	// wordCountOverride: non-null in book/part preview modes only.
+	// In editor modes (chapter/scene/template) the toolbar uses its live TipTap
+	// count (+ headingWordCount offset in chapter mode).
+	const toolbarWordCountOverride = bookCoverMode ? (bookWordCount ?? null)
+		: partPageMode ? (partWordCount ?? null)
+			: null;
+
 	const isLoading = templateMode
 		? templateLoading
 		: singleSceneMode
@@ -270,14 +322,24 @@ export default function EditorPanel({
 				if (singleSceneModeRef.current) {
 					const sid = sceneIdRef.current;
 					if (!sid) return;
-					await scenesApi.updateContent(sid, html);
+					// Use TipTap's CharacterCount for the most accurate word count —
+					// it operates on the parsed document model, matching what the
+					// status bar displays.
+					const wc = editorRef.current?.storage?.characterCount?.words() ?? 0;
+					await scenesApi.updateContent(sid, html, wc);
 					queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(sid) });
 				} else {
 					const firstId = firstSceneIdRef.current;
 					if (!firstId) return;
 					const chunks = parseSceneChunks(html, firstId);
 					if (!chunks.length) return;
-					await Promise.all(chunks.map(c => scenesApi.updateContent(c.sceneId, c.content)));
+					// Count words per chunk from the HTML — TipTap's CharacterCount
+					// only gives a total for the whole document, not per-scene.
+					// countWords() uses the same /\S+/g algorithm TipTap uses internally,
+					// so the per-scene values sum to the same total the status bar shows.
+					await Promise.all(
+						chunks.map(c => scenesApi.updateContent(c.sceneId, c.content, countWords(c.content)))
+					);
 					chunks.forEach(c =>
 						queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(c.sceneId) })
 					);
@@ -377,8 +439,8 @@ export default function EditorPanel({
 	const handleTogglePreview = useCallback(() => setPreviewActive(p => !p), []);
 
 	const previewValues = useMemo(
-		() => resolveValues({ scope: templateScope, book: previewBook, project: previewProject }),
-		[templateScope, previewBook, previewProject]
+		() => resolveValues({ scope: templateScope, book: previewBook, project: previewProject, wordCount: bookWordCount ?? null }),
+		[templateScope, previewBook, previewProject, bookWordCount]
 	);
 	const previewHtml = useMemo(() => {
 		if (!showEditorPreview || !editor) return '';
@@ -466,6 +528,8 @@ export default function EditorPanel({
 				onInsertToken={handleInsertToken}
 				previewActive={previewActive}
 				onTogglePreview={handleTogglePreview}
+				wordCountOverride={toolbarWordCountOverride}
+				headingWordCount={multiSceneMode ? chapterHeadingWords : 0}
 			/>
 
 			{/* ── Content area ─────────────────────────────────────────────── */}

@@ -135,13 +135,23 @@ public class ProjectDao {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Word count
+    // -------------------------------------------------------------------------
+
     /**
-     * Returns the sum of {@code word_count} across every scene that belongs
-     * to a book in this project. Used by the WORDS template token and the
-     * project properties panel read-only display.
+     * Returns the total manuscript word count for the project, including:
+     *   - scene.word_count for every scene in every book
+     *   - words in every chapter title/subtitle (blank title = 2 words for "Chapter N")
+     *   - words in every part title/subtitle (blank title = 2 words for "Part I")
+     *
+     * Used by the WORDS template token and the project properties panel chip.
      */
     public int getTotalWordCount(UUID projectId) throws SQLException {
-        String sql = """
+        int total = 0;
+
+        // 1. Scene content
+        String sceneSql = """
                 SELECT COALESCE(SUM(s.word_count), 0)
                 FROM scene s
                 JOIN chapter ch ON ch.id = s.chapter_id
@@ -149,11 +159,78 @@ public class ProjectDao {
                 WHERE b.project_id = ?
                 """;
         try (Connection c = ds.getConnection();
-                PreparedStatement ps = c.prepareStatement(sql)) {
+                PreparedStatement ps = c.prepareStatement(sceneSql)) {
             ps.setObject(1, projectId);
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? rs.getInt(1) : 0;
+                if (rs.next()) total += rs.getInt(1);
             }
         }
+
+        // 2. Chapter heading words (title + subtitle)
+        //    Blank title → auto-numbered "Chapter N" = 2 words
+        String chapterSql = """
+                SELECT ch.title, ch.subtitle
+                FROM chapter ch
+                JOIN book b ON b.id = ch.book_id
+                WHERE b.project_id = ?
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(chapterSql)) {
+            ps.setObject(1, projectId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String t = rs.getString("title");
+                    String s = rs.getString("subtitle");
+                    total += (t == null || t.isBlank()) ? 2 : countPlainTextWords(t);
+                    total += countPlainTextWords(s);
+                }
+            }
+        }
+
+        // 3. Part heading words (title + subtitle)
+        //    Blank title → auto-numbered "Part I" = 2 words
+        String partSql = """
+                SELECT p.title, p.subtitle
+                FROM part p
+                JOIN book b ON b.id = p.book_id
+                WHERE b.project_id = ?
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(partSql)) {
+            ps.setObject(1, projectId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String t = rs.getString("title");
+                    String s = rs.getString("subtitle");
+                    total += (t == null || t.isBlank()) ? 2 : countPlainTextWords(t);
+                    total += countPlainTextWords(s);
+                }
+            }
+        }
+
+        return total;
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Counts non-whitespace runs in plain text (equivalent to /\S+/g in JS).
+     * Character-by-character scan avoids Java split("\\s+") returning [""] for
+     * empty strings.
+     */
+    private static int countPlainTextWords(String text) {
+        if (text == null || text.isBlank()) return 0;
+        int     count  = 0;
+        boolean inWord = false;
+        for (int i = 0; i < text.length(); i++) {
+            if (!Character.isWhitespace(text.charAt(i))) {
+                if (!inWord) { count++; inWord = true; }
+            } else {
+                inWord = false;
+            }
+        }
+        return count;
     }
 }

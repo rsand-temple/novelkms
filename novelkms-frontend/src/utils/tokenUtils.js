@@ -59,10 +59,16 @@ function toRoman(n) {
 	return result
 }
 
-/** Format a word count as a comma-separated integer string, e.g. 12345 → "12,345". */
+/**
+ * Formats a word count for display on cover/part templates.
+ * Rounds to the nearest 500 and prefixes "About " — standard manuscript
+ * submission convention so agents/publishers get an approximate figure.
+ * Example: 76,432 → "About 76,500"
+ */
 function formatWordCount(n) {
 	if (n == null) return ''
-	return Number(n).toLocaleString('en-US')
+	const rounded = Math.round(Number(n) / 500) * 500
+	return 'About ' + rounded.toLocaleString('en-US')
 }
 
 // ── Value resolution ──────────────────────────────────────────────────────────
@@ -102,7 +108,7 @@ function realValues(book, project, wordCount) {
  * @param {string}  scope      - 'book' | 'global'
  * @param {object}  book       - Book record
  * @param {object}  project    - Project record
- * @param {number?} wordCount  - Total project word count (null = blank)
+ * @param {number?} wordCount  - Total book word count (null = blank)
  */
 export function resolveValues({ scope, book, project, wordCount = null }) {
 	const real = scope === 'book' ? realValues(book, project, wordCount) : {}
@@ -121,7 +127,7 @@ export function resolveValues({ scope, book, project, wordCount = null }) {
  * @param {number}  partNumber - 1-based ordinal position within the book
  * @param {object}  book       - Book record
  * @param {object}  project    - Project record
- * @param {number?} wordCount  - Total project word count (null = blank)
+ * @param {number?} wordCount  - Total book word count (null = blank)
  */
 export function resolveValuesForPart({ part, partNumber, book, project, wordCount = null }) {
 	const out = {}

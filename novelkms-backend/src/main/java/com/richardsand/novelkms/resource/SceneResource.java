@@ -2,6 +2,7 @@ package com.richardsand.novelkms.resource;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -122,6 +123,11 @@ public class SceneResource {
      * Dedicated endpoint for saving scene content (the TipTap document).
      * Separated from metadata updates to support auto-save without clobbering
      * structural edits happening concurrently.
+     *
+     * wordCount must be supplied by the caller (the frontend):
+     * single-scene mode — TipTap CharacterCount.words()
+     * multi-scene mode — per-chunk countWords() HTML-strip helper
+     * Both use /\S+/ matching, consistent with the status bar display.
      */
     @PUT
     @Path("/scenes/{id}/content")
@@ -145,6 +151,32 @@ public class SceneResource {
             return sceneDao.delete(id)
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
+        } catch (SQLException sqle) {
+            return serverError(sqle);
+        }
+    }
+
+    /**
+     * One-time repair endpoint: recomputes word_count for every scene from its
+     * stored HTML content using the same /\S+/ algorithm as the frontend.
+     *
+     * Needed because the autosave path previously omitted wordCount from the
+     * PUT /scenes/{id}/content request, causing every editor-touched scene to
+     * have word_count = 0 (Java int default when field is absent from JSON).
+     *
+     * Call once after deploying the fix:
+     * curl -X POST http://localhost:8080/api/admin/recalculate-word-counts
+     *
+     * Returns { "updated": N } where N is the number of scenes processed.
+     * Safe to call multiple times — idempotent.
+     */
+    @POST
+    @Path("/admin/recalculate-word-counts")
+    public Response recalculateWordCounts() {
+        try {
+            int updated = sceneDao.recalculateAllWordCounts();
+            logger.info("recalculate-word-counts: updated {} scenes", updated);
+            return Response.ok(Map.of("updated", updated)).build();
         } catch (SQLException sqle) {
             return serverError(sqle);
         }

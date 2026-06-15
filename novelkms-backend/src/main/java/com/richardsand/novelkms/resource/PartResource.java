@@ -2,6 +2,7 @@ package com.richardsand.novelkms.resource;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -31,12 +32,12 @@ import jakarta.ws.rs.core.Response;
 @Consumes(MediaType.APPLICATION_JSON)
 public class PartResource {
     private static final Logger logger = LoggerFactory.getLogger(PartResource.class);
-    private final PartDao    partDao;
-    private final ChapterDao chapterDao;
+    private final PartDao       partDao;
+    private final ChapterDao    chapterDao;
 
     @Inject
     public PartResource(PartDao partDao, ChapterDao chapterDao) {
-        this.partDao    = partDao;
+        this.partDao = partDao;
         this.chapterDao = chapterDao;
     }
 
@@ -45,25 +46,33 @@ public class PartResource {
     // -------------------------------------------------------------------------
 
     public static class CreatePartRequest {
-        @JsonProperty public String title;
-        @JsonProperty public String subtitle;
-        @JsonProperty public String notes;
+        @JsonProperty
+        public String title;
+        @JsonProperty
+        public String subtitle;
+        @JsonProperty
+        public String notes;
     }
 
     public static class UpdatePartRequest {
-        @JsonProperty public String title;
-        @JsonProperty public String subtitle;
-        @JsonProperty public String notes;
+        @JsonProperty
+        public String title;
+        @JsonProperty
+        public String subtitle;
+        @JsonProperty
+        public String notes;
     }
 
     public static class CreateChapterRequest {
-        @JsonProperty public String title;
-        @JsonProperty public String notes;
+        @JsonProperty
+        public String title;
+        @JsonProperty
+        public String notes;
     }
 
-    /** Body: { "ids": ["uuid1", "uuid2", ...] } in desired display order. */
     public static class ReorderRequest {
-        @JsonProperty public List<UUID> ids;
+        @JsonProperty
+        public List<UUID> ids;
     }
 
     // -------------------------------------------------------------------------
@@ -152,11 +161,29 @@ public class PartResource {
     }
 
     // -------------------------------------------------------------------------
+    // Word count
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the total word count for a part: the part heading words, all
+     * scene content in the part's chapters, and all chapter heading words.
+     * Used by the editor status bar when a part is selected.
+     *
+     * Returns { "wordCount": N }
+     */
+    @GET
+    @Path("/parts/{id}/word-count")
+    public Response getWordCount(@PathParam("id") UUID id) {
+        try {
+            int count = partDao.getTotalWordCount(id);
+            return Response.ok(Map.of("wordCount", count)).build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Chapters within a part
-    //
-    // These live on PartResource (not ChapterResource) because the natural URL
-    // is /parts/{partId}/chapters.  ChapterResource still owns the book-level
-    // chapter endpoints (/books/{bookId}/chapters).
     // -------------------------------------------------------------------------
 
     @GET
@@ -170,11 +197,6 @@ public class PartResource {
         }
     }
 
-    /**
-     * Creates a chapter inside a part.  Looks up the part to obtain the
-     * book_id so that chapter.book_id is always populated (used by cascade
-     * queries and guards throughout the DAO layer).
-     */
     @POST
     @Path("/parts/{partId}/chapters")
     public Response createPartChapter(@PathParam("partId") UUID partId, CreateChapterRequest req) {

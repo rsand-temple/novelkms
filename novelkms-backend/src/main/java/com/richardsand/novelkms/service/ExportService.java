@@ -396,14 +396,14 @@ public class ExportService {
         try {
             if (book.getProjectId() != null) {
                 project = projectDao.findById(book.getProjectId()).orElse(null);
-                words = projectDao.getTotalWordCount(book.getProjectId());
+                words = bookDao.getTotalWordCount(book.getId());
             }
         } catch (Exception e) {
             logger.warn("Could not load project for token resolution: {}", e.getMessage());
         }
 
         final Project proj     = project;
-        final String  wordsStr = words > 0 ? String.format("%,d", words) : null;
+        final String  wordsStr = words > 0 ? formatWordsForCover(words) : null;
 
         org.jsoup.nodes.Document jsoup = Jsoup.parseBodyFragment(html);
         for (Element span : jsoup.select("span[data-token]")) {
@@ -981,6 +981,17 @@ public class ExportService {
         }
         sb.append('-').append(fileTimestamp()).append(".docx");
         return sb.toString();
+    }
+
+    /**
+     * Formats a word count for the cover page: rounds to the nearest 500 and
+     * prefixes with "About " (standard manuscript submission convention).
+     * Matches the formatWordCount() function in tokenUtils.js.
+     * Example: 76,432 → "About 76,500"
+     */
+    private static String formatWordsForCover(int words) {
+        long rounded = Math.round(words / 500.0) * 500;
+        return String.format("About %,d", rounded);
     }
 
     private String toRoman(int n) {

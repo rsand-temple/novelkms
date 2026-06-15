@@ -106,9 +106,13 @@ public class SceneDao {
     }
 
     /**
-     * Saves scene content and recalculates word count.
-     * Word count is a simple whitespace-split estimate; the frontend may
-     * supply a more accurate count derived from the TipTap document model.
+     * Saves scene content and word count.
+     * wordCount is supplied by the caller:
+     * - From the frontend: TipTap's CharacterCount.words() (single-scene mode)
+     * or the countWords() HTML-strip helper (multi-scene mode).
+     * - From ImportService.finalizeScene: stripHtml + split on the HTML content.
+     * Both approaches use /\S+/ matching so results are consistent with the
+     * word count displayed in the editor status bar.
      */
     public Optional<Scene> saveContent(UUID id, String content, int wordCount) throws SQLException {
         Instant now = Instant.now();
@@ -246,6 +250,105 @@ public class SceneDao {
             }
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Word count repair
+    // -------------------------------------------------------------------------
+
+    /**
+     * Recomputes word_count for every scene that has stored content, using the
+     * same /\S+/ algorithm that the frontend's countWords() helper and
+     * ImportService.finalizeScene() both use.
+     *
+     * Called via POST /api/admin/recalculate-word-counts to repair scenes whose
+     * word_count was zeroed by the pre-fix autosave path (which omitted wordCount
+     * from the PUT /scenes/{id}/content request body).
+     *
+     * Two-phase approach: read all scenes first on one connection, then write
+     * all updates in a single batched transaction on a second connection,
+     * avoiding holding an open cursor across the update.
+     *
+     * Returns the number of scenes updated.
+     */
+    public int recalculateAllWordCounts() throws SQLException {
+        // Phase 1 — collect (id, recomputed word count) for every scene with content
+        record Update(UUID id, int wordCount) {
+        }
+        List<Update> updates = new ArrayList<>();
+
+        String selectSql = "SELECT id, content FROM scene WHERE content IS NOT NULL AND content <> ''";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(selectSql);
+                ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                UUID   id      = rs.getObject("id", UUID.class);
+                String content = rs.getString("content");
+                updates.add(new Update(id, countWordsFromHtml(content)));
+            }
+        }
+
+        if (updates.isEmpty()) {
+            return 0;
+        }
+
+        // Phase 2 — apply all updates in one batched transaction
+        String  updateSql = "UPDATE scene SET word_count = ?, updated_at = ? WHERE id = ?";
+        Instant now       = Instant.now();
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(updateSql)) {
+            c.setAutoCommit(false);
+            try {
+                for (Update u : updates) {
+                    ps.setInt(1, u.wordCount());
+                    ps.setTimestamp(2, Timestamp.from(now));
+                    ps.setObject(3, u.id());
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+
+        return updates.size();
+    }
+
+    /**
+     * Strips HTML tags and counts non-whitespace tokens (/\S+/ matching),
+     * consistent with TipTap's CharacterCount.words() and the frontend's
+     * countWords() helper in EditorPanel.jsx.
+     */
+    private int countWordsFromHtml(String html) {
+        if (html == null || html.isBlank()) {
+            return 0;
+        }
+        // Replace every HTML tag with a space so adjacent words across tag
+        // boundaries are not merged (e.g. "end</p><p>start" → "end start").
+        String text = html.replaceAll("<[^>]+>", " ").trim();
+        if (text.isBlank()) {
+            return 0;
+        }
+        // Count non-whitespace runs — same as /\S+/g in JavaScript
+        int     count  = 0;
+        boolean inWord = false;
+        for (int i = 0; i < text.length(); i++) {
+            if (!Character.isWhitespace(text.charAt(i))) {
+                if (!inWord) {
+                    count++;
+                    inWord = true;
+                }
+            } else {
+                inWord = false;
+            }
+        }
+        return count;
+    }
+
+    // -------------------------------------------------------------------------
 
     private int nextDisplayOrder(UUID chapterId) throws SQLException {
         String sql = "SELECT COALESCE(MAX(display_order), -1) + 1 FROM scene WHERE chapter_id = ?";
