@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>com.richardsand.novelkms</groupId>
 		<artifactId>novelkms-parent</artifactId>
-		<version>0.0.1-SNAPSHOT</version>
+		<version>0.5-SNAPSHOT</version>
 	</parent>
 
 	<!--
@@ -21,7 +21,6 @@
 	<packaging>jar</packaging>
 
 	<properties>
-		<nodeVersion>v20.19.2</nodeVersion>
 		<npmVersion>10.8.2</npmVersion>
 	</properties>
 	
@@ -39,7 +38,7 @@
 						</goals>
 						<phase>generate-resources</phase>
 						<configuration>
-							<nodeVersion>v20.19.2</nodeVersion>
+							<nodeVersion>v20.19.2</nodeVersion><!-- property doesn't work here -->
 							<npmVersion>${npm.version}</npmVersion>
 						</configuration>
 					</execution>
