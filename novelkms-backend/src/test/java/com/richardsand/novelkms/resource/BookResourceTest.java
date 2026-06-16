@@ -45,7 +45,7 @@ class BookResourceTest extends NovelKmsTestBase {
 
     @Test
     void listBooks_empty_returns200AndEmptyArray() {
-        Response r = RESOURCES.target("/api/projects/" + testProject.getId() + "/books")
+        Response r = RESOURCES.target("/projects/" + testProject.getId() + "/books")
                 .request().get();
 
         assertEquals(200, r.getStatus());
@@ -58,7 +58,7 @@ class BookResourceTest extends NovelKmsTestBase {
         bookDao.create(testProject.getId(), "Book A", null, null, null);
         bookDao.create(testProject.getId(), "Book B", null, null, null);
 
-        Response r = RESOURCES.target("/api/projects/" + testProject.getId() + "/books")
+        Response r = RESOURCES.target("/projects/" + testProject.getId() + "/books")
                 .request().get();
 
         assertEquals(200, r.getStatus());
@@ -74,7 +74,7 @@ class BookResourceTest extends NovelKmsTestBase {
     void getBook_knownId_returns200() throws SQLException {
         Book b = bookDao.create(testProject.getId(), "My Book", "Sub", null, null);
 
-        Response r = RESOURCES.target("/api/books/" + b.getId()).request().get();
+        Response r = RESOURCES.target("/books/" + b.getId()).request().get();
 
         assertEquals(200, r.getStatus());
         Book found = r.readEntity(Book.class);
@@ -84,7 +84,7 @@ class BookResourceTest extends NovelKmsTestBase {
 
     @Test
     void getBook_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/books/" + UUID.randomUUID()).request().get();
+        Response r = RESOURCES.target("/books/" + UUID.randomUUID()).request().get();
 
         assertEquals(404, r.getStatus());
     }
@@ -95,7 +95,7 @@ class BookResourceTest extends NovelKmsTestBase {
 
     @Test
     void createBook_validRequest_returns201() {
-        Response r = RESOURCES.target("/api/projects/" + testProject.getId() + "/books")
+        Response r = RESOURCES.target("/projects/" + testProject.getId() + "/books")
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("title", "New Book", "subtitle", "A Subtitle")));
 
@@ -109,7 +109,7 @@ class BookResourceTest extends NovelKmsTestBase {
 
     @Test
     void createBook_missingTitle_returns400() {
-        Response r = RESOURCES.target("/api/projects/" + testProject.getId() + "/books")
+        Response r = RESOURCES.target("/projects/" + testProject.getId() + "/books")
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("subtitle", "No title")));
 
@@ -124,7 +124,7 @@ class BookResourceTest extends NovelKmsTestBase {
     void updateBook_knownId_returns200() throws SQLException {
         Book b = bookDao.create(testProject.getId(), "Old Title", null, null, null);
 
-        Response r = RESOURCES.target("/api/books/" + b.getId())
+        Response r = RESOURCES.target("/books/" + b.getId())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "New Title", "notes", "Updated notes")));
 
@@ -136,7 +136,7 @@ class BookResourceTest extends NovelKmsTestBase {
 
     @Test
     void updateBook_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/books/" + UUID.randomUUID())
+        Response r = RESOURCES.target("/books/" + UUID.randomUUID())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "Ghost")));
 
@@ -151,14 +151,14 @@ class BookResourceTest extends NovelKmsTestBase {
     void deleteBook_knownId_returns204() throws SQLException {
         Book b = bookDao.create(testProject.getId(), "To Delete", null, null, null);
 
-        Response r = RESOURCES.target("/api/books/" + b.getId()).request().delete();
+        Response r = RESOURCES.target("/books/" + b.getId()).request().delete();
 
         assertEquals(204, r.getStatus());
     }
 
     @Test
     void deleteBook_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/books/" + UUID.randomUUID()).request().delete();
+        Response r = RESOURCES.target("/books/" + UUID.randomUUID()).request().delete();
 
         assertEquals(404, r.getStatus());
     }

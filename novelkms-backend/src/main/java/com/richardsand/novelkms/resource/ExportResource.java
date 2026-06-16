@@ -28,7 +28,7 @@ import jakarta.ws.rs.core.Response;
  * All return application/vnd.openxmlformats-officedocument.wordprocessingml.document
  * with a Content-Disposition: attachment header so the browser triggers a download.
  */
-@Path("/api")
+@Path("/")
 @Produces(MediaType.APPLICATION_JSON)
 public class ExportResource {
 

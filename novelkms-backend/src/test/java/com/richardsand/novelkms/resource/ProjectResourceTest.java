@@ -39,12 +39,12 @@ class ProjectResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // GET /api/projects
+    // GET /projects
     // -------------------------------------------------------------------------
 
     @Test
     void listProjects_empty_returns200AndEmptyArray() {
-        Response r = RESOURCES.target("/api/projects").request().get();
+        Response r = RESOURCES.target("/projects").request().get();
 
         assertEquals(200, r.getStatus());
         List<Project> projects = r.readEntity(new GenericType<>() {});
@@ -56,7 +56,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
         projectDao.create("Alpha", null);
         projectDao.create("Beta", null);
 
-        Response r = RESOURCES.target("/api/projects").request().get();
+        Response r = RESOURCES.target("/projects").request().get();
 
         assertEquals(200, r.getStatus());
         List<Project> projects = r.readEntity(new GenericType<>() {});
@@ -64,14 +64,14 @@ class ProjectResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // GET /api/projects/{id}
+    // GET /projects/{id}
     // -------------------------------------------------------------------------
 
     @Test
     void getProject_knownId_returns200() throws SQLException {
         Project p = projectDao.create("The Alone Man", "A thriller");
 
-        Response r = RESOURCES.target("/api/projects/" + p.getId()).request().get();
+        Response r = RESOURCES.target("/projects/" + p.getId()).request().get();
 
         assertEquals(200, r.getStatus());
         Project found = r.readEntity(Project.class);
@@ -81,18 +81,18 @@ class ProjectResourceTest extends NovelKmsTestBase {
 
     @Test
     void getProject_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/projects/" + UUID.randomUUID()).request().get();
+        Response r = RESOURCES.target("/projects/" + UUID.randomUUID()).request().get();
 
         assertEquals(404, r.getStatus());
     }
 
     // -------------------------------------------------------------------------
-    // POST /api/projects
+    // POST /projects
     // -------------------------------------------------------------------------
 
     @Test
     void createProject_validRequest_returns201WithProject() {
-        Response r = RESOURCES.target("/api/projects")
+        Response r = RESOURCES.target("/projects")
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("title", "New Project", "description", "A description")));
 
@@ -106,7 +106,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
 
     @Test
     void createProject_missingName_returns400() {
-        Response r = RESOURCES.target("/api/projects")
+        Response r = RESOURCES.target("/projects")
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("description", "No name")));
 
@@ -115,7 +115,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
 
     @Test
     void createProject_blankName_returns400() {
-        Response r = RESOURCES.target("/api/projects")
+        Response r = RESOURCES.target("/projects")
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("name", "   ")));
 
@@ -123,14 +123,14 @@ class ProjectResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // PUT /api/projects/{id}
+    // PUT /projects/{id}
     // -------------------------------------------------------------------------
 
     @Test
     void updateProject_knownId_returns200WithUpdatedData() throws SQLException {
         Project p = projectDao.create("Original Name", null);
 
-        Response r = RESOURCES.target("/api/projects/" + p.getId())
+        Response r = RESOURCES.target("/projects/" + p.getId())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "Updated Title", "description", "Updated desc")));
 
@@ -142,7 +142,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
 
     @Test
     void updateProject_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/projects/" + UUID.randomUUID())
+        Response r = RESOURCES.target("/projects/" + UUID.randomUUID())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "Ghost")));
 
@@ -153,7 +153,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
     void updateProject_missingName_returns400() throws SQLException {
         Project p = projectDao.create("Project", null);
 
-        Response r = RESOURCES.target("/api/projects/" + p.getId())
+        Response r = RESOURCES.target("/projects/" + p.getId())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("description", "No name")));
 
@@ -161,14 +161,14 @@ class ProjectResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // DELETE /api/projects/{id}
+    // DELETE /projects/{id}
     // -------------------------------------------------------------------------
 
     @Test
     void deleteProject_knownId_returns204() throws SQLException {
         Project p = projectDao.create("To Delete", null);
 
-        Response r = RESOURCES.target("/api/projects/" + p.getId())
+        Response r = RESOURCES.target("/projects/" + p.getId())
                 .request()
                 .delete();
 
@@ -177,7 +177,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
 
     @Test
     void deleteProject_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/projects/" + UUID.randomUUID())
+        Response r = RESOURCES.target("/projects/" + UUID.randomUUID())
                 .request()
                 .delete();
 

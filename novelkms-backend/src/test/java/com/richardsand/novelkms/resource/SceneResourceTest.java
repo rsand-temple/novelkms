@@ -47,12 +47,12 @@ class SceneResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // GET /api/chapters/{chapterId}/scenes
+    // GET /chapters/{chapterId}/scenes
     // -------------------------------------------------------------------------
 
     @Test
     void listScenes_empty_returns200AndEmptyArray() {
-        Response r = RESOURCES.target("/api/chapters/" + testChapter.getId() + "/scenes")
+        Response r = RESOURCES.target("/chapters/" + testChapter.getId() + "/scenes")
                 .request().get();
 
         assertEquals(200, r.getStatus());
@@ -65,7 +65,7 @@ class SceneResourceTest extends NovelKmsTestBase {
         sceneDao.create(testChapter.getId(), "Scene A", null);
         sceneDao.create(testChapter.getId(), "Scene B", null);
 
-        Response r = RESOURCES.target("/api/chapters/" + testChapter.getId() + "/scenes")
+        Response r = RESOURCES.target("/chapters/" + testChapter.getId() + "/scenes")
                 .request().get();
 
         assertEquals(200, r.getStatus());
@@ -74,14 +74,14 @@ class SceneResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // GET /api/scenes/{id}
+    // GET /scenes/{id}
     // -------------------------------------------------------------------------
 
     @Test
     void getScene_knownId_returns200() throws SQLException {
         Scene s = sceneDao.create(testChapter.getId(), "My Scene", "my notes");
 
-        Response r = RESOURCES.target("/api/scenes/" + s.getId()).request().get();
+        Response r = RESOURCES.target("/scenes/" + s.getId()).request().get();
 
         assertEquals(200, r.getStatus());
         Scene found = r.readEntity(Scene.class);
@@ -93,18 +93,18 @@ class SceneResourceTest extends NovelKmsTestBase {
 
     @Test
     void getScene_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/scenes/" + UUID.randomUUID()).request().get();
+        Response r = RESOURCES.target("/scenes/" + UUID.randomUUID()).request().get();
 
         assertEquals(404, r.getStatus());
     }
 
     // -------------------------------------------------------------------------
-    // POST /api/chapters/{chapterId}/scenes
+    // POST /chapters/{chapterId}/scenes
     // -------------------------------------------------------------------------
 
     @Test
     void createScene_validRequest_returns201() {
-        Response r = RESOURCES.target("/api/chapters/" + testChapter.getId() + "/scenes")
+        Response r = RESOURCES.target("/chapters/" + testChapter.getId() + "/scenes")
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("title", "New Scene", "notes", "opening scene")));
 
@@ -119,7 +119,7 @@ class SceneResourceTest extends NovelKmsTestBase {
 
     @Test
     void createScene_missingTitle_returns400() {
-        Response r = RESOURCES.target("/api/chapters/" + testChapter.getId() + "/scenes")
+        Response r = RESOURCES.target("/chapters/" + testChapter.getId() + "/scenes")
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("notes", "No title")));
 
@@ -127,14 +127,14 @@ class SceneResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // PUT /api/scenes/{id}  (metadata update)
+    // PUT /scenes/{id}  (metadata update)
     // -------------------------------------------------------------------------
 
     @Test
     void updateScene_knownId_returns200() throws SQLException {
         Scene s = sceneDao.create(testChapter.getId(), "Old Title", null);
 
-        Response r = RESOURCES.target("/api/scenes/" + s.getId())
+        Response r = RESOURCES.target("/scenes/" + s.getId())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "New Title", "notes", "Updated")));
 
@@ -146,7 +146,7 @@ class SceneResourceTest extends NovelKmsTestBase {
 
     @Test
     void updateScene_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/scenes/" + UUID.randomUUID())
+        Response r = RESOURCES.target("/scenes/" + UUID.randomUUID())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "Ghost")));
 
@@ -154,7 +154,7 @@ class SceneResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // PUT /api/scenes/{id}/content  (TipTap content save)
+    // PUT /scenes/{id}/content  (TipTap content save)
     // -------------------------------------------------------------------------
 
     @Test
@@ -162,7 +162,7 @@ class SceneResourceTest extends NovelKmsTestBase {
         Scene s = sceneDao.create(testChapter.getId(), "Draft", null);
         String tiptapJson = "{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\"}]}";
 
-        Response r = RESOURCES.target("/api/scenes/" + s.getId() + "/content")
+        Response r = RESOURCES.target("/scenes/" + s.getId() + "/content")
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("content", tiptapJson, "wordCount", 15)));
 
@@ -176,7 +176,7 @@ class SceneResourceTest extends NovelKmsTestBase {
     void saveContent_unknownId_returns404() {
         String json = "{\"type\":\"doc\"}";
 
-        Response r = RESOURCES.target("/api/scenes/" + UUID.randomUUID() + "/content")
+        Response r = RESOURCES.target("/scenes/" + UUID.randomUUID() + "/content")
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("content", json, "wordCount", 0)));
 
@@ -187,31 +187,31 @@ class SceneResourceTest extends NovelKmsTestBase {
     void saveContent_doesNotAffectTitle() throws SQLException {
         Scene s = sceneDao.create(testChapter.getId(), "Stable Title", null);
 
-        RESOURCES.target("/api/scenes/" + s.getId() + "/content")
+        RESOURCES.target("/scenes/" + s.getId() + "/content")
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("content", "{\"type\":\"doc\"}", "wordCount", 5)));
 
-        Response r = RESOURCES.target("/api/scenes/" + s.getId()).request().get();
+        Response r = RESOURCES.target("/scenes/" + s.getId()).request().get();
         Scene found = r.readEntity(Scene.class);
         assertEquals("Stable Title", found.getTitle());
     }
 
     // -------------------------------------------------------------------------
-    // DELETE /api/scenes/{id}
+    // DELETE /scenes/{id}
     // -------------------------------------------------------------------------
 
     @Test
     void deleteScene_knownId_returns204() throws SQLException {
         Scene s = sceneDao.create(testChapter.getId(), "To Delete", null);
 
-        Response r = RESOURCES.target("/api/scenes/" + s.getId()).request().delete();
+        Response r = RESOURCES.target("/scenes/" + s.getId()).request().delete();
 
         assertEquals(204, r.getStatus());
     }
 
     @Test
     void deleteScene_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/scenes/" + UUID.randomUUID()).request().delete();
+        Response r = RESOURCES.target("/scenes/" + UUID.randomUUID()).request().delete();
 
         assertEquals(404, r.getStatus());
     }

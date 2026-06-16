@@ -42,7 +42,7 @@ import jakarta.ws.rs.core.Response;
  * the returned {@code scope} (GLOBAL vs BOOK) to know whether a book is
  * currently overriding.
  */
-@Path("/api")
+@Path("/")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class TemplateResource {

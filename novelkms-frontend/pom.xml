@@ -9,23 +9,38 @@
 		<artifactId>novelkms-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 	</parent>
-	<packaging>pom</packaging>
 
+	<!--
+		Packaged as a JAR (not a ZIP) so that maven-shade-plugin in the distro
+		module can merge its contents into the uber jar. The Vite build output
+		is staged under target/classes/webapp, so the produced jar contains:
+			webapp/index.html
+			webapp/assets/...
+		Dropwizard's AssetsBundle("/webapp", "/", "index.html") serves it.
+	-->
+	<packaging>jar</packaging>
+
+	<properties>
+		<nodeVersion>v20.19.2</nodeVersion>
+		<npmVersion>10.8.2</npmVersion>
+	</properties>
+	
 	<build>
 		<plugins>
 			<plugin>
 				<groupId>com.github.eirslett</groupId>
 				<artifactId>frontend-maven-plugin</artifactId>
-				<version>1.15.0</version>
+				<version>2.0.1</version>
 				<executions>
 					<execution>
 						<id>install-node-and-npm</id>
 						<goals>
 							<goal>install-node-and-npm</goal>
 						</goals>
+						<phase>generate-resources</phase>
 						<configuration>
-							<nodeVersion>v20.17.0</nodeVersion>
-							<npmVersion>10.8.2</npmVersion>
+							<nodeVersion>v20.19.2</nodeVersion>
+							<npmVersion>${npm.version}</npmVersion>
 						</configuration>
 					</execution>
 					<execution>
@@ -43,7 +58,7 @@
 						<goals>
 							<goal>npm</goal>
 						</goals>
-						<phase>prepare-package</phase>
+						<phase>generate-resources</phase>
 						<configuration>
 							<arguments>run build</arguments>
 						</configuration>
@@ -51,24 +66,26 @@
 				</executions>
 			</plugin>
 
-			<!-- Package the built folder as a zip artifact -->
+			<!-- Stage the Vite dist/ output into the jar's classpath under webapp/ -->
 			<plugin>
-				<artifactId>maven-assembly-plugin</artifactId>
-				<version>3.7.1</version>
-				<configuration>
-					<finalName>novelkms-ui</finalName>
-					<appendAssemblyId>false</appendAssemblyId>
-					<descriptors>
-						<descriptor>assembly/ui.xml</descriptor>
-					</descriptors>
-				</configuration>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-resources-plugin</artifactId>
 				<executions>
 					<execution>
-						<id>make-ui-zip</id>
-						<phase>package</phase>
+						<id>copy-ui-to-classes</id>
+						<phase>prepare-package</phase>
 						<goals>
-							<goal>single</goal>
+							<goal>copy-resources</goal>
 						</goals>
+						<configuration>
+							<outputDirectory>${project.build.outputDirectory}/webapp</outputDirectory>
+							<resources>
+								<resource>
+									<directory>${project.basedir}/dist</directory>
+									<filtering>false</filtering>
+								</resource>
+							</resources>
+						</configuration>
 					</execution>
 				</executions>
 			</plugin>

@@ -30,12 +30,12 @@
 		<jersey.version>3.0.18</jersey.version>
 		<jetty.version>9.4.58.v20250814</jetty.version>
 		<json.version>20240303</json.version>
+		<jsoup.version>1.22.2</jsoup.version>
 		<junit.version>5.14.4</junit.version>
 		<logback.version>1.5.34</logback.version>
 		<lombok.version>1.18.20</lombok.version>
 		<nimbus-jose-jwt.version>9.48</nimbus-jose-jwt.version>
-		<jsoup.version>1.18.1</jsoup.version>
-		<poi-ooxml.version>5.3.0</poi-ooxml.version>
+		<poi-ooxml.version>5.5.1</poi-ooxml.version>
 		<postgres.version>42.7.11</postgres.version>
 	</properties>
 
@@ -65,26 +65,6 @@
 				</executions>
 			</plugin>
 
-			<!-- Maven Dependency Plugin -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-dependency-plugin</artifactId>
-				<version>3.1.2</version>
-				<executions>
-					<execution>
-						<id>copy-dependencies</id>
-						<phase>package</phase>
-						<goals>
-							<goal>copy-dependencies</goal>
-						</goals>
-						<configuration>
-							<outputDirectory>${project.build.directory}/lib</outputDirectory>
-							<includeScope>runtime</includeScope>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
-
 			<!-- Surefire -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -95,6 +75,13 @@
 					<useModulePath>false</useModulePath>
 				</configuration>
 			</plugin>
+
+			<!--
+				NOTE: the maven-dependency-plugin copy-dependencies execution that
+				used to copy runtime jars into target/lib was removed. That step
+				belonged to the old exploded-distribution model. The fat jar is now
+				assembled in the novelkms-distro module via maven-shade-plugin.
+			-->
 		</plugins>
 	</build>
 
@@ -105,6 +92,14 @@
 			<artifactId>dropwizard-core</artifactId>
 			<version>${dropwizard.version}</version>
 		</dependency>
+
+		<!-- Dropwizard assets — serves the built React app from the classpath -->
+		<dependency>
+			<groupId>io.dropwizard</groupId>
+			<artifactId>dropwizard-assets</artifactId>
+			<version>${dropwizard.version}</version>
+		</dependency>
+
 		<dependency>
 			<groupId>io.dropwizard</groupId>
 			<artifactId>dropwizard-testing</artifactId>
@@ -148,10 +143,10 @@
 
 		<!-- Logging -->
 		<dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-to-slf4j</artifactId>
-            <version>2.23.1</version>
-        </dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-to-slf4j</artifactId>
+			<version>2.23.1</version>
+		</dependency>
 		<dependency>
 			<groupId>ch.qos.logback</groupId>
 			<artifactId>logback-classic</artifactId>

@@ -44,12 +44,12 @@ class ChapterResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // GET /api/books/{bookId}/chapters
+    // GET /books/{bookId}/chapters
     // -------------------------------------------------------------------------
 
     @Test
     void listChapters_empty_returns200AndEmptyArray() {
-        Response r = RESOURCES.target("/api/books/" + testBook.getId() + "/chapters")
+        Response r = RESOURCES.target("/books/" + testBook.getId() + "/chapters")
                 .request().get();
 
         assertEquals(200, r.getStatus());
@@ -62,7 +62,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
         chapterDao.create(testBook.getId(), null, "Chapter A", null, null);
         chapterDao.create(testBook.getId(), null, "Chapter B", null, null);
 
-        Response r = RESOURCES.target("/api/books/" + testBook.getId() + "/chapters")
+        Response r = RESOURCES.target("/books/" + testBook.getId() + "/chapters")
                 .request().get();
 
         assertEquals(200, r.getStatus());
@@ -71,14 +71,14 @@ class ChapterResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // GET /api/chapters/{id}
+    // GET /chapters/{id}
     // -------------------------------------------------------------------------
 
     @Test
     void getChapter_knownId_returns200() throws SQLException {
         Chapter ch = chapterDao.create(testBook.getId(), null, "My Chapter", null, "notes");
 
-        Response r = RESOURCES.target("/api/chapters/" + ch.getId()).request().get();
+        Response r = RESOURCES.target("/chapters/" + ch.getId()).request().get();
 
         assertEquals(200, r.getStatus());
         Chapter found = r.readEntity(Chapter.class);
@@ -89,18 +89,18 @@ class ChapterResourceTest extends NovelKmsTestBase {
 
     @Test
     void getChapter_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/chapters/" + UUID.randomUUID()).request().get();
+        Response r = RESOURCES.target("/chapters/" + UUID.randomUUID()).request().get();
 
         assertEquals(404, r.getStatus());
     }
 
     // -------------------------------------------------------------------------
-    // POST /api/books/{bookId}/chapters
+    // POST /books/{bookId}/chapters
     // -------------------------------------------------------------------------
 
     @Test
     void createChapter_withoutPart_returns201() {
-        Response r = RESOURCES.target("/api/books/" + testBook.getId() + "/chapters")
+        Response r = RESOURCES.target("/books/" + testBook.getId() + "/chapters")
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("title", "New Chapter")));
 
@@ -114,7 +114,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
 
     @Test
     void createChapter_missingTitle_returns400() {
-        Response r = RESOURCES.target("/api/books/" + testBook.getId() + "/chapters")
+        Response r = RESOURCES.target("/books/" + testBook.getId() + "/chapters")
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("notes", "No title")));
 
@@ -122,14 +122,14 @@ class ChapterResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // PUT /api/chapters/{id}
+    // PUT /chapters/{id}
     // -------------------------------------------------------------------------
 
     @Test
     void updateChapter_knownId_returns200() throws SQLException {
         Chapter ch = chapterDao.create(testBook.getId(), null, "Old Title", null, null);
 
-        Response r = RESOURCES.target("/api/chapters/" + ch.getId())
+        Response r = RESOURCES.target("/chapters/" + ch.getId())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "New Title", "notes", "New notes")));
 
@@ -141,7 +141,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
 
     @Test
     void updateChapter_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/chapters/" + UUID.randomUUID())
+        Response r = RESOURCES.target("/chapters/" + UUID.randomUUID())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "Ghost")));
 
@@ -149,21 +149,21 @@ class ChapterResourceTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
-    // DELETE /api/chapters/{id}
+    // DELETE /chapters/{id}
     // -------------------------------------------------------------------------
 
     @Test
     void deleteChapter_knownId_returns204() throws SQLException {
         Chapter ch = chapterDao.create(testBook.getId(), null, "To Delete", null, null);
 
-        Response r = RESOURCES.target("/api/chapters/" + ch.getId()).request().delete();
+        Response r = RESOURCES.target("/chapters/" + ch.getId()).request().delete();
 
         assertEquals(204, r.getStatus());
     }
 
     @Test
     void deleteChapter_unknownId_returns404() {
-        Response r = RESOURCES.target("/api/chapters/" + UUID.randomUUID()).request().delete();
+        Response r = RESOURCES.target("/chapters/" + UUID.randomUUID()).request().delete();
 
         assertEquals(404, r.getStatus());
     }

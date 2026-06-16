@@ -2,114 +2,91 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-	<artifactId>novelkms-backend</artifactId>
+	<artifactId>novelkms-distro</artifactId>
 	<name>Novel Authoring Knowledge Management System - Distro</name>
 	<parent>
 		<groupId>com.richardsand.novelkms</groupId>
 		<artifactId>novelkms-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 	</parent>
-	<packaging>pom</packaging>
 
-	<build>
-		<plugins>
-			<plugin>
-				<artifactId>maven-dependency-plugin</artifactId>
-				<version>3.6.1</version>
-				<executions>
-					<!-- Unpack UI zip into target/assembled/ui -->
-					<execution>
-						<id>unpack-ui</id>
-						<phase>prepare-package</phase>
-						<goals>
-							<goal>unpack</goal>
-						</goals>
-						<configuration>
-							<artifactItems>
-								<artifactItem>
-									<groupId>com.staples.iam.azure.manage</groupId>
-									<artifactId>security-frontend</artifactId>
-									<version>${project.version}</version>
-									<type>zip</type>
-									<outputDirectory>${project.build.directory}/assembled/ui</outputDirectory>
-								</artifactItem>
-							</artifactItems>
-						</configuration>
-					</execution>
+	<!--
+		Thin packaging module. Has no source of its own; it exists only to fuse
+		the backend application, the frontend webapp/, and all runtime
+		dependencies into one runnable uber jar: target/novelkms.jar
 
-					<!-- Copy API jar into target/assembled/backend -->
-					<execution>
-						<id>copy-api</id>
-						<phase>prepare-package</phase>
-						<goals>
-							<goal>copy</goal>
-						</goals>
-						<configuration>
-							<artifactItems>
-								<artifactItem>
-									<groupId>com.staples.iam.azure.manage</groupId>
-									<artifactId>security-backend</artifactId>
-									<version>${project.version}</version>
-									<outputDirectory>${project.build.directory}/assembled/backend/lib</outputDirectory>
-								</artifactItem>
-							</artifactItems>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
-
-			<!-- Package everything (ui/, backend/, config/, scripts/, iis/) into 
-				one zip -->
-			<plugin>
-				<artifactId>maven-assembly-plugin</artifactId>
-				<version>3.7.1</version>
-				<executions>
-					<execution>
-						<id>make-dist</id>
-						<phase>package</phase>
-						<goals>
-							<goal>single</goal>
-						</goals>
-						<configuration>
-							<finalName>security-dist-${project.version}</finalName>
-							<appendAssemblyId>false</appendAssemblyId>
-							<descriptors>
-								<descriptor>src/main/assembly/distro.xml</descriptor>
-							</descriptors>
-						</configuration>
-					</execution>
-					<execution>
-						<id>attach-sources-zip</id>
-						<phase>package</phase>
-						<goals>
-							<goal>single</goal>
-						</goals>
-						<configuration>
-							<finalName>security-src-${project.version}</finalName>
-							<appendAssemblyId>false</appendAssemblyId>
-							<descriptors>
-								<descriptor>src/main/assembly/distro-src.xml</descriptor>
-							</descriptors>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
-		</plugins>
-	</build>
+		Run it with:
+			java -jar novelkms.jar server config.yaml
+	-->
+	<packaging>jar</packaging>
 
 	<dependencies>
 		<dependency>
 			<groupId>com.richardsand.novelkms</groupId>
 			<artifactId>novelkms-backend</artifactId>
 			<version>${project.version}</version>
-			<type>jar</type>
 		</dependency>
 		<dependency>
 			<groupId>com.richardsand.novelkms</groupId>
 			<artifactId>novelkms-frontend</artifactId>
 			<version>${project.version}</version>
-			<type>zip</type>
 		</dependency>
 	</dependencies>
 
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-shade-plugin</artifactId>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>shade</goal>
+						</goals>
+						<configuration>
+							<createDependencyReducedPom>false</createDependencyReducedPom>
+							<finalName>novelkms</finalName>
+							<filters>
+								<!-- Strip JAR signature files to avoid
+									 "Invalid signature file digest" errors -->
+								<filter>
+									<artifact>*:*</artifact>
+									<excludes>
+										<exclude>META-INF/*.SF</exclude>
+										<exclude>META-INF/*.DSA</exclude>
+										<exclude>META-INF/*.RSA</exclude>
+										<exclude>module-info.class</exclude>
+									</excludes>
+								</filter>
+								<!--
+									The backend carries a dev placeholder
+									webapp/index.html so AssetsBundle can start
+									in Eclipse. Exclude it from the uber jar so
+									the real frontend build from novelkms-frontend
+									is the only webapp/ on the classpath.
+								-->
+								<filter>
+									<artifact>com.richardsand.novelkms:novelkms-backend</artifact>
+									<excludes>
+										<exclude>webapp/**</exclude>
+									</excludes>
+								</filter>
+							</filters>
+							<transformers>
+								<!-- Merge META-INF/services so Jersey/HK2 SPI works -->
+								<transformer
+									implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+								<!-- Set the runnable Main-Class -->
+								<transformer
+									implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+									<mainClass>com.richardsand.novelkms.NovelKmsServer</mainClass>
+								</transformer>
+							</transformers>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
 </project>

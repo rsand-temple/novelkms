@@ -31,6 +31,7 @@ import com.richardsand.novelkms.resource.TemplateResource;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 
+import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
@@ -43,6 +44,16 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
 
     @Override
     public void initialize(Bootstrap<NovelKmsConfig> bootstrap) {
+        // Serve the bundled React app (packaged under /webapp on the classpath
+        // by the novelkms-frontend module) at the application root.
+        //
+        // This requires the Jersey servlet to be moved off "/" so it does not
+        // collide with the asset servlet. config.yaml sets:
+        // server:
+        // rootPath: /api/*
+        // and the JAX-RS resources are mounted at "/" (class-level @Path("/")),
+        // so the API still resolves at /api/... exactly as before.
+        bootstrap.addBundle(new AssetsBundle("/webapp", "/", "index.html"));
     }
 
     @Override

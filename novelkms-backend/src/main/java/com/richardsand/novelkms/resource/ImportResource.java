@@ -18,7 +18,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
-@Path("/api")
+@Path("/")
 @Produces(MediaType.APPLICATION_JSON)
 public class ImportResource {
 

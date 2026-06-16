@@ -1,31 +1,29 @@
-# DropWizard
+# ===========================================================================
+# NovelKMS configuration
+#
+# Run with:   java -jar novelkms.jar server config.yaml
+# Then open:  http://localhost:8080
+#
+# The H2 database file is created automatically next to wherever you launch
+# the command from (the "./" below is relative to your current directory).
+# ===========================================================================
+
 server:
+  # Mount the JAX-RS API under /api/* so the application root ("/") is free
+  # for the bundled React app. The resource classes are mounted at "/", so
+  # endpoints still resolve at /api/... (e.g. /api/books).
+  rootPath: /api/*
   applicationConnectors:
     - type: http
       port: 8080
   adminConnectors:
     - type: http
       port: 8081
-  requestLog:
-    appenders:
-      - type: console
-        target: stdout
-        threshold: INFO
-        timeZone: America/New_York
-        logFormat: "%t{yyyy-MM-dd HH:mm:ss} [REQUEST][%clientHost][%m][%U%q] - %s %bytesSent %elapsedTime ms"
 
 logging:
-  level: DEBUG
+  level: INFO
   loggers:
-    io.netty: INFO
-    org.eclipse.jetty: INFO
-    reactor.netty: INFO
-  appenders:
-    - type: console
-      logFormat: "%d{yyyy-MM-dd HH:mm:ss} [%level][%X{ctx}][%logger{36}] - [%msg]%n"
-      timeZone: America/New_York
-
-# Application
+    com.richardsand.novelkms: INFO
 
 database:
   #url: jdbc:postgresql://localhost:5432/postgres

@@ -24,7 +24,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
-@Path("/api")
+@Path("/")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class ChapterResource {
@@ -159,7 +159,7 @@ public class ChapterResource {
             return serverError(e);
         }
     }
-    
+
     @PUT
     @Path("/scenes/{id}/move")
     @Consumes(MediaType.APPLICATION_JSON)

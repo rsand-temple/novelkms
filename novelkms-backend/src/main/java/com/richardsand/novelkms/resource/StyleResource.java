@@ -53,7 +53,7 @@ import jakarta.ws.rs.core.Response;
  * Body for PUT: { "definition": { fontFamily, fontSize, bold, italic,
  *                 firstLineIndent, textIndent, spacingBefore, spacingAfter } }.
  */
-@Path("/api")
+@Path("/")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class StyleResource {
