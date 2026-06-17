@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.model.Project;
 
@@ -22,6 +23,8 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.ToString;
@@ -30,7 +33,7 @@ import lombok.ToString;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class ProjectResource {
-    private static Logger    logger = LoggerFactory.getLogger(ProjectResource.class);
+    private static final Logger logger = LoggerFactory.getLogger(ProjectResource.class);
     private final ProjectDao projectDao;
 
     @Inject
@@ -38,141 +41,117 @@ public class ProjectResource {
         this.projectDao = projectDao;
     }
 
-    // -------------------------------------------------------------------------
-    // Request DTOs
-    // -------------------------------------------------------------------------
-
     @ToString
     public static class CreateRequest {
-        @JsonProperty
-        public String title;
-        @JsonProperty
-        public String description;
+        @JsonProperty public String title;
+        @JsonProperty public String description;
     }
 
     @ToString
     public static class UpdateRequest {
-        @JsonProperty
-        public String title;
-        @JsonProperty
-        public String description;
-        @JsonProperty
-        public String authorFirstName;
-        @JsonProperty
-        public String authorLastName;
-        @JsonProperty
-        public String copyright;
-        @JsonProperty
-        public String displayName;
-        @JsonProperty
-        public String emailAddress;
-        @JsonProperty
-        public String phoneNumber;
+        @JsonProperty public String title;
+        @JsonProperty public String description;
+        @JsonProperty public String authorFirstName;
+        @JsonProperty public String authorLastName;
+        @JsonProperty public String copyright;
+        @JsonProperty public String displayName;
+        @JsonProperty public String emailAddress;
+        @JsonProperty public String phoneNumber;
     }
-
-    // -------------------------------------------------------------------------
-    // Endpoints
-    // -------------------------------------------------------------------------
 
     @GET
     @Path("/projects")
-    public Response listProjects() {
+    public Response listProjects(@Context ContainerRequestContext request) {
         try {
-            List<Project> projects = projectDao.findAll();
+            List<Project> projects = projectDao.findAllForUser(CurrentUser.id(request));
             return Response.ok(projects).build();
-        } catch (SQLException sqle) {
-            return serverError(sqle);
+        } catch (SQLException e) {
+            return serverError(e);
         }
     }
 
     @GET
     @Path("/projects/{id}")
-    public Response getProject(@PathParam("id") UUID id) {
+    public Response getProject(@PathParam("id") UUID id, @Context ContainerRequestContext request) {
         try {
-            return projectDao.findById(id)
+            return projectDao.findByIdForUser(id, CurrentUser.id(request))
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
-        } catch (SQLException sqle) {
-            return serverError(sqle);
+        } catch (SQLException e) {
+            return serverError(e);
         }
     }
 
     @POST
     @Path("/projects")
-    public Response createProject(CreateRequest req) {
-        if (StringUtils.isBlank(req.title)) {
-            logger.debug("title is required");
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("title is required").build();
+    public Response createProject(CreateRequest body, @Context ContainerRequestContext request) {
+        if (body == null || StringUtils.isBlank(body.title)) {
+            return Response.status(Response.Status.BAD_REQUEST).entity("title is required").build();
         }
         try {
-            Project project = projectDao.create(req.title, req.description);
+            Project project = projectDao.createForUser(CurrentUser.id(request), body.title, body.description);
             return Response.status(Response.Status.CREATED).entity(project).build();
-        } catch (SQLException sqle) {
-            return serverError(sqle);
+        } catch (SQLException e) {
+            return serverError(e);
         }
     }
 
     @PUT
     @Path("/projects/{id}")
-    public Response updateProject(@PathParam("id") UUID id, UpdateRequest req) {
-        if (StringUtils.isBlank(req.title)) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("title is required").build();
+    public Response updateProject(@PathParam("id") UUID id, UpdateRequest body,
+                                  @Context ContainerRequestContext request) {
+        if (body == null || StringUtils.isBlank(body.title)) {
+            return Response.status(Response.Status.BAD_REQUEST).entity("title is required").build();
         }
+        Project project = Project.builder()
+                .id(id)
+                .title(body.title)
+                .description(body.description)
+                .authorFirstName(body.authorFirstName)
+                .authorLastName(body.authorLastName)
+                .copyright(body.copyright)
+                .displayName(body.displayName)
+                .emailAddress(body.emailAddress)
+                .phoneNumber(body.phoneNumber)
+                .build();
         try {
-            Project project = Project.builder()
-                    .id(id)
-                    .title(req.title)
-                    .description(req.description)
-                    .authorFirstName(req.authorFirstName)
-                    .authorLastName(req.authorLastName)
-                    .copyright(req.copyright)
-                    .displayName(req.displayName)
-                    .emailAddress(req.emailAddress)
-                    .phoneNumber(req.phoneNumber)
-                    .build();
-            return projectDao.update(project)
+            return projectDao.updateForUser(CurrentUser.id(request), project)
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
-        } catch (SQLException sqle) {
-            return serverError(sqle);
+        } catch (SQLException e) {
+            return serverError(e);
         }
     }
 
-    /**
-     * Returns the total word count across all scenes in every book belonging
-     * to this project. Used by the project properties panel and the WORDS
-     * template token during export.
-     */
     @GET
     @Path("/projects/{id}/word-count")
-    public Response getProjectWordCount(@PathParam("id") UUID id) {
+    public Response getProjectWordCount(@PathParam("id") UUID id,
+                                        @Context ContainerRequestContext request) {
         try {
-            int count = projectDao.getTotalWordCount(id);
-            return Response.ok(Map.of("wordCount", count)).build();
-        } catch (SQLException sqle) {
-            return serverError(sqle);
+            int count = projectDao.getTotalWordCountForUser(CurrentUser.id(request), id);
+            return count < 0
+                    ? Response.status(Response.Status.NOT_FOUND).build()
+                    : Response.ok(Map.of("wordCount", count)).build();
+        } catch (SQLException e) {
+            return serverError(e);
         }
     }
 
     @DELETE
     @Path("/projects/{id}")
-    public Response deleteProject(@PathParam("id") UUID id) {
+    public Response deleteProject(@PathParam("id") UUID id,
+                                  @Context ContainerRequestContext request) {
         try {
-            return projectDao.delete(id)
+            return projectDao.deleteForUser(CurrentUser.id(request), id)
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
-        } catch (SQLException sqle) {
-            return serverError(sqle);
+        } catch (SQLException e) {
+            return serverError(e);
         }
     }
 
-    // -------------------------------------------------------------------------
-
-    private Response serverError(SQLException sqle) {
-        logger.info("SQLException: {}", sqle.getMessage());
-        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                .entity(sqle.getMessage()).build();
+    private Response serverError(SQLException e) {
+        logger.info("SQLException: {}", e.getMessage());
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
     }
 }

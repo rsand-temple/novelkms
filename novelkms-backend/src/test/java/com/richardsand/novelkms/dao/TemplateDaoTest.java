@@ -33,42 +33,23 @@ class TemplateDaoTest extends NovelKmsTestBase {
 
     @Test
     void getOrCreateGlobal_lazilySeedsFromDefault() throws SQLException {
-        assertTrue(templateDao.findGlobal(TemplateDao.TYPE_COVER).isEmpty());
+        assertTrue(templateDao.findSystem(TemplateDao.TYPE_COVER).isEmpty());
 
-        Template global = templateDao.getOrCreateGlobal(TemplateDao.TYPE_COVER);
+        Template global = templateDao.getOrCreateSystem(TemplateDao.TYPE_COVER);
 
         assertNotNull(global.getId());
-        assertEquals(TemplateDao.SCOPE_GLOBAL, global.getScope());
+        assertEquals(TemplateDao.SCOPE_SYSTEM, global.getScope());
         assertEquals(TemplateDao.TYPE_COVER, global.getTemplateType());
         assertEquals(TemplateDao.DEFAULT_COVER_CONTENT, global.getContent());
-        assertTrue(templateDao.findGlobal(TemplateDao.TYPE_COVER).isPresent());
+        assertTrue(templateDao.findSystem(TemplateDao.TYPE_COVER).isPresent());
     }
 
     @Test
     void getOrCreateGlobal_isIdempotent() throws SQLException {
-        Template first  = templateDao.getOrCreateGlobal(TemplateDao.TYPE_PART);
-        Template second = templateDao.getOrCreateGlobal(TemplateDao.TYPE_PART);
+        Template first  = templateDao.getOrCreateSystem(TemplateDao.TYPE_PART);
+        Template second = templateDao.getOrCreateSystem(TemplateDao.TYPE_PART);
 
         assertEquals(first.getId(), second.getId());
-    }
-
-    @Test
-    void updateGlobal_persistsContentAndReusesRow() throws SQLException {
-        Template seeded = templateDao.getOrCreateGlobal(TemplateDao.TYPE_COVER);
-
-        Template updated = templateDao.updateGlobal(TemplateDao.TYPE_COVER, "<p>Custom global</p>");
-
-        assertEquals(seeded.getId(), updated.getId());
-        assertEquals("<p>Custom global</p>", updated.getContent());
-    }
-
-    @Test
-    void resetGlobal_restoresDefaultContent() throws SQLException {
-        templateDao.updateGlobal(TemplateDao.TYPE_COVER, "<p>Custom global</p>");
-
-        Template reset = templateDao.resetGlobal(TemplateDao.TYPE_COVER);
-
-        assertEquals(TemplateDao.DEFAULT_COVER_CONTENT, reset.getContent());
     }
 
     // -------------------------------------------------------------------------
@@ -79,7 +60,7 @@ class TemplateDaoTest extends NovelKmsTestBase {
     void resolveForBook_fallsBackToGlobalWhenNoOverride() throws SQLException {
         Template resolved = templateDao.resolveForBook(book.getId(), TemplateDao.TYPE_COVER);
 
-        assertEquals(TemplateDao.SCOPE_GLOBAL, resolved.getScope());
+        assertEquals(TemplateDao.SCOPE_SYSTEM, resolved.getScope());
         assertEquals(TemplateDao.DEFAULT_COVER_CONTENT, resolved.getContent());
     }
 
@@ -107,7 +88,7 @@ class TemplateDaoTest extends NovelKmsTestBase {
     void overrideDoesNotAffectGlobal() throws SQLException {
         templateDao.upsertBookOverride(book.getId(), TemplateDao.TYPE_COVER, "<p>Book cover</p>");
 
-        Template global = templateDao.getOrCreateGlobal(TemplateDao.TYPE_COVER);
+        Template global = templateDao.getOrCreateSystem(TemplateDao.TYPE_COVER);
 
         assertNotEquals("<p>Book cover</p>", global.getContent());
         assertEquals(TemplateDao.DEFAULT_COVER_CONTENT, global.getContent());
@@ -121,7 +102,7 @@ class TemplateDaoTest extends NovelKmsTestBase {
 
         assertTrue(deleted);
         Template resolved = templateDao.resolveForBook(book.getId(), TemplateDao.TYPE_COVER);
-        assertEquals(TemplateDao.SCOPE_GLOBAL, resolved.getScope());
+        assertEquals(TemplateDao.SCOPE_SYSTEM, resolved.getScope());
     }
 
     @Test
