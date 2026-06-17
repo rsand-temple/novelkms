@@ -54,14 +54,14 @@ export default function BookCoverPreview({ bookId, book, project, pageConfig, se
 		setConfirmingReset(false)
 	}
 
-	// Fetch the total project word count so the WORDS token resolves correctly
-	// in the cover template preview (e.g. "About 87,432 words").
+	// Fetch the book-level word count so the WORDS token reflects this book only.
+	// (EditorPanel fetches the same key so TanStack Query deduplicates the request.)
 	const { data: wordCountData } = useQuery({
-		queryKey: ['projects', project?.id, 'word-count'],
-		queryFn: () => client.get(`/projects/${project.id}/word-count`).then(r => r.data),
-		enabled: !!project?.id,
+		queryKey: ['books', bookId, 'word-count'],
+		queryFn: () => client.get(`/books/${bookId}/word-count`).then(r => r.data.wordCount),
+		enabled: !!bookId,
 	})
-	const wordCount = wordCountData?.wordCount ?? null
+	const wordCount = wordCountData ?? null
 
 	// Resolve template tokens against real book/project data.
 	const values = useMemo(

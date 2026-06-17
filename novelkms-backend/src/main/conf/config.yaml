@@ -30,3 +30,17 @@ database:
   adminUser: admin
   adminPwd: admin123
   url: jdbc:h2:C:/dev/temp/novelkmsdb;MODE=PostgreSQL;AUTO_SERVER=TRUE
+
+auth:
+  publicBaseUrl: http://localhost:8080
+  frontendBaseUrl: http://localhost:3000
+  secureCookies: false
+  sessionDays: 30
+
+  google:
+    clientId: ${GOOGLE_CLIENT_ID}
+    clientSecret: ${GOOGLE_CLIENT_SECRET}
+    authorizationUrl: https://accounts.google.com/o/oauth2/v2/auth
+    tokenUrl: https://oauth2.googleapis.com/token
+    userInfoUrl: https://openidconnect.googleapis.com/v1/userinfo
+    scope: openid email profile 

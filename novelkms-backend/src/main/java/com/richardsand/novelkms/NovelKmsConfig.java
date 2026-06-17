@@ -9,11 +9,34 @@ import lombok.Getter;
 public class NovelKmsConfig extends Configuration {
     @Getter
     public static class Database {
-        String url;
-        String adminUser;
-        String adminPwd;
+        public String url;
+        public String adminUser;
+        public String adminPwd;
+    }
+
+    @Getter
+    public static class OAuthProvider {
+        public String clientId;
+        public String clientSecret;
+        public String authorizationUrl;
+        public String tokenUrl;
+        public String userInfoUrl;
+        public String scope;
+    }
+
+    @Getter
+    public static class Auth {
+        public String        publicBaseUrl;
+        public String        frontendBaseUrl = "";
+        public boolean       secureCookies   = true;
+        public int           sessionDays     = 30;
+        public OAuthProvider google;
+        public OAuthProvider meta;
     }
 
     @JsonProperty
     Database database;
+
+    @JsonProperty
+    Auth auth;
 }

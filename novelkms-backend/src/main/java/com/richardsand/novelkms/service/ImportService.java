@@ -766,13 +766,13 @@ public class ImportService {
 
     /** Maps POI's getPictureType() int to a MIME type string. */
     private String getMimeTypeForPicture(XWPFPictureData pd) {
-        return switch (pd.getPictureType()) {
-        case 5 -> "image/jpeg";
-        case 6 -> "image/png";
-        case 8 -> "image/gif";
-        case 9 -> "image/tiff";
-        case 11 -> "image/bmp";
-        case 12 -> "image/svg+xml";
+        return switch (pd.getPictureTypeEnum()) {
+        case JPEG -> "image/jpeg";
+        case PNG -> "image/png";
+        case GIF -> "image/gif";
+        case TIFF -> "image/tiff";
+        case BMP -> "image/bmp";
+        case SVG -> "image/svg+xml";
         default -> "image/jpeg";
         };
     }

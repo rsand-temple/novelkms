@@ -11,6 +11,10 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.richardsand.novelkms.auth.AuthenticationFilter;
+import com.richardsand.novelkms.auth.OAuthService;
+import com.richardsand.novelkms.auth.SessionService;
+import com.richardsand.novelkms.dao.AuthDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.PartDao;
@@ -19,6 +23,7 @@ import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.StyleDao;
 import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
+import com.richardsand.novelkms.resource.AuthResource;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterResource;
 import com.richardsand.novelkms.resource.ExportResource;
@@ -31,29 +36,23 @@ import com.richardsand.novelkms.resource.TemplateResource;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 
-import io.dropwizard.assets.AssetsBundle;
+import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
+import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
 
 public class NovelKmsServer extends Application<NovelKmsConfig> {
-    Logger logger = LoggerFactory.getLogger(getClass());
-
+    Logger          logger     = LoggerFactory.getLogger(getClass());
     boolean         isPostgres = false;
     BasicDataSource ds         = new BasicDataSource();
 
     @Override
     public void initialize(Bootstrap<NovelKmsConfig> bootstrap) {
-        // Serve the bundled React app (packaged under /webapp on the classpath
-        // by the novelkms-frontend module) at the application root.
-        //
-        // This requires the Jersey servlet to be moved off "/" so it does not
-        // collide with the asset servlet. config.yaml sets:
-        // server:
-        // rootPath: /api/*
-        // and the JAX-RS resources are mounted at "/" (class-level @Path("/")),
-        // so the API still resolves at /api/... exactly as before.
-        bootstrap.addBundle(new AssetsBundle("/webapp", "/", "index.html"));
+        bootstrap.setConfigurationSourceProvider(
+                new SubstitutingSourceProvider(
+                        bootstrap.getConfigurationSourceProvider(),
+                        new EnvironmentVariableSubstitutor(false)));
     }
 
     @Override
@@ -61,7 +60,6 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         String jdbcUrl   = config.getDatabase().url;
         String adminUser = config.getDatabase().adminUser;
         String adminPwd  = config.getDatabase().adminPwd;
-
         if (jdbcUrl != null && jdbcUrl.startsWith("jdbc:postgresql:")) {
             logger.info("Loading POSTGRESQL driver");
             ds.setDriverClassName("org.postgresql.Driver");
@@ -69,8 +67,6 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
             logger.info("Loading H2 driver");
             ds.setDriverClassName("org.h2.Driver");
         }
-
-        logger.debug("URL {}", jdbcUrl);
         ds.setUrl(jdbcUrl);
         ds.setUsername(adminUser);
         ds.setPassword(adminPwd);
@@ -84,39 +80,41 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         ds.setRemoveAbandonedOnBorrow(true);
         ds.setRemoveAbandonedTimeout(Duration.ofSeconds(30));
         ds.setLogAbandoned(true);
-
         try {
-            String product = ds.getConnection().getMetaData().getDatabaseProductName();
-            isPostgres = product != null && product.toLowerCase().contains("postgres");
+            isPostgres = ds.getConnection().getMetaData().getDatabaseProductName().toLowerCase().contains("postgres");
         } catch (SQLException e) {
             isPostgres = false;
         }
 
-        // Flyway migration
-        Flyway flyway = Flyway.configure()
-                .dataSource(jdbcUrl, adminUser, adminPwd)
-                .locations("classpath:db/migration/" + ((isPostgres) ? "postgresql" : "h2"))
-                .load();
-        // flyway.repair();
-        flyway.migrate();
+        Flyway.configure().dataSource(jdbcUrl, adminUser, adminPwd)
+                .locations("classpath:db/migration/" + (isPostgres ? "postgresql" : "h2")).load().migrate();
 
-        // DAOs
-        ProjectDao  projectDao  = new ProjectDao(ds);
-        BookDao     bookDao     = new BookDao(ds);
-        PartDao     partDao     = new PartDao(ds);
-        ChapterDao  chapterDao  = new ChapterDao(ds);
-        SceneDao    sceneDao    = new SceneDao(ds);
-        TemplateDao templateDao = new TemplateDao(ds);
-        StyleDao    styleDao    = new StyleDao(ds);
+        ProjectDao     projectDao     = new ProjectDao(ds);
+        BookDao        bookDao        = new BookDao(ds);
+        PartDao        partDao        = new PartDao(ds);
+        ChapterDao     chapterDao     = new ChapterDao(ds);
+        SceneDao       sceneDao       = new SceneDao(ds);
+        TemplateDao    templateDao    = new TemplateDao(ds);
+        StyleDao       styleDao       = new StyleDao(ds);
+        AuthDao        authDao        = new AuthDao(ds);
+        ImportService  importService  = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
+        ExportService  exportService  = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao);
+        SessionService sessionService = new SessionService(authDao, config.getAuth());
+        OAuthService   oauthService   = new OAuthService(config.getAuth(), authDao);
+        env.lifecycle().manage(new io.dropwizard.lifecycle.Managed() {
+            @Override
+            public void start() {
+            }
 
-        // Services
-        ImportService importService = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        ExportService exportService = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao);
+            @Override
+            public void stop() throws Exception {
+                oauthService.close();
+            }
+        });
 
-        // Multipart support for file uploads
         env.jersey().register(MultiPartFeature.class);
-
-        // Resources
+        env.jersey().register(AuthResource.class);
+        env.jersey().register(AuthenticationFilter.class);
         env.jersey().register(BookResource.class);
         env.jersey().register(ChapterResource.class);
         env.jersey().register(ExportResource.class);
@@ -127,12 +125,9 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(TemplateResource.class);
         env.jersey().register(StyleResource.class);
 
-        // ObjectMapper
         ObjectMapper mapper = env.getObjectMapper();
         mapper.findAndRegisterModules();
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
-        // HK2 bindings
         env.jersey().register(new org.glassfish.hk2.utilities.binding.AbstractBinder() {
             @Override
             protected void configure() {
@@ -145,12 +140,13 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(sceneDao).to(SceneDao.class);
                 bind(templateDao).to(TemplateDao.class);
                 bind(styleDao).to(StyleDao.class);
+                bind(authDao).to(AuthDao.class);
                 bind(importService).to(ImportService.class);
                 bind(exportService).to(ExportService.class);
+                bind(sessionService).to(SessionService.class);
+                bind(oauthService).to(OAuthService.class);
             }
         });
-
-        // Health checks
         env.healthChecks().register("database", new DataSourceHealthCheck(ds));
     }
 

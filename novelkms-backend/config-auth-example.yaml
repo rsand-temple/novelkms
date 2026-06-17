@@ -1,0 +1,24 @@
+database:
+  url: ${DATABASE_URL:-jdbc:postgresql://localhost:5432/novelkms}
+  adminUser: ${DATABASE_USER:-novelkms}
+  adminPwd: ${DATABASE_PASSWORD}
+
+auth:
+  publicBaseUrl: ${PUBLIC_BASE_URL}       # e.g. https://novelkms.example.net
+  frontendBaseUrl: ${FRONTEND_BASE_URL:-}
+  secureCookies: true
+  sessionDays: 30
+  google:
+    clientId: ${GOOGLE_CLIENT_ID}
+    clientSecret: ${GOOGLE_CLIENT_SECRET}
+    authorizationUrl: https://accounts.google.com/o/oauth2/v2/auth
+    tokenUrl: https://oauth2.googleapis.com/token
+    userInfoUrl: https://openidconnect.googleapis.com/v1/userinfo
+    scope: openid email profile
+  meta:
+    clientId: ${META_CLIENT_ID}
+    clientSecret: ${META_CLIENT_SECRET}
+    authorizationUrl: https://www.facebook.com/v24.0/dialog/oauth
+    tokenUrl: https://graph.facebook.com/v24.0/oauth/access_token
+    userInfoUrl: https://graph.facebook.com/v24.0/me
+    scope: email,public_profile

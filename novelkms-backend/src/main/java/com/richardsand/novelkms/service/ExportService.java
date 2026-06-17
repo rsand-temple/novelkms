@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import javax.imageio.ImageIO;
 
+import org.apache.poi.common.usermodel.PictureType;
 import org.apache.poi.util.Units;
 import org.apache.poi.wp.usermodel.HeaderFooterType;
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment;
@@ -1018,16 +1019,16 @@ public class ExportService {
         return new double[] { maxWidthIn, maxWidthIn * 0.75 };
     }
 
-    private int mimeToPoiType(String mime) {
+    private PictureType mimeToPoiType(String mime) {
         if (mime == null)
-            return XWPFDocument.PICTURE_TYPE_JPEG;
+            return PictureType.JPEG;
         return switch (mime.toLowerCase()) {
-        case "image/jpeg", "image/jpg" -> XWPFDocument.PICTURE_TYPE_JPEG;
-        case "image/png" -> XWPFDocument.PICTURE_TYPE_PNG;
-        case "image/gif" -> XWPFDocument.PICTURE_TYPE_GIF;
-        case "image/tiff" -> XWPFDocument.PICTURE_TYPE_TIFF;
-        case "image/bmp" -> XWPFDocument.PICTURE_TYPE_BMP;
-        default -> XWPFDocument.PICTURE_TYPE_JPEG;
+        case "image/jpeg", "image/jpg" -> PictureType.JPEG;
+        case "image/png" -> PictureType.PNG;
+        case "image/gif" -> PictureType.GIF;
+        case "image/tiff" -> PictureType.TIFF;
+        case "image/bmp" -> PictureType.BMP;
+        default -> PictureType.JPEG;
         };
     }
 

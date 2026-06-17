@@ -26,6 +26,7 @@
 		<h2.version>2.4.240</h2.version>
 		<httpclient.version>4.5.14</httpclient.version>
 		<jackson.version>2.22.0</jackson.version>
+		<jakarta-rs-api.version>3.1.0</jakarta-rs-api.version>
 		<javax.mail>1.6.2</javax.mail>
 		<jersey.version>3.0.18</jersey.version>
 		<jetty.version>9.4.58.v20250814</jetty.version>
@@ -92,6 +93,12 @@
 			<artifactId>dropwizard-core</artifactId>
 			<version>${dropwizard.version}</version>
 		</dependency>
+		<dependency>
+			<groupId>io.dropwizard</groupId>
+			<artifactId>dropwizard-testing</artifactId>
+			<version>${dropwizard.version}</version>
+			<scope>test</scope>
+		</dependency>
 
 		<!-- Dropwizard assets — serves the built React app from the classpath -->
 		<dependency>
@@ -99,13 +106,13 @@
 			<artifactId>dropwizard-assets</artifactId>
 			<version>${dropwizard.version}</version>
 		</dependency>
-
+		
+		<!-- Jakarta RS-API upgrade -->
 		<dependency>
-			<groupId>io.dropwizard</groupId>
-			<artifactId>dropwizard-testing</artifactId>
-			<version>${dropwizard.version}</version>
-			<scope>test</scope>
-		</dependency>
+		    <groupId>jakarta.ws.rs</groupId>
+            <artifactId>jakarta.ws.rs-api</artifactId>
+            <version>3.1.0</version>
+        </dependency>
 
 		<!-- H2 database -->
 		<dependency>
