@@ -30,6 +30,7 @@ import jakarta.ws.rs.core.Response;
 class SceneResourceTest extends NovelKmsTestBase {
 
     static final ResourceExtension RESOURCES = ResourceExtension.builder()
+            .addProvider(testAuthenticationFilter())
             .addResource(new SceneResource(sceneDao))
             .setMapper(createMapper())
             .build();
@@ -41,7 +42,7 @@ class SceneResourceTest extends NovelKmsTestBase {
     @BeforeEach
     void setUp() throws SQLException {
         truncateAll();
-        testProject = projectDao.create("Test Project", null);
+        testProject = createTestProject("Test Project", null);;
         testBook    = bookDao.create(testProject.getId(), "Test Book", null, null, null);
         testChapter = chapterDao.create(testBook.getId(), null, "Test Chapter", null, null);
     }

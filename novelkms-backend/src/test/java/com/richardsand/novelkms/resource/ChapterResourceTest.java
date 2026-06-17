@@ -29,6 +29,7 @@ import jakarta.ws.rs.core.Response;
 class ChapterResourceTest extends NovelKmsTestBase {
 
     static final ResourceExtension RESOURCES = ResourceExtension.builder()
+            .addProvider(testAuthenticationFilter())
             .addResource(new ChapterResource(chapterDao, sceneDao))
             .setMapper(createMapper())
             .build();
@@ -39,7 +40,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
     @BeforeEach
     void setUp() throws SQLException {
         truncateAll();
-        testProject = projectDao.create("Test Project", null);
+        testProject = createTestProject("Test Project", null);
         testBook    = bookDao.create(testProject.getId(), "Test Book", null, null, null);
     }
 
