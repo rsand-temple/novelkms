@@ -38,6 +38,7 @@ import com.richardsand.novelkms.resource.TemplateResource;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 
+import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.core.Application;
@@ -54,6 +55,14 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         bootstrap.setConfigurationSourceProvider(new SubstitutingSourceProvider(
                 bootstrap.getConfigurationSourceProvider(),
                 new EnvironmentVariableSubstitutor(true)));
+        
+        bootstrap.addBundle(
+                new AssetsBundle(
+                        "/webapp",
+                        "/",
+                        "index.html"
+                )
+        );
     }
 
     @Override
