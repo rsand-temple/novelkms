@@ -19,8 +19,8 @@ import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
-import com.richardsand.novelkms.dao.StyleDao;
 import com.richardsand.novelkms.dao.TemplateDao;
+import com.richardsand.novelkms.dao.UserStyleDao;
 import com.richardsand.novelkms.model.Project;
 
 import jakarta.annotation.Priority;
@@ -61,7 +61,7 @@ public abstract class NovelKmsTestBase {
     protected static final ChapterDao      chapterDao;
     protected static final SceneDao        sceneDao;
     protected static final TemplateDao     templateDao;
-    protected static final StyleDao        styleDao;
+    protected static final UserStyleDao    styleDao;
 
     static {
         try {
@@ -86,7 +86,7 @@ public abstract class NovelKmsTestBase {
             chapterDao = new ChapterDao(ds);
             sceneDao = new SceneDao(ds);
             templateDao = new TemplateDao(ds);
-            styleDao = new StyleDao(ds);
+            styleDao = new UserStyleDao(ds);
 
             // Ensure static ResourceExtensions have a valid principal even before
             // the first subclass @BeforeEach executes.

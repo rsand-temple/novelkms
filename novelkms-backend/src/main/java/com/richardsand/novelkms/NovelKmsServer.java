@@ -21,9 +21,9 @@ import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.PartDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
-import com.richardsand.novelkms.dao.StyleDao;
 import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dao.TenantAccessDao;
+import com.richardsand.novelkms.dao.UserStyleDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
 import com.richardsand.novelkms.resource.AuthResource;
 import com.richardsand.novelkms.resource.BookResource;
@@ -112,7 +112,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         ChapterDao chapterDao = new ChapterDao(ds);
         SceneDao sceneDao = new SceneDao(ds);
         TemplateDao templateDao = new TemplateDao(ds);
-        StyleDao styleDao = new StyleDao(ds);
+        UserStyleDao userStyleDao = new UserStyleDao(ds);
         AuthDao authDao = new AuthDao(ds);
         TenantAccessDao tenantAccessDao = new TenantAccessDao(ds);
 
@@ -155,7 +155,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(chapterDao).to(ChapterDao.class);
                 bind(sceneDao).to(SceneDao.class);
                 bind(templateDao).to(TemplateDao.class);
-                bind(styleDao).to(StyleDao.class);
+                bind(userStyleDao).to(UserStyleDao.class);
                 bind(authDao).to(AuthDao.class);
                 bind(tenantAccessDao).to(TenantAccessDao.class);
                 bind(importService).to(ImportService.class);
