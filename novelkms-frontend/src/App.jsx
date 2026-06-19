@@ -20,6 +20,11 @@ import ExportDialog from './components/nav/dialogs/ExportDialog'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
 
+/* eslint-disable no-undef */
+const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
+const BUILD_NUMBER = typeof __BUILD_NUMBER__ !== 'undefined' ? __BUILD_NUMBER__ : '?'
+/* eslint-enable no-undef */
+
 const DEFAULT_NAV_WIDTH = 300
 const DEFAULT_PROPS_WIDTH = 320
 const MIN_NAV_WIDTH = 220
@@ -693,6 +698,27 @@ export default function App() {
 					</Box>
 				</Box>
 
+				<Box sx={{
+					height: 22,
+					flexShrink: 0,
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'flex-end',
+					px: 2,
+				}}>
+					<Typography
+						variant="caption"
+						sx={{
+							fontSize: '0.65rem',
+							color: 'text.disabled',
+							letterSpacing: 0.3,
+							userSelect: 'none',
+						}}
+					>
+						{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
+					</Typography>
+				</Box>
+
 				<ImportDialog
 					open={importDialogOpen}
 					onClose={() => setImportDialogOpen(false)}
@@ -700,8 +726,8 @@ export default function App() {
 					onSuccess={handleImportSuccess}
 				/>
 
-				<ExportDialog
-					open={exportDialog.open}
+ 				<ExportDialog
+ 					open={exportDialog.open}
 					onClose={() => setExportDialog(d => ({ ...d, open: false }))}
 					url={exportDialog.url}
 					suggestedName={exportDialog.suggestedName}
