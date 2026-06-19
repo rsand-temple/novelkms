@@ -262,16 +262,31 @@ export default function EditorPanel({
 	const styleSheet = bookId ? bookStyleSheet : globalStyleSheet;
 
 	// ── Context-sensitive word count ──────────────────────────────────────────
-	// Book mode: fetch total from API (includes chapter/part headings).
-	// Part mode: fetch total from API (includes part + chapter headings).
+	// Project mode: fetch project total from API (all books).
+	// Book mode: fetch book total from API (includes chapter/part headings).
+	// Part mode: fetch part total from API (includes part + chapter headings).
 	// Chapter mode: TipTap live count + heading words computed below.
 	// Scene mode: TipTap live count only.
+	const { data: projectWordCount } = useQuery({
+		queryKey: ['projects', projectId, 'word-count'],
+		queryFn: () => client.get(`/projects/${projectId}/word-count`).then(r => r.data.wordCount),
+		enabled: !!projectId && projectShelfMode,
+		staleTime: 60_000,
+	});
+
 	const { data: bookWordCount } = useQuery({
 		queryKey: ['books', bookId, 'word-count'],
 		queryFn: () => client.get(`/books/${bookId}/word-count`).then(r => r.data.wordCount),
-		// Enabled for book cover preview (status bar) and book-scope template mode
-		// (WORDS token in template editor preview).
-		enabled: !!bookId && (bookCoverMode || templateMode),
+		// Enabled for book draft/cover preview (status bar) and book-scope
+		// template mode (WORDS token in template editor preview).
+		enabled: !!bookId && (bookDraftMode || templateMode),
+		staleTime: 60_000,
+	});
+
+	const { data: partWordCount } = useQuery({
+		queryKey: ['parts', partId, 'word-count'],
+		queryFn: () => client.get(`/parts/${partId}/word-count`).then(r => r.data.wordCount),
+		enabled: !!partId && partDraftMode,
 		staleTime: 60_000,
 	});
 
@@ -285,9 +300,15 @@ export default function EditorPanel({
 		return countWords(title) + countWords(subtitle);
 	}, [multiSceneMode, chapterData]);
 
-	// In editor modes (chapter/scene/template) the toolbar uses its live TipTap
-	// count (+ headingWordCount offset in chapter mode).
-	const toolbarWordCountOverride = null;
+	// Override the toolbar word count for modes where there is no live TipTap
+	// editor (or the TipTap count is stale/irrelevant).
+	const toolbarWordCountOverride = projectShelfMode
+		? (projectWordCount ?? 0)
+		: (bookDraftMode || bookCoverMode)
+			? (bookWordCount ?? 0)
+			: partDraftMode
+				? (partWordCount ?? 0)
+				: null;
 
 	const isLoading = templateMode
 		? templateLoading
