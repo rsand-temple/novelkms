@@ -32,6 +32,9 @@ public class BookResource {
     private static final Logger logger = LoggerFactory.getLogger(BookResource.class);
     private final BookDao       bookDao;
 
+    /** One year in seconds — used for immutable image cache responses. */
+    private static final int CACHE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
+
     @Inject
     public BookResource(BookDao bookDao) {
         this.bookDao = bookDao;
@@ -189,13 +192,26 @@ public class BookResource {
     // Cover image
     // -------------------------------------------------------------------------
 
+    /**
+     * Serves the raw cover image bytes with the stored MIME type.
+     *
+     * The frontend appends {@code ?t={book.updatedAt}} to the URL, so each
+     * image revision produces a distinct URL. This lets us set an aggressive
+     * {@code Cache-Control: max-age=31536000, immutable} header — the browser
+     * caches the response indefinitely for a given query-string, and a new
+     * {@code updatedAt} value after upload/delete naturally bypasses the cache.
+     */
     @GET
     @Path("/books/{id}/cover-image")
     @Produces(MediaType.WILDCARD)
     public Response getCoverImage(@PathParam("id") UUID id) {
         try {
             return bookDao.getCoverImage(id)
-                    .map(img -> Response.ok(img.data(), img.mimeType()).build())
+                    .map(img -> Response.ok(img.data(), img.mimeType())
+                            .header("Cache-Control",
+                                    "public, max-age=" + CACHE_MAX_AGE_SECONDS
+                                            + ", no-transform, immutable")
+                            .build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {
             return serverError(e);
