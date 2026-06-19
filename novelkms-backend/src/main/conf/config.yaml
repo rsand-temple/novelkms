@@ -19,12 +19,27 @@ server:
   adminConnectors:
     - type: http
       port: 8081
+  requestLog:
+    appenders:
+      - type: console
+#      - type: file
+#        timeZone: America/New_York
+#        currentLogFilename: /logs/novelkms-access.log
+#        archivedLogFilenamePattern: /logs/novelkms-access-%d.log.gz
+#        archivedFileCount: 14
 
 logging:
   level: INFO
   loggers:
     com.richardsand.novelkms: INFO
-
+    timeZone: America/New_York
+  appenders:
+    - type: console
+#    - type: file
+#      currentLogFilename: /logs/novelkms.log
+#      archivedLogFilenamePattern: /logs/novelkms-%d.log.gz
+#      archivedFileCount: 14
+  
 database:
   #url: jdbc:postgresql://localhost:5432/postgres
   adminUser: admin

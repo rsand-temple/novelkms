@@ -452,131 +452,131 @@ export default function App() {
 									}
 								/>
 								<Box sx={{
-							flex: 1,
-							minHeight: 0,
-							overflow: 'hidden',
-							bgcolor: 'background.paper',
+									flex: 1,
+									minHeight: 0,
+									overflow: 'hidden',
+									bgcolor: 'background.paper',
 
-							'& .MuiListItemButton-root': {
-								position: 'relative',
-								minHeight: 34,
-								py: 0.35,
-								pr: 1,
-								ml: 0,
-								mr: 0,
-								borderRadius: 0,
-								borderLeft: '3px solid transparent',
-								transition: 'background-color 120ms ease, border-color 120ms ease, color 120ms ease',
-							},
-							'& .MuiListItemButton-root:hover': {
-								bgcolor: 'action.hover',
-							},
-							'& .MuiListItemButton-root.Mui-selected': {
-								bgcolor: 'action.selected',
-								borderLeftColor: 'primary.main',
-							},
-							'& .MuiListItemButton-root.Mui-selected:hover': {
-								bgcolor: 'action.selected',
-							},
-							'& .MuiListItemIcon-root': {
-								color: 'text.secondary',
-								transition: 'color 120ms ease, opacity 120ms ease',
-							},
-							'& .MuiListItemText-primary': {
-								overflow: 'hidden',
-								textOverflow: 'ellipsis',
-								whiteSpace: 'nowrap',
-							},
-							'& .MuiListItemText-secondary': {
-								mt: 0.15,
-								fontSize: '0.66rem',
-								lineHeight: 1.1,
-								color: 'warning.dark',
-							},
+									'& .MuiListItemButton-root': {
+										position: 'relative',
+										minHeight: 34,
+										py: 0.35,
+										pr: 1,
+										ml: 0,
+										mr: 0,
+										borderRadius: 0,
+										borderLeft: '3px solid transparent',
+										transition: 'background-color 120ms ease, border-color 120ms ease, color 120ms ease',
+									},
+									'& .MuiListItemButton-root:hover': {
+										bgcolor: 'action.hover',
+									},
+									'& .MuiListItemButton-root.Mui-selected': {
+										bgcolor: 'action.selected',
+										borderLeftColor: 'primary.main',
+									},
+									'& .MuiListItemButton-root.Mui-selected:hover': {
+										bgcolor: 'action.selected',
+									},
+									'& .MuiListItemIcon-root': {
+										color: 'text.secondary',
+										transition: 'color 120ms ease, opacity 120ms ease',
+									},
+									'& .MuiListItemText-primary': {
+										overflow: 'hidden',
+										textOverflow: 'ellipsis',
+										whiteSpace: 'nowrap',
+									},
+									'& .MuiListItemText-secondary': {
+										mt: 0.15,
+										fontSize: '0.66rem',
+										lineHeight: 1.1,
+										color: 'warning.dark',
+									},
 
-							// Project rows — strongest anchors
-							'& .MuiListItemButton-root:has([data-testid="FolderIcon"])': {
-								minHeight: 40,
-								mt: 0.5,
-								bgcolor: 'rgba(42, 57, 66, 0.035)',
-								borderTop: '1px solid',
-								borderBottom: '1px solid',
-								borderTopColor: 'divider',
-								borderBottomColor: 'divider',
-							},
-							'& .MuiListItemButton-root:has([data-testid="FolderIcon"]) .MuiListItemText-primary': {
-								fontWeight: 750,
-								letterSpacing: 0.1,
-							},
-							'& [data-testid="FolderIcon"]': {
-								color: 'primary.main',
-							},
+									// Project rows — strongest anchors
+									'& .MuiListItemButton-root:has([data-testid="FolderIcon"])': {
+										minHeight: 40,
+										mt: 0.5,
+										bgcolor: 'rgba(42, 57, 66, 0.035)',
+										borderTop: '1px solid',
+										borderBottom: '1px solid',
+										borderTopColor: 'divider',
+										borderBottomColor: 'divider',
+									},
+									'& .MuiListItemButton-root:has([data-testid="FolderIcon"]) .MuiListItemText-primary': {
+										fontWeight: 750,
+										letterSpacing: 0.1,
+									},
+									'& [data-testid="FolderIcon"]': {
+										color: 'primary.main',
+									},
 
-							// Book rows — visible document anchors
-							'& .MuiListItemButton-root:has([data-testid="MenuBookIcon"])': {
-								minHeight: 38,
-								bgcolor: 'rgba(42, 57, 66, 0.018)',
-							},
-							'& .MuiListItemButton-root:has([data-testid="MenuBookIcon"]) .MuiListItemText-primary': {
-								fontWeight: 650,
-							},
-							'& [data-testid="MenuBookIcon"]': {
-								color: 'primary.light',
-							},
+									// Book rows — visible document anchors
+									'& .MuiListItemButton-root:has([data-testid="MenuBookIcon"])': {
+										minHeight: 38,
+										bgcolor: 'rgba(42, 57, 66, 0.018)',
+									},
+									'& .MuiListItemButton-root:has([data-testid="MenuBookIcon"]) .MuiListItemText-primary': {
+										fontWeight: 650,
+									},
+									'& [data-testid="MenuBookIcon"]': {
+										color: 'primary.light',
+									},
 
-							// Parts — sectional dividers
-							'& .MuiListItemButton-root:has([data-testid="BookmarksIcon"])': {
-								minHeight: 36,
-								mt: 0.35,
-							},
-							'& .MuiListItemButton-root:has([data-testid="BookmarksIcon"]) .MuiListItemText-primary': {
-								fontWeight: 650,
-								fontStyle: 'normal',
-								fontSize: '0.78rem',
-								textTransform: 'uppercase',
-								letterSpacing: '0.055em',
-								color: 'text.secondary',
-							},
-							'& [data-testid="BookmarksIcon"]': {
-								color: 'secondary.main',
-							},
+									// Parts — sectional dividers
+									'& .MuiListItemButton-root:has([data-testid="BookmarksIcon"])': {
+										minHeight: 36,
+										mt: 0.35,
+									},
+									'& .MuiListItemButton-root:has([data-testid="BookmarksIcon"]) .MuiListItemText-primary': {
+										fontWeight: 650,
+										fontStyle: 'normal',
+										fontSize: '0.78rem',
+										textTransform: 'uppercase',
+										letterSpacing: '0.055em',
+										color: 'text.secondary',
+									},
+									'& [data-testid="BookmarksIcon"]': {
+										color: 'secondary.main',
+									},
 
-							// Chapters — primary working outline entries
-							'& .MuiListItemButton-root:has([data-testid="ArticleIcon"]) .MuiListItemText-primary': {
-								fontWeight: 550,
-							},
-							'& [data-testid="ArticleIcon"]': {
-								fontSize: 18,
-							},
+									// Chapters — primary working outline entries
+									'& .MuiListItemButton-root:has([data-testid="ArticleIcon"]) .MuiListItemText-primary': {
+										fontWeight: 550,
+									},
+									'& [data-testid="ArticleIcon"]': {
+										fontSize: 18,
+									},
 
-							// Scenes — quieter leaves
-							'& .MuiListItemButton-root:has([data-testid="TheatersIcon"])': {
-								minHeight: 31,
-								color: 'text.secondary',
-							},
-							'& .MuiListItemButton-root:has([data-testid="TheatersIcon"]) .MuiListItemText-primary': {
-								fontSize: '0.78rem',
-								fontWeight: 400,
-							},
-							'& .MuiListItemButton-root:has([data-testid="TheatersIcon"]).Mui-selected': {
-								color: 'text.primary',
-							},
-							'& [data-testid="TheatersIcon"]': {
-								fontSize: 16,
-								opacity: 0.72,
-							},
+									// Scenes — quieter leaves
+									'& .MuiListItemButton-root:has([data-testid="TheatersIcon"])': {
+										minHeight: 31,
+										color: 'text.secondary',
+									},
+									'& .MuiListItemButton-root:has([data-testid="TheatersIcon"]) .MuiListItemText-primary': {
+										fontSize: '0.78rem',
+										fontWeight: 400,
+									},
+									'& .MuiListItemButton-root:has([data-testid="TheatersIcon"]).Mui-selected': {
+										color: 'text.primary',
+									},
+									'& [data-testid="TheatersIcon"]': {
+										fontSize: 16,
+										opacity: 0.72,
+									},
 
-							// Expand/collapse affordances
-							'& [data-testid="ChevronRightIcon"], & [data-testid="ExpandMoreIcon"]': {
-								fontSize: 18,
-								opacity: 0.62,
-								transition: 'opacity 120ms ease',
-							},
-							'& .MuiListItemButton-root:hover [data-testid="ChevronRightIcon"], & .MuiListItemButton-root:hover [data-testid="ExpandMoreIcon"]': {
-								opacity: 1,
-							},
-						}}>
-							<NavPanel selection={selection} setSelection={setSelection} />
+									// Expand/collapse affordances
+									'& [data-testid="ChevronRightIcon"], & [data-testid="ExpandMoreIcon"]': {
+										fontSize: 18,
+										opacity: 0.62,
+										transition: 'opacity 120ms ease',
+									},
+									'& .MuiListItemButton-root:hover [data-testid="ChevronRightIcon"], & .MuiListItemButton-root:hover [data-testid="ExpandMoreIcon"]': {
+										opacity: 1,
+									},
+								}}>
+									<NavPanel selection={selection} setSelection={setSelection} />
 								</Box>
 							</>
 						)}
@@ -663,35 +663,35 @@ export default function App() {
 									}
 								/>
 								<Box sx={{
-							flex: 1,
-							minHeight: 0,
-							overflow: 'hidden',
-							bgcolor: 'background.default',
-							'& > .MuiBox-root': {
-								bgcolor: 'transparent',
-							},
-							'& > .MuiBox-root > .MuiStack-root': {
-								m: 1,
-								p: 1.75,
-								border: '1px solid',
-								borderColor: 'divider',
-								borderRadius: 1.25,
-								bgcolor: 'background.paper',
-								boxShadow: 1,
-							},
-							'& .MuiTypography-overline': {
-								display: 'block',
-								fontSize: '0.68rem',
-								fontWeight: 800,
-								letterSpacing: '0.11em',
-								color: 'primary.main',
-							},
-						}}>
-							<PropertiesPanel
-								selection={selection}
-								setSelection={setSelection}
-								selectTemplate={selectTemplate}
-							/>
+									flex: 1,
+									minHeight: 0,
+									overflow: 'hidden',
+									bgcolor: 'background.default',
+									'& > .MuiBox-root': {
+										bgcolor: 'transparent',
+									},
+									'& > .MuiBox-root > .MuiStack-root': {
+										m: 1,
+										p: 1.75,
+										border: '1px solid',
+										borderColor: 'divider',
+										borderRadius: 1.25,
+										bgcolor: 'background.paper',
+										boxShadow: 1,
+									},
+									'& .MuiTypography-overline': {
+										display: 'block',
+										fontSize: '0.68rem',
+										fontWeight: 800,
+										letterSpacing: '0.11em',
+										color: 'primary.main',
+									},
+								}}>
+									<PropertiesPanel
+										selection={selection}
+										setSelection={setSelection}
+										selectTemplate={selectTemplate}
+									/>
 								</Box>
 							</>
 						)}
@@ -703,7 +703,7 @@ export default function App() {
 					flexShrink: 0,
 					display: 'flex',
 					alignItems: 'center',
-					justifyContent: 'flex-end',
+					justifyContent: 'space-between',
 					px: 2,
 				}}>
 					<Typography
@@ -715,7 +715,18 @@ export default function App() {
 							userSelect: 'none',
 						}}
 					>
-						{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
+						© {new Date().getFullYear()} Richard A. Sand. All rights reserved.
+					</Typography>
+					<Typography
+						variant="caption"
+						sx={{
+							fontSize: '0.65rem',
+							color: 'text.disabled',
+							letterSpacing: 0.3,
+							userSelect: 'none',
+						}}
+					>
+					{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
 					</Typography>
 				</Box>
 
@@ -726,8 +737,8 @@ export default function App() {
 					onSuccess={handleImportSuccess}
 				/>
 
- 				<ExportDialog
- 					open={exportDialog.open}
+				<ExportDialog
+					open={exportDialog.open}
 					onClose={() => setExportDialog(d => ({ ...d, open: false }))}
 					url={exportDialog.url}
 					suggestedName={exportDialog.suggestedName}
