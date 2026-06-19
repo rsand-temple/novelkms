@@ -46,30 +46,28 @@ import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
 
 public class NovelKmsServer extends Application<NovelKmsConfig> {
-    private final Logger logger = LoggerFactory.getLogger(getClass());
-    private boolean isPostgres = false;
-    private final BasicDataSource ds = new BasicDataSource();
+    private final Logger          logger     = LoggerFactory.getLogger(getClass());
+    private boolean               isPostgres = false;
+    private final BasicDataSource ds         = new BasicDataSource();
 
     @Override
     public void initialize(Bootstrap<NovelKmsConfig> bootstrap) {
         bootstrap.setConfigurationSourceProvider(new SubstitutingSourceProvider(
                 bootstrap.getConfigurationSourceProvider(),
                 new EnvironmentVariableSubstitutor(true)));
-        
+
         bootstrap.addBundle(
                 new AssetsBundle(
                         "/webapp",
                         "/",
-                        "index.html"
-                )
-        );
+                        "index.html"));
     }
 
     @Override
     public void run(NovelKmsConfig config, Environment env) throws Exception {
-        String jdbcUrl = config.getDatabase().url;
+        String jdbcUrl   = config.getDatabase().url;
         String adminUser = config.getDatabase().adminUser;
-        String adminPwd = config.getDatabase().adminPwd;
+        String adminPwd  = config.getDatabase().adminPwd;
 
         if (jdbcUrl != null && jdbcUrl.startsWith("jdbc:postgresql:")) {
             logger.info("Loading POSTGRESQL driver");
@@ -106,24 +104,30 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 .load()
                 .migrate();
 
-        ProjectDao projectDao = new ProjectDao(ds);
-        BookDao bookDao = new BookDao(ds);
-        PartDao partDao = new PartDao(ds);
-        ChapterDao chapterDao = new ChapterDao(ds);
-        SceneDao sceneDao = new SceneDao(ds);
-        TemplateDao templateDao = new TemplateDao(ds);
-        UserStyleDao userStyleDao = new UserStyleDao(ds);
-        AuthDao authDao = new AuthDao(ds);
+        ProjectDao      projectDao      = new ProjectDao(ds);
+        BookDao         bookDao         = new BookDao(ds);
+        PartDao         partDao         = new PartDao(ds);
+        ChapterDao      chapterDao      = new ChapterDao(ds);
+        SceneDao        sceneDao        = new SceneDao(ds);
+        TemplateDao     templateDao     = new TemplateDao(ds);
+        UserStyleDao    userStyleDao    = new UserStyleDao(ds);
+        AuthDao         authDao         = new AuthDao(ds);
         TenantAccessDao tenantAccessDao = new TenantAccessDao(ds);
 
-        ImportService importService = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        ExportService exportService = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao);
+        ImportService  importService  = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
+        ExportService  exportService  = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao);
         SessionService sessionService = new SessionService(authDao, config.getAuth());
-        OAuthService oauthService = new OAuthService(config.getAuth(), authDao);
+        OAuthService   oauthService   = new OAuthService(config.getAuth(), authDao);
 
         env.lifecycle().manage(new io.dropwizard.lifecycle.Managed() {
-            @Override public void start() {}
-            @Override public void stop() throws Exception { oauthService.close(); }
+            @Override
+            public void start() {
+            }
+
+            @Override
+            public void stop() throws Exception {
+                oauthService.close();
+            }
         });
 
         env.jersey().register(MultiPartFeature.class);
@@ -166,6 +170,21 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         });
 
         env.healthChecks().register("database", new DataSourceHealthCheck(ds));
+        logBuildInfo();
+    }
+
+    private void logBuildInfo() {
+        try (var in = getClass().getClassLoader().getResourceAsStream("build.properties")) {
+            if (in != null) {
+                var props = new java.util.Properties();
+                props.load(in);
+                logger.info("NovelKMS Version {} Build {}",
+                        props.getProperty("app.version", "unknown"),
+                        props.getProperty("build.number", "unknown"));
+            }
+        } catch (Exception e) {
+            logger.warn("Could not read build.properties", e);
+        }
     }
 
     public static void main(String[] args) throws Exception {
