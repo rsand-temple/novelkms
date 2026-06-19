@@ -10,14 +10,10 @@
 		<version>0.5-SNAPSHOT</version>
 	</parent>
 
-	<!--
-		Thin packaging module. Has no source of its own; it exists only to fuse
-		the backend application, the frontend webapp/, and all runtime
-		dependencies into one runnable uber jar: target/novelkms.jar
-
-		Run it with:
-			java -jar novelkms.jar server config.yaml
-	-->
+	<!-- Thin packaging module. Has no source of its own; it exists only to 
+		fuse the backend application, the frontend webapp/, and all runtime dependencies 
+		into one runnable uber jar: target/novelkms.jar Run it with: java -jar novelkms.jar 
+		server config.yaml -->
 	<packaging>jar</packaging>
 
 	<dependencies>
@@ -34,6 +30,14 @@
 	</dependencies>
 
 	<build>
+		<extensions>
+			<extension>
+				<groupId>org.apache.maven.wagon</groupId>
+				<artifactId>wagon-ssh</artifactId>
+				<version>3.5.3</version>
+			</extension>
+		</extensions>
+
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -48,8 +52,8 @@
 							<createDependencyReducedPom>false</createDependencyReducedPom>
 							<finalName>novelkms</finalName>
 							<filters>
-								<!-- Strip JAR signature files to avoid
-									 "Invalid signature file digest" errors -->
+								<!-- Strip JAR signature files to avoid "Invalid signature file digest" 
+									errors -->
 								<filter>
 									<artifact>*:*</artifact>
 									<excludes>
@@ -59,13 +63,9 @@
 										<exclude>module-info.class</exclude>
 									</excludes>
 								</filter>
-								<!--
-									The backend carries a dev placeholder
-									webapp/index.html so AssetsBundle can start
-									in Eclipse. Exclude it from the uber jar so
-									the real frontend build from novelkms-frontend
-									is the only webapp/ on the classpath.
-								-->
+								<!-- The backend carries a dev placeholder webapp/index.html so AssetsBundle 
+									can start in Eclipse. Exclude it from the uber jar so the real frontend build 
+									from novelkms-frontend is the only webapp/ on the classpath. -->
 								<filter>
 									<artifact>com.richardsand.novelkms:novelkms-backend</artifact>
 									<excludes>
@@ -86,6 +86,57 @@
 						</configuration>
 					</execution>
 				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>wagon-maven-plugin</artifactId>
+				<version>2.0.2</version>
+				<executions>
+					<execution>
+						<id>upload-jar</id>
+						<phase>deploy</phase>
+						<goals>
+							<goal>upload-single</goal>
+						</goals>
+						<configuration>
+							<serverId>media</serverId>
+							<fromFile>${project.build.directory}/novelkms.jar</fromFile>
+							<url>scp://media.sand.idfconnect.lan/home/rsand/novelkms-container</url>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<version>3.1.0</version>
+				<executions>
+					<execution>
+						<id>trigger-webhook</id>
+						<phase>deploy</phase>
+						<goals>
+							<goal>exec</goal>
+						</goals>
+						<configuration>
+							<executable>curl</executable>
+							<arguments>
+								<argument>-X</argument>
+								<argument>POST</argument>
+								<argument>http://media.sand.idfconnect.lan:9000/hooks/novelkms-redeploy-webhook</argument>
+							</arguments>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<artifactId>maven-deploy-plugin</artifactId>
+				<version>3.1.1</version>
+				<configuration>
+					<skip>true</skip>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
