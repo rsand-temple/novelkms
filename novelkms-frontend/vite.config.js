@@ -13,8 +13,9 @@ function getBuildNumber() {
 
 function getAppVersion() {
 	try {
-		const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
-		return pkg.version || '0.0'
+		const pom = readFileSync('../pom.xml', 'utf-8')
+		const match = pom.match(/<version>([^<]+)<\/version>/)
+		return match ? match[1] : '0.0'
 	} catch {
 		return '0.0'
 	}
