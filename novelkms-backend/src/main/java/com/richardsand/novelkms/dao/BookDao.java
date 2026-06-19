@@ -29,7 +29,8 @@ public class BookDao {
      * Holds the raw bytes and MIME type of a cover image.
      * Only materialized by getCoverImage(); never included in normal book rows.
      */
-    public record CoverImage(byte[] data, String mimeType) {}
+    public record CoverImage(byte[] data, String mimeType) {
+    }
 
     public BookDao(BasicDataSource ds) {
         this.ds = ds;
@@ -39,7 +40,7 @@ public class BookDao {
     // Shared SELECT fragment
     //
     // cover_image is intentionally excluded — the column may hold megabytes of
-    // binary data.  has_cover_image is a lightweight CASE expression that tells
+    // binary data. has_cover_image is a lightweight CASE expression that tells
     // the caller whether an image exists without loading the bytes.
     // -------------------------------------------------------------------------
 
@@ -70,12 +71,12 @@ public class BookDao {
                 .notes(rs.getString("notes"))
                 .pageLayoutEnabled(rs.getBoolean("page_layout_enabled"))
                 .pageSizePreset(rs.getString("page_size_preset"))
-                .pageWidthIn(rs.getObject("page_width_in", Double.class))
-                .pageHeightIn(rs.getObject("page_height_in", Double.class))
-                .pageMarginTopIn(rs.getObject("page_margin_top_in", Double.class))
-                .pageMarginBottomIn(rs.getObject("page_margin_bottom_in", Double.class))
-                .pageMarginInnerIn(rs.getObject("page_margin_inner_in", Double.class))
-                .pageMarginOuterIn(rs.getObject("page_margin_outer_in", Double.class))
+                .pageWidthIn(getNullableDouble(rs, "page_width_in"))
+                .pageHeightIn(getNullableDouble(rs, "page_height_in"))
+                .pageMarginTopIn(getNullableDouble(rs, "page_margin_top_in"))
+                .pageMarginBottomIn(getNullableDouble(rs, "page_margin_bottom_in"))
+                .pageMarginInnerIn(getNullableDouble(rs, "page_margin_inner_in"))
+                .pageMarginOuterIn(getNullableDouble(rs, "page_margin_outer_in"))
                 .hasCoverImage(rs.getBoolean("has_cover_image"))
                 .importedFrom(rs.getString("imported_from"))
                 .importedAt(importedAtTs != null ? importedAtTs.toInstant() : null)
@@ -124,9 +125,11 @@ public class BookDao {
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return Optional.empty();
+                if (!rs.next())
+                    return Optional.empty();
                 byte[] bytes = rs.getBytes("cover_image");
-                if (bytes == null) return Optional.empty();
+                if (bytes == null)
+                    return Optional.empty();
                 return Optional.of(new CoverImage(bytes, rs.getString("cover_image_mime_type")));
             }
         }
@@ -245,10 +248,10 @@ public class BookDao {
             ps.setString(6, pageSizePreset != null ? pageSizePreset : "LETTER");
             ps.setObject(7, pageWidthIn);
             ps.setObject(8, pageHeightIn);
-            ps.setDouble(9,  pageMarginTopIn    != null ? pageMarginTopIn    : DEFAULT_MARGIN_TOP);
+            ps.setDouble(9, pageMarginTopIn != null ? pageMarginTopIn : DEFAULT_MARGIN_TOP);
             ps.setDouble(10, pageMarginBottomIn != null ? pageMarginBottomIn : DEFAULT_MARGIN_BOTTOM);
-            ps.setDouble(11, pageMarginInnerIn  != null ? pageMarginInnerIn  : DEFAULT_MARGIN_INNER);
-            ps.setDouble(12, pageMarginOuterIn  != null ? pageMarginOuterIn  : DEFAULT_MARGIN_OUTER);
+            ps.setDouble(11, pageMarginInnerIn != null ? pageMarginInnerIn : DEFAULT_MARGIN_INNER);
+            ps.setDouble(12, pageMarginOuterIn != null ? pageMarginOuterIn : DEFAULT_MARGIN_OUTER);
             ps.setTimestamp(13, Timestamp.from(now));
             ps.setObject(14, id);
             int rows = ps.executeUpdate();
@@ -274,9 +277,9 @@ public class BookDao {
 
     /**
      * Returns the total manuscript word count for a single book, including:
-     *   - scene.word_count for every scene in the book
-     *   - words in every chapter title/subtitle (blank title = 2 words for "Chapter N")
-     *   - words in every part title/subtitle (blank title = 2 words for "Part I")
+     * - scene.word_count for every scene in the book
+     * - words in every chapter title/subtitle (blank title = 2 words for "Chapter N")
+     * - words in every part title/subtitle (blank title = 2 words for "Part I")
      *
      * Used by GET /api/books/{id}/word-count (status bar when book is selected)
      * and by ExportService for the WORDS token in DOCX export.
@@ -295,7 +298,8 @@ public class BookDao {
                 PreparedStatement ps = c.prepareStatement(sceneSql)) {
             ps.setObject(1, bookId);
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) total += rs.getInt(1);
+                if (rs.next())
+                    total += rs.getInt(1);
             }
         }
 
@@ -352,16 +356,31 @@ public class BookDao {
     // -------------------------------------------------------------------------
 
     private static int countPlainTextWords(String text) {
-        if (text == null || text.isBlank()) return 0;
+        if (text == null || text.isBlank())
+            return 0;
         int     count  = 0;
         boolean inWord = false;
         for (int i = 0; i < text.length(); i++) {
             if (!Character.isWhitespace(text.charAt(i))) {
-                if (!inWord) { count++; inWord = true; }
+                if (!inWord) {
+                    count++;
+                    inWord = true;
+                }
             } else {
                 inWord = false;
             }
         }
         return count;
+    }
+
+    private static Double getNullableDouble(ResultSet rs, String column) throws SQLException {
+        Object value = rs.getObject(column);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number n) {
+            return n.doubleValue();
+        }
+        return Double.valueOf(value.toString());
     }
 }
