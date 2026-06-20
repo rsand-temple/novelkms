@@ -3,6 +3,7 @@ package com.richardsand.novelkms.resource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -41,7 +42,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
     void setUp() throws SQLException {
         truncateAll();
         testProject = createTestProject("Test Project", null);
-        testBook    = bookDao.create(testProject.getId(), "Test Book", null, null, null);
+        testBook = bookDao.create(testProject.getId(), "Test Book", null, null, null);
     }
 
     // -------------------------------------------------------------------------
@@ -54,7 +55,8 @@ class ChapterResourceTest extends NovelKmsTestBase {
                 .request().get();
 
         assertEquals(200, r.getStatus());
-        List<Chapter> chapters = r.readEntity(new GenericType<>() {});
+        List<Chapter> chapters = r.readEntity(new GenericType<>() {
+        });
         assertEquals(0, chapters.size());
     }
 
@@ -67,7 +69,8 @@ class ChapterResourceTest extends NovelKmsTestBase {
                 .request().get();
 
         assertEquals(200, r.getStatus());
-        List<Chapter> chapters = r.readEntity(new GenericType<>() {});
+        List<Chapter> chapters = r.readEntity(new GenericType<>() {
+        });
         assertEquals(2, chapters.size());
     }
 
@@ -132,7 +135,10 @@ class ChapterResourceTest extends NovelKmsTestBase {
 
         Response r = RESOURCES.target("/chapters/" + ch.getId())
                 .request(MediaType.APPLICATION_JSON)
-                .put(Entity.json(Map.of("title", "New Title", "notes", "New notes")));
+                .put(Entity.json(Map.of(
+                        "title", "New Title",
+                        "notes", "New notes",
+                        "resetsNumbering", false)));
 
         assertEquals(200, r.getStatus());
         Chapter updated = r.readEntity(Chapter.class);
@@ -144,9 +150,57 @@ class ChapterResourceTest extends NovelKmsTestBase {
     void updateChapter_unknownId_returns404() {
         Response r = RESOURCES.target("/chapters/" + UUID.randomUUID())
                 .request(MediaType.APPLICATION_JSON)
-                .put(Entity.json(Map.of("title", "Ghost")));
+                .put(Entity.json(Map.of(
+                        "title", "Ghost",
+                        "resetsNumbering", false)));
 
         assertEquals(404, r.getStatus());
+    }
+
+    @Test
+    void updateChapter_missingResetsNumbering_returns400() throws SQLException {
+        // resetsNumbering is intentionally boxed (Boolean, not boolean) and required
+        // on every update — a caller that omits it fails loudly instead of silently
+        // clearing the flag (the same bug class fixed earlier for scene word counts).
+        Chapter ch = chapterDao.create(testBook.getId(), null, "Old Title", null, null);
+
+        Response r = RESOURCES.target("/chapters/" + ch.getId())
+                .request(MediaType.APPLICATION_JSON)
+                .put(Entity.json(Map.of("title", "New Title", "notes", "New notes")));
+
+        assertEquals(400, r.getStatus());
+    }
+
+    @Test
+    void updateChapter_blankTitle_returns200AndPersistsBlank() throws SQLException {
+        // A blank title is a valid update state — the nav tree and EditorPanel both
+        // fall back to "Chapter N" display. Only create requires a non-blank title.
+        Chapter ch = chapterDao.create(testBook.getId(), null, "Old Title", null, null);
+
+        Response r = RESOURCES.target("/chapters/" + ch.getId())
+                .request(MediaType.APPLICATION_JSON)
+                .put(Entity.json(Map.of(
+                        "title", "",
+                        "resetsNumbering", false)));
+
+        assertEquals(200, r.getStatus());
+        Chapter updated = r.readEntity(Chapter.class);
+        assertEquals("", updated.getTitle());
+    }
+
+    @Test
+    void updateChapter_setsResetsNumbering_persistsValue() throws SQLException {
+        Chapter ch = chapterDao.create(testBook.getId(), null, "Old Title", null, null);
+
+        Response r = RESOURCES.target("/chapters/" + ch.getId())
+                .request(MediaType.APPLICATION_JSON)
+                .put(Entity.json(Map.of(
+                        "title", "Old Title",
+                        "resetsNumbering", true)));
+
+        assertEquals(200, r.getStatus());
+        Chapter updated = r.readEntity(Chapter.class);
+        assertTrue(updated.isResetsNumbering());
     }
 
     // -------------------------------------------------------------------------
