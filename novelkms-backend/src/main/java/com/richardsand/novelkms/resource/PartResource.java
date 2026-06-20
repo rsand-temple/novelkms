@@ -120,12 +120,16 @@ public class PartResource {
     @PUT
     @Path("/parts/{id}")
     public Response updatePart(@PathParam("id") UUID id, UpdatePartRequest req) {
-        if (req == null || req.title == null || req.title.isBlank()) {
+        if (req == null) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("title is required").build();
+                    .entity("request body is required").build();
         }
+        // Unlike create, a blank title is a valid state on update — the nav tree
+        // and EditorPanel both fall back to "Part {Roman numeral}" when title is empty.
+        // Never persist null, since the title column is NOT NULL.
+        String title = req.title != null ? req.title : "";
         try {
-            return partDao.update(id, req.title, req.subtitle, req.notes)
+            return partDao.update(id, title, req.subtitle, req.notes)
                     .map(p -> Response.ok(p).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {
