@@ -34,6 +34,8 @@ public class ChapterDao {
                 .id(rs.getObject("id", UUID.class))
                 .bookId(rs.getObject("book_id", UUID.class))
                 .partId(partId)
+                .codexId(rs.getObject("codex_id", UUID.class))
+                .codexCategory(rs.getString("codex_category"))
                 .title(rs.getString("title"))
                 .subtitle(rs.getString("subtitle"))
                 .displayOrder(rs.getInt("display_order"))
@@ -46,7 +48,7 @@ public class ChapterDao {
     }
 
     // -------------------------------------------------------------------------
-    // Queries
+    // Queries (manuscript chapters only — codex chapters are excluded)
     // -------------------------------------------------------------------------
 
     public List<Chapter> findByBookId(UUID bookId) throws SQLException {
@@ -75,12 +77,13 @@ public class ChapterDao {
                 "    ) AS chapter_number " +
                 "  FROM grouped " +
                 ") " +
-                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, c.resets_numbering, " +
+                "SELECT c.id, c.book_id, c.part_id, c.codex_id, c.codex_category, " +
+                "       c.title, c.subtitle, c.notes, c.resets_numbering, " +
                 "       c.display_order, c.created_at, c.updated_at, " +
                 "       n.chapter_number " +
                 "FROM chapter c " +
                 "JOIN numbered n ON c.id = n.id " +
-                "WHERE c.book_id = ? AND c.part_id IS NULL " +
+                "WHERE c.book_id = ? AND c.part_id IS NULL AND c.codex_id IS NULL " +
                 "ORDER BY n.chapter_number";
 
         List<Chapter> result = new ArrayList<>();
@@ -123,7 +126,8 @@ public class ChapterDao {
                 "    ) AS chapter_number " +
                 "  FROM grouped " +
                 ") " +
-                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, c.resets_numbering, " +
+                "SELECT c.id, c.book_id, c.part_id, c.codex_id, c.codex_category, " +
+                "       c.title, c.subtitle, c.notes, c.resets_numbering, " +
                 "       c.display_order, c.created_at, c.updated_at, " +
                 "       n.chapter_number " +
                 "FROM chapter c " +
@@ -145,7 +149,37 @@ public class ChapterDao {
         return result;
     }
 
+    /**
+     * Returns the category chapters that belong to a codex, in display order.
+     * Codex chapters are not numbered, so chapter_number is reported as 0.
+     */
+    public List<Chapter> findByCodexId(UUID codexId) throws SQLException {
+        String sql = "SELECT c.id, c.book_id, c.part_id, c.codex_id, c.codex_category, " +
+                "       c.title, c.subtitle, c.notes, c.resets_numbering, " +
+                "       c.display_order, c.created_at, c.updated_at, " +
+                "       0 AS chapter_number " +
+                "FROM chapter c " +
+                "WHERE c.codex_id = ? " +
+                "ORDER BY c.display_order";
+
+        List<Chapter> result = new ArrayList<>();
+        try (Connection conn = ds.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setObject(1, codexId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(map(rs));
+                }
+            }
+        }
+        return result;
+    }
+
     public Optional<Chapter> findById(UUID id) throws SQLException {
+        // The numbering CTE is keyed on book_id, so it produces no row for a
+        // codex chapter (book_id NULL). The final LEFT JOIN + COALESCE therefore
+        // returns codex chapters with chapter_number 0, while manuscript chapters
+        // keep their computed number.
         String sql = "WITH ordered AS ( " +
                 "  SELECT c.id, c.resets_numbering, " +
                 "    CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END AS sort_bucket, " +
@@ -171,11 +205,12 @@ public class ChapterDao {
                 "    ) AS chapter_number " +
                 "  FROM grouped " +
                 ") " +
-                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, c.resets_numbering, " +
+                "SELECT c.id, c.book_id, c.part_id, c.codex_id, c.codex_category, " +
+                "       c.title, c.subtitle, c.notes, c.resets_numbering, " +
                 "       c.display_order, c.created_at, c.updated_at, " +
-                "       n.chapter_number " +
+                "       COALESCE(n.chapter_number, 0) AS chapter_number " +
                 "FROM chapter c " +
-                "JOIN numbered n ON c.id = n.id " +
+                "LEFT JOIN numbered n ON c.id = n.id " +
                 "WHERE c.id = ?";
 
         try (Connection conn = ds.getConnection();
@@ -221,6 +256,39 @@ public class ChapterDao {
                 .displayOrder(displayOrder).notes(notes)
                 .resetsNumbering(false)
                 .createdAt(now).updatedAt(now)
+                .build();
+    }
+
+    /**
+     * Creates a category chapter inside a codex. book_id and part_id are NULL;
+     * codex_id and codex_category identify it. display_order is scoped to the
+     * codex.
+     */
+    public Chapter createCodexChapter(UUID codexId, String codexCategory, String title) throws SQLException {
+        UUID    id           = UUID.randomUUID();
+        Instant now          = Instant.now();
+        int     displayOrder = nextDisplayOrderInCodex(codexId);
+        String  sql          = """
+                INSERT INTO chapter (id, book_id, part_id, codex_id, codex_category, title, subtitle, display_order, notes, created_at, updated_at)
+                VALUES (?, NULL, NULL, ?, ?, ?, NULL, ?, NULL, ?, ?)
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, id);
+            ps.setObject(2, codexId);
+            ps.setString(3, codexCategory);
+            ps.setString(4, title);
+            ps.setInt(5, displayOrder);
+            ps.setTimestamp(6, Timestamp.from(now));
+            ps.setTimestamp(7, Timestamp.from(now));
+            ps.executeUpdate();
+        }
+        return Chapter.builder()
+                .id(id).codexId(codexId).codexCategory(codexCategory).title(title)
+                .displayOrder(displayOrder)
+                .resetsNumbering(false)
+                .createdAt(now).updatedAt(now)
+                .chapterNumber(0)
                 .build();
     }
 
@@ -327,6 +395,38 @@ public class ChapterDao {
     }
 
     /**
+     * Assigns display_order 0..n-1 to the given codex category-chapter IDs.
+     * The codex_id guard prevents accidental updates to chapters in a different codex.
+     */
+    public void reorderInCodex(UUID codexId, List<UUID> ids) throws SQLException {
+        String sql = """
+                UPDATE chapter SET display_order = ?, updated_at = ?
+                WHERE id = ? AND codex_id = ?
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            c.setAutoCommit(false);
+            try {
+                Instant now = Instant.now();
+                for (int i = 0; i < ids.size(); i++) {
+                    ps.setInt(1, i);
+                    ps.setTimestamp(2, Timestamp.from(now));
+                    ps.setObject(3, ids.get(i));
+                    ps.setObject(4, codexId);
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
+
+    /**
      * Moves a chapter to a new parent container and renumbers both the source
      * and target sibling lists in a single transaction.
      *
@@ -412,6 +512,20 @@ public class ChapterDao {
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, partId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
+    }
+
+    /**
+     * Scopes display_order to category chapters within a specific codex.
+     */
+    private int nextDisplayOrderInCodex(UUID codexId) throws SQLException {
+        String sql = "SELECT COALESCE(MAX(display_order), -1) + 1 FROM chapter WHERE codex_id = ?";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, codexId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getInt(1) : 0;
             }

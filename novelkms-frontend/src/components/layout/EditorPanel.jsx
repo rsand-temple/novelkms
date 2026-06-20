@@ -235,7 +235,7 @@ export default function EditorPanel({
 
 	// Project shelf: project selected but no book open yet.
 	// Clicking a book card calls onSelectBook to open it.
-	const projectShelfMode = !templateMode && !bookId && !!projectId;
+	const projectShelfMode = !templateMode && !bookId && !!projectId && !chapterId;
 
 	// ── Chapter data for heading (multi-scene mode only) ──────────────────────
 	const { data: chapterData } = useChapter(multiSceneMode ? chapterId : null);

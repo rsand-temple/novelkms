@@ -53,6 +53,8 @@ const EMPTY_SELECTION = {
 	partId: null,
 	chapterId: null,
 	sceneId: null,
+	codexId: null,        // selected codex (categories/entries live under it)
+	codexCategory: null,  // category key of the selected codex chapter, if any
 	templateType: null,   // 'cover' | 'part' | null
 	templateScope: null,  // 'global' | 'book' | null
 }
@@ -237,7 +239,13 @@ export default function App() {
 	const setSelection = useCallback((update) => {
 		setSel(prev => {
 			const base = typeof update === 'function' ? update(prev) : update
-			return { ...base, templateType: null, templateScope: null }
+			return {
+				...base,
+				codexId:       base.codexId ?? null,
+				codexCategory: base.codexCategory ?? null,
+				templateType: null,
+				templateScope: null,
+			}
 		})
 	}, [])
 
@@ -248,6 +256,8 @@ export default function App() {
 			partId: null,
 			chapterId: null,
 			sceneId: null,
+			codexId: null,
+			codexCategory: null,
 			templateType: type,
 			templateScope: scope,
 		}))

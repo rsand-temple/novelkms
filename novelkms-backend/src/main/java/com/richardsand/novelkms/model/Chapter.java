@@ -19,12 +19,31 @@ public class Chapter {
     @JsonProperty
     private UUID id;
 
+    /**
+     * Nullable. Set for manuscript chapters (which belong to a book, directly
+     * or via a part). NULL for codex chapters, which belong to a codex instead.
+     */
     @JsonProperty
     private UUID bookId;
 
     /** Nullable — chapter may belong directly to a book without a part. */
     @JsonProperty
     private UUID partId;
+
+    /**
+     * Nullable. Set for codex chapters (a category folder inside a codex). NULL
+     * for manuscript chapters. A chapter belongs to a book XOR a codex.
+     */
+    @JsonProperty
+    private UUID codexId;
+
+    /**
+     * For codex chapters, the category key (CHARACTER, PLOT, NOTES, ...) from
+     * codex_category. NULL for manuscript chapters and for plain (uncategorized)
+     * codex chapters.
+     */
+    @JsonProperty
+    private String codexCategory;
 
     @JsonProperty
     private String title;
@@ -42,7 +61,8 @@ public class Chapter {
     /**
      * When true, this chapter's computed chapterNumber resets to 1, and every
      * subsequent chapter in book order continues counting from here until the
-     * next reset point. Persisted; defaults to false.
+     * next reset point. Persisted; defaults to false. Not meaningful for codex
+     * chapters (which are not numbered).
      */
     @JsonProperty
     private boolean resetsNumbering;
@@ -53,7 +73,7 @@ public class Chapter {
     @JsonProperty
     private Instant updatedAt;
 
-    /** computed, not stored */
+    /** computed, not stored. 0 for codex chapters (they are not numbered). */
     @JsonProperty
     private int chapterNumber;
 

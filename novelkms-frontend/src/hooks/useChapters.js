@@ -49,6 +49,9 @@ export const useUpdateChapter = () => {
 		onSuccess: (_, { id, data }) => {
 			queryClient.invalidateQueries({ queryKey: CHAPTER_KEYS.detail(id) })
 			queryClient.invalidateQueries({ queryKey: CHAPTER_KEYS.byBook(data.bookId) })
+			// A codex category is a chapter row; refresh codex lists too so an
+			// inspector rename of a category reflects immediately.
+			queryClient.invalidateQueries({ queryKey: ['codex'] })
 		},
 	})
 }
@@ -60,6 +63,7 @@ export const useDeleteChapter = () => {
 		onSuccess: (_, { bookId }) => {
 			queryClient.invalidateQueries({ queryKey: CHAPTER_KEYS.byBook(bookId) })
 			queryClient.invalidateQueries({ queryKey: BOOK_KEYS.detail(bookId) })
+			queryClient.invalidateQueries({ queryKey: ['codex'] })
 		},
 	})
 }

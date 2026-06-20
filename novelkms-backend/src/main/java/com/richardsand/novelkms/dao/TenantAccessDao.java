@@ -36,21 +36,48 @@ public class TenantAccessDao {
                 """, partId, userId);
     }
 
+    /**
+     * A codex belongs to a project (series scope) or a book (book scope). Resolve
+     * the owning project through whichever is set.
+     */
+    public boolean ownsCodex(UUID userId, UUID codexId) throws SQLException {
+        return exists("""
+                SELECT 1 FROM codex cx
+                LEFT JOIN book cb ON cb.id = cx.book_id
+                JOIN project p ON p.id = COALESCE(cx.project_id, cb.project_id)
+                WHERE cx.id = ? AND p.owner_user_id = ?
+                """, codexId, userId);
+    }
+
+    /**
+     * A chapter belongs to a book (manuscript) OR a codex (world-building). The
+     * codex itself is either project-scoped or book-scoped, so the owning project
+     * is resolved through the first non-null of: the chapter's book, the codex's
+     * project, or the codex's book.
+     */
     public boolean ownsChapter(UUID userId, UUID chapterId) throws SQLException {
         return exists("""
                 SELECT 1 FROM chapter c
-                JOIN book b ON b.id = c.book_id
-                JOIN project p ON p.id = b.project_id
+                LEFT JOIN book b   ON b.id  = c.book_id
+                LEFT JOIN codex cx ON cx.id = c.codex_id
+                LEFT JOIN book cb  ON cb.id = cx.book_id
+                JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id)
                 WHERE c.id = ? AND p.owner_user_id = ?
                 """, chapterId, userId);
     }
 
+    /**
+     * A scene's chapter may be a manuscript chapter or a codex chapter; ownership
+     * resolves through the same book-or-codex path as {@link #ownsChapter}.
+     */
     public boolean ownsScene(UUID userId, UUID sceneId) throws SQLException {
         return exists("""
                 SELECT 1 FROM scene s
                 JOIN chapter c ON c.id = s.chapter_id
-                JOIN book b ON b.id = c.book_id
-                JOIN project p ON p.id = b.project_id
+                LEFT JOIN book b   ON b.id  = c.book_id
+                LEFT JOIN codex cx ON cx.id = c.codex_id
+                LEFT JOIN book cb  ON cb.id = cx.book_id
+                JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id)
                 WHERE s.id = ? AND p.owner_user_id = ?
                 """, sceneId, userId);
     }
@@ -59,6 +86,7 @@ public class TenantAccessDao {
         return ownsProject(userId, entityId)
                 || ownsBook(userId, entityId)
                 || ownsPart(userId, entityId)
+                || ownsCodex(userId, entityId)
                 || ownsChapter(userId, entityId)
                 || ownsScene(userId, entityId);
     }

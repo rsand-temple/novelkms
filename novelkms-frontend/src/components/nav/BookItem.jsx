@@ -10,6 +10,7 @@ import { useUpdateBook }    from '../../hooks/useBooks'
 import PartItem             from './PartItem'
 import ChapterItem          from './ChapterItem'
 import ChapterListZone      from './ChapterListZone'
+import CodexSection         from './CodexSection'
 import { containerIds }     from '../../dnd/dndUtils'
 import { useNavContextMenu } from './NavContextMenuContext'
 import { useSearch } from '../../search/SearchContext'
@@ -184,6 +185,14 @@ export default function BookItem({ book, selection, setSelection }) {
 							))}
 						</ChapterListZone>
 					</SortableContext>
+
+					<CodexSection
+						scope="book"
+						ownerId={book.id}
+						open={open}
+						selection={selection}
+						setSelection={setSelection}
+					/>
 				</Box>
 			</Collapse>
 		</Box>

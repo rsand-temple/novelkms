@@ -89,6 +89,11 @@ export function useMoveScene() {
     onSuccess: () => {
       // Invalidates all scene lists — covers both source and target chapters
       queryClient.invalidateQueries({ queryKey: ['scenes'] })
+      // A move between the manuscript and a codex category changes the
+      // book/part/project word-count totals, so refresh those too.
+      queryClient.invalidateQueries({
+        predicate: (q) => q.queryKey[q.queryKey.length - 1] === 'word-count',
+      })
     },
   })
 }

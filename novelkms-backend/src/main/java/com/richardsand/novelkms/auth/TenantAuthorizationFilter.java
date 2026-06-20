@@ -68,6 +68,7 @@ public class TenantAuthorizationFilter implements ContainerRequestFilter {
                 case "projects" -> access.ownsProject(userId, id);
                 case "books" -> access.ownsBook(userId, id);
                 case "parts" -> access.ownsPart(userId, id);
+                case "codex" -> access.ownsCodex(userId, id);
                 case "chapters" -> access.ownsChapter(userId, id);
                 case "scenes" -> access.ownsScene(userId, id);
                 default -> true;
@@ -85,6 +86,7 @@ public class TenantAuthorizationFilter implements ContainerRequestFilter {
                 boolean owned = switch (s[1]) {
                     case "books" -> access.ownsBook(userId, id);
                     case "parts" -> access.ownsPart(userId, id);
+                case "codex" -> access.ownsCodex(userId, id);
                     case "chapters" -> access.ownsChapter(userId, id);
                     case "scenes" -> access.ownsScene(userId, id);
                     default -> false;
