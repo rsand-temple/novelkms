@@ -38,6 +38,7 @@ public class ChapterDao {
                 .subtitle(rs.getString("subtitle"))
                 .displayOrder(rs.getInt("display_order"))
                 .notes(rs.getString("notes"))
+                .resetsNumbering(rs.getBoolean("resets_numbering"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .updatedAt(rs.getTimestamp("updated_at").toInstant())
                 .chapterNumber(rs.getInt("chapter_number"))
@@ -50,30 +51,42 @@ public class ChapterDao {
 
     public List<Chapter> findByBookId(UUID bookId) throws SQLException {
         String sql = "WITH ordered AS ( " +
-                "  SELECT c.id, " +
-                "    ROW_NUMBER() OVER ( " +
-                "      ORDER BY " +
-                "        CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END, " +
-                "        p.display_order, " +
-                "        c.display_order " +
-                "    ) AS chapter_number " +
+                "  SELECT c.id, c.resets_numbering, " +
+                "    CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END AS sort_bucket, " +
+                "    p.display_order AS part_order, " +
+                "    c.display_order AS chapter_order " +
                 "  FROM chapter c " +
                 "  LEFT JOIN part p ON c.part_id = p.id " +
                 "  WHERE c.book_id = ? " +
+                "), " +
+                "grouped AS ( " +
+                "  SELECT id, sort_bucket, part_order, chapter_order, " +
+                "    SUM(CASE WHEN resets_numbering THEN 1 ELSE 0 END) OVER ( " +
+                "      ORDER BY sort_bucket, part_order, chapter_order " +
+                "      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW " +
+                "    ) AS numbering_group " +
+                "  FROM ordered " +
+                "), " +
+                "numbered AS ( " +
+                "  SELECT id, " +
+                "    ROW_NUMBER() OVER ( " +
+                "      PARTITION BY numbering_group " +
+                "      ORDER BY sort_bucket, part_order, chapter_order " +
+                "    ) AS chapter_number " +
+                "  FROM grouped " +
                 ") " +
-                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, " +
+                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, c.resets_numbering, " +
                 "       c.display_order, c.created_at, c.updated_at, " +
-                "       o.chapter_number " +
+                "       n.chapter_number " +
                 "FROM chapter c " +
-                "JOIN ordered o ON c.id = o.id " +
-                "LEFT JOIN part p ON c.part_id = p.id " +
+                "JOIN numbered n ON c.id = n.id " +
                 "WHERE c.book_id = ? AND c.part_id IS NULL " +
-                "ORDER BY o.chapter_number";
+                "ORDER BY n.chapter_number";
 
         List<Chapter> result = new ArrayList<>();
         try (Connection conn = ds.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setObject(1, bookId); // CTE
+            ps.setObject(1, bookId); // ordered CTE
             ps.setObject(2, bookId); // outer WHERE
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -86,29 +99,42 @@ public class ChapterDao {
 
     public List<Chapter> findByPartId(UUID partId) throws SQLException {
         String sql = "WITH ordered AS ( " +
-                "  SELECT c.id, " +
-                "    ROW_NUMBER() OVER ( " +
-                "      ORDER BY " +
-                "        CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END, " +
-                "        p.display_order, " +
-                "        c.display_order " +
-                "    ) AS chapter_number " +
+                "  SELECT c.id, c.resets_numbering, " +
+                "    CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END AS sort_bucket, " +
+                "    p.display_order AS part_order, " +
+                "    c.display_order AS chapter_order " +
                 "  FROM chapter c " +
                 "  LEFT JOIN part p ON c.part_id = p.id " +
                 "  WHERE c.book_id = (SELECT book_id FROM part WHERE id = ?) " +
+                "), " +
+                "grouped AS ( " +
+                "  SELECT id, sort_bucket, part_order, chapter_order, " +
+                "    SUM(CASE WHEN resets_numbering THEN 1 ELSE 0 END) OVER ( " +
+                "      ORDER BY sort_bucket, part_order, chapter_order " +
+                "      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW " +
+                "    ) AS numbering_group " +
+                "  FROM ordered " +
+                "), " +
+                "numbered AS ( " +
+                "  SELECT id, " +
+                "    ROW_NUMBER() OVER ( " +
+                "      PARTITION BY numbering_group " +
+                "      ORDER BY sort_bucket, part_order, chapter_order " +
+                "    ) AS chapter_number " +
+                "  FROM grouped " +
                 ") " +
-                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, " +
+                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, c.resets_numbering, " +
                 "       c.display_order, c.created_at, c.updated_at, " +
-                "       o.chapter_number " +
+                "       n.chapter_number " +
                 "FROM chapter c " +
-                "JOIN ordered o ON c.id = o.id " +
+                "JOIN numbered n ON c.id = n.id " +
                 "WHERE c.part_id = ? " +
-                "ORDER BY o.chapter_number";
+                "ORDER BY n.chapter_number";
 
         List<Chapter> result = new ArrayList<>();
         try (Connection conn = ds.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setObject(1, partId); // CTE subquery
+            ps.setObject(1, partId); // ordered CTE subquery
             ps.setObject(2, partId); // outer WHERE
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -121,27 +147,40 @@ public class ChapterDao {
 
     public Optional<Chapter> findById(UUID id) throws SQLException {
         String sql = "WITH ordered AS ( " +
-                "  SELECT c.id, " +
-                "    ROW_NUMBER() OVER ( " +
-                "      ORDER BY " +
-                "        CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END, " +
-                "        p.display_order, " +
-                "        c.display_order " +
-                "    ) AS chapter_number " +
+                "  SELECT c.id, c.resets_numbering, " +
+                "    CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END AS sort_bucket, " +
+                "    p.display_order AS part_order, " +
+                "    c.display_order AS chapter_order " +
                 "  FROM chapter c " +
                 "  LEFT JOIN part p ON c.part_id = p.id " +
                 "  WHERE c.book_id = (SELECT book_id FROM chapter WHERE id = ?) " +
+                "), " +
+                "grouped AS ( " +
+                "  SELECT id, sort_bucket, part_order, chapter_order, " +
+                "    SUM(CASE WHEN resets_numbering THEN 1 ELSE 0 END) OVER ( " +
+                "      ORDER BY sort_bucket, part_order, chapter_order " +
+                "      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW " +
+                "    ) AS numbering_group " +
+                "  FROM ordered " +
+                "), " +
+                "numbered AS ( " +
+                "  SELECT id, " +
+                "    ROW_NUMBER() OVER ( " +
+                "      PARTITION BY numbering_group " +
+                "      ORDER BY sort_bucket, part_order, chapter_order " +
+                "    ) AS chapter_number " +
+                "  FROM grouped " +
                 ") " +
-                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, " +
+                "SELECT c.id, c.book_id, c.part_id, c.title, c.subtitle, c.notes, c.resets_numbering, " +
                 "       c.display_order, c.created_at, c.updated_at, " +
-                "       o.chapter_number " +
+                "       n.chapter_number " +
                 "FROM chapter c " +
-                "JOIN ordered o ON c.id = o.id " +
+                "JOIN numbered n ON c.id = n.id " +
                 "WHERE c.id = ?";
 
         try (Connection conn = ds.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setObject(1, id); // CTE subquery
+            ps.setObject(1, id); // ordered CTE subquery
             ps.setObject(2, id); // outer WHERE
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? Optional.of(map(rs)) : Optional.empty();
@@ -180,14 +219,16 @@ public class ChapterDao {
         return Chapter.builder()
                 .id(id).bookId(bookId).partId(partId).title(title).subtitle(subtitle)
                 .displayOrder(displayOrder).notes(notes)
+                .resetsNumbering(false)
                 .createdAt(now).updatedAt(now)
                 .build();
     }
 
-    public Optional<Chapter> update(UUID id, String title, String subtitle, String notes) throws SQLException {
+    public Optional<Chapter> update(UUID id, String title, String subtitle, String notes,
+            boolean resetsNumbering) throws SQLException {
         Instant now = Instant.now();
         String  sql = """
-                UPDATE chapter SET title = ?, subtitle = ?, notes = ?, updated_at = ?
+                UPDATE chapter SET title = ?, subtitle = ?, notes = ?, resets_numbering = ?, updated_at = ?
                 WHERE id = ?
                 """;
         try (Connection c = ds.getConnection();
@@ -195,8 +236,9 @@ public class ChapterDao {
             ps.setString(1, title);
             ps.setString(2, subtitle);
             ps.setString(3, notes);
-            ps.setTimestamp(4, Timestamp.from(now));
-            ps.setObject(5, id);
+            ps.setBoolean(4, resetsNumbering);
+            ps.setTimestamp(5, Timestamp.from(now));
+            ps.setObject(6, id);
             int rows = ps.executeUpdate();
             if (rows == 0) {
                 return Optional.empty();

@@ -45,6 +45,8 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 		// Allow saving an empty title — display will fall back to "Chapter N".
 		if (newTitle !== (chapter.title ?? '')) {
 			// useUpdateChapter expects { id, data }; data.bookId drives list invalidation.
+			// resetsNumbering must be passed through unchanged — the backend requires
+			// it on every update and has no way to know the prior value otherwise.
 			updateChapter({
 				id:   chapter.id,
 				data: {
@@ -52,6 +54,7 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 					title:    newTitle,
 					subtitle: chapter.subtitle,
 					notes:    chapter.notes,
+					resetsNumbering: chapter.resetsNumbering ?? false,
 				},
 			})
 		}

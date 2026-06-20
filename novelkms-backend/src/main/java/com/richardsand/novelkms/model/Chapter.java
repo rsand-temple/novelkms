@@ -39,6 +39,14 @@ public class Chapter {
     @JsonProperty
     private String notes;
 
+    /**
+     * When true, this chapter's computed chapterNumber resets to 1, and every
+     * subsequent chapter in book order continues counting from here until the
+     * next reset point. Persisted; defaults to false.
+     */
+    @JsonProperty
+    private boolean resetsNumbering;
+
     @JsonProperty
     private Instant createdAt;
 

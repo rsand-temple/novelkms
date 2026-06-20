@@ -3,10 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
 	Box, Typography, TextField, Divider, CircularProgress,
 	Stack, Chip, Button, Select, MenuItem, FormControl,
-	InputLabel, FormControlLabel, Switch,
+	InputLabel, FormControlLabel, Switch, Checkbox,
 } from '@mui/material';
 import { useScene, SCENE_KEYS } from '../../hooks/useScenes';
-import { useChapter, CHAPTER_KEYS } from '../../hooks/useChapters';
+import { useChapter } from '../../hooks/useChapters';
 import { usePart, PART_KEYS } from '../../hooks/useParts';
 import { useBook, BOOK_KEYS, useUploadCoverImage, useDeleteCoverImage } from '../../hooks/useBooks';
 import { useProject } from '../../hooks/useProjects';
@@ -78,17 +78,22 @@ function SceneProperties({ sceneId, chapterId }) {
 
 // ── Chapter ───────────────────────────────────────────────────────────────────
 
-function ChapterForm({ chapter, chapterId, bookId }) {
+function ChapterForm({ chapter, chapterId }) {
 	const qc = useQueryClient();
 	const [title, setTitle] = useState(chapter.title ?? '');
 	const [subtitle, setSubtitle] = useState(chapter.subtitle ?? '');
 	const [notes, setNotes] = useState(chapter.notes ?? '');
+	const [resetsNumbering, setResetsNumbering] = useState(chapter.resetsNumbering ?? false);
 
 	const { mutate: save, isPending } = useMutation({
 		mutationFn: (patch) => chaptersApi.update(chapterId, patch),
 		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: CHAPTER_KEYS.detail(chapterId) });
-			if (bookId) qc.invalidateQueries({ queryKey: CHAPTER_KEYS.byBook(bookId) });
+			// Broad invalidation: toggling resetsNumbering can shift the computed
+			// chapterNumber of every chapter that follows it in book order —
+			// potentially in other parts, or in the direct-book chapter list —
+			// not just this chapter's own cache entries. Mirrors useMoveChapter.
+			qc.invalidateQueries({ queryKey: ['chapters'] });
+			qc.invalidateQueries({ queryKey: ['parts'] });
 		},
 	});
 
@@ -107,9 +112,24 @@ function ChapterForm({ chapter, chapterId, bookId }) {
 				value={subtitle} onChange={(e) => setSubtitle(e.target.value)} />
 			<TextField label="Notes" size="small" fullWidth multiline minRows={3}
 				value={notes} onChange={(e) => setNotes(e.target.value)} />
+
+			<FormControlLabel
+				control={
+					<Checkbox
+						size="small"
+						checked={resetsNumbering}
+						onChange={(e) => setResetsNumbering(e.target.checked)}
+					/>
+				}
+				label="Reset numbering"
+			/>
+			<Typography variant="caption" color="text.secondary" sx={{ mt: -1.5 }}>
+				Every chapter after this one renumbers from here until the next reset point.
+			</Typography>
+
 			<Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
 				<Button size="small" variant="contained"
-					onClick={() => save({ title, subtitle, notes })} disabled={isPending}>
+					onClick={() => save({ title, subtitle, notes, resetsNumbering })} disabled={isPending}>
 					Save
 				</Button>
 			</Box>
@@ -442,14 +462,14 @@ function BookProperties({ bookId, projectId, selectTemplate }) {
 // ── Project ───────────────────────────────────────────────────────────────────
 
 function ProjectForm({ project, projectId }) {
-	const [title, setTitle]               = useState(project.title           ?? '')
-	const [description, setDescription]   = useState(project.description     ?? '')
+	const [title, setTitle] = useState(project.title ?? '')
+	const [description, setDescription] = useState(project.description ?? '')
 	const [authorFirstName, setAuthorFirstName] = useState(project.authorFirstName ?? '')
-	const [authorLastName, setAuthorLastName]   = useState(project.authorLastName  ?? '')
-	const [displayName, setDisplayName]   = useState(project.displayName     ?? '')
-	const [copyright, setCopyright]       = useState(project.copyright       ?? '')
-	const [emailAddress, setEmailAddress] = useState(project.emailAddress    ?? '')
-	const [phoneNumber, setPhoneNumber]   = useState(project.phoneNumber     ?? '')
+	const [authorLastName, setAuthorLastName] = useState(project.authorLastName ?? '')
+	const [displayName, setDisplayName] = useState(project.displayName ?? '')
+	const [copyright, setCopyright] = useState(project.copyright ?? '')
+	const [emailAddress, setEmailAddress] = useState(project.emailAddress ?? '')
+	const [phoneNumber, setPhoneNumber] = useState(project.phoneNumber ?? '')
 
 	const { mutate: save, isPending } = useUpdateProject()
 

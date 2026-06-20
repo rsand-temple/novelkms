@@ -134,7 +134,7 @@ class ChapterDaoTest extends NovelKmsTestBase {
     void update_changesTitleAndNotes() throws SQLException {
         Chapter original = chapterDao.create(book.getId(), null, "Old Title", null, "Old Notes");
 
-        Optional<Chapter> updated = chapterDao.update(original.getId(), "New Title", null, "New Notes");
+        Optional<Chapter> updated = chapterDao.update(original.getId(), "New Title", null, "New Notes", false);
 
         assertTrue(updated.isPresent());
         assertEquals("New Title", updated.get().getTitle());
@@ -143,7 +143,7 @@ class ChapterDaoTest extends NovelKmsTestBase {
 
     @Test
     void update_unknownId_returnsEmpty() throws SQLException {
-        Optional<Chapter> updated = chapterDao.update(UUID.randomUUID(), "Ghost", null, null);
+        Optional<Chapter> updated = chapterDao.update(UUID.randomUUID(), "Ghost", null, null, false);
 
         assertFalse(updated.isPresent());
     }

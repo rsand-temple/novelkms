@@ -61,6 +61,8 @@ public class ChapterResource {
         public String subtitle;
         @JsonProperty
         public String notes;
+        @JsonProperty
+        public Boolean resetsNumbering;
     }
 
     /**
@@ -139,12 +141,16 @@ public class ChapterResource {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("request body is required").build();
         }
+        if (req.resetsNumbering == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("resetsNumbering is required").build();
+        }
         // Unlike create, a blank title is a valid state on update — the nav tree
         // and EditorPanel both fall back to "Chapter N" when title is empty.
         // Never persist null, since the title column is NOT NULL.
         String title = req.title != null ? req.title : "";
         try {
-            return chapterDao.update(id, title, req.subtitle, req.notes)
+            return chapterDao.update(id, title, req.subtitle, req.notes, req.resetsNumbering)
                     .map(ch -> Response.ok(ch).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {
