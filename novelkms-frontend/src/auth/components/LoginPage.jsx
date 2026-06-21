@@ -10,7 +10,8 @@ export default function LoginPage() {
       <Stack spacing={2.5}>
         <Box><Typography variant="h4" fontWeight={750}>NovelKMS</Typography><Typography color="text.secondary">Novel Authoring Workspace</Typography></Box>
         <Button variant="contained" size="large" disabled={!providers.google} href={authApi.startUrl('google')}>Continue with Google</Button>
-        <Button variant="outlined" size="large" disabled={!providers.meta} href={authApi.startUrl('meta')}>Continue with Facebook</Button>
+        <Button variant="outlined" size="large" disabled={!providers.github} href={authApi.startUrl('github')}>Continue with GitHub</Button>
+		<Button variant="outlined" size="large" disabled={!providers.meta} href={authApi.startUrl('meta')}>Continue with Facebook</Button>
       </Stack>
     </Paper>
   </Box>

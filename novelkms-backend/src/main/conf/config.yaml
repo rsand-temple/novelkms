@@ -68,7 +68,7 @@ auth:
   github:
     clientId: {{GITHUB_CLIENT_ID}}
     clientSecret: {{GITHUB_CLIENT_SECRET}}
-    authorizationUrl: https://accounts.google.com/o/oauth2/v2/auth
-    tokenUrl: https://oauth2.googleapis.com/token
-    userInfoUrl: https://openidconnect.googleapis.com/v1/userinfo
-    scope: openid email profile
+    authorizationUrl: https://github.com/login/oauth/authorize
+    tokenUrl: https://github.com/login/oauth/access_token
+    userInfoUrl: https://api.github.com/user
+    scope: read:user user:email

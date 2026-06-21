@@ -49,7 +49,10 @@ public class AuthResource {
     @GET
     @Path("/providers")
     public Map<String, Boolean> providers() {
-        return Map.of("google", configured(config.google), "meta", configured(config.meta));
+        return Map.of(
+                "google", configured(config.google),
+                "github", configured(config.github),
+                "meta", configured(config.meta));
     }
 
     @GET
@@ -91,8 +94,19 @@ public class AuthResource {
             var pending = dao.findPendingRegistration(CryptoTokens.sha256(registrationToken));
             if (pending.isPresent()) {
                 var p = pending.get().profile();
-                return Response.ok(Map.of("state", "REGISTRATION_REQUIRED", "registration", Map.of(
-                        "emailAddress", p.email(), "firstName", nullToEmpty(p.firstName()), "lastName", nullToEmpty(p.lastName())))).build();
+                return Response.ok(
+                        Map.of(
+                                "state",
+                                "REGISTRATION_REQUIRED",
+                                "registration",
+                                Map.of(
+                                        "emailAddress",
+                                        p.email(),
+                                        "firstName",
+                                        nullToEmpty(p.firstName()),
+                                        "lastName",
+                                        nullToEmpty(p.lastName()))))
+                        .build();
             }
         }
         return Response.ok(Map.of("state", "UNAUTHENTICATED")).build();
@@ -113,8 +127,14 @@ public class AuthResource {
             return Response.status(Response.Status.BAD_REQUEST).entity(Map.of("error", "display_name_required")).build();
         var    user    = dao.register(pending.get(), body.firstName(), body.lastName(), body.displayName(), body.mobileNumber());
         String session = sessions.create(user, request.getRemoteAddr(), request.getHeader("User-Agent"));
-        return Response.ok(Map.of("state", "AUTHENTICATED", "user", Map.of("id", user.id(), "displayName", user.displayName(), "emailAddress", user.emailAddress())))
-                .cookie(sessionCookie(session), clearCookie(AuthConstants.REGISTRATION_COOKIE)).build();
+        return Response.ok(
+                Map.of(
+                        "state",
+                        "AUTHENTICATED",
+                        "user",
+                        Map.of("id", user.id(), "displayName", user.displayName(), "emailAddress", user.emailAddress())))
+                .cookie(sessionCookie(session), clearCookie(AuthConstants.REGISTRATION_COOKIE))
+                .build();
     }
 
     @POST

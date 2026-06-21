@@ -12,12 +12,14 @@ import java.util.Optional;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.richardsand.novelkms.NovelKmsConfig;
@@ -77,12 +79,16 @@ public class OAuthService implements AutoCloseable {
     }
 
     private OAuthProfile exchange(String providerName, String code) throws Exception {
-        NovelKmsConfig.OAuthProvider p    = provider(providerName);
-        String                       body = "client_id=" + enc(p.clientId) + "&client_secret=" + enc(p.clientSecret)
+        NovelKmsConfig.OAuthProvider p = provider(providerName);
+
+        String body = "client_id=" + enc(p.clientId) + "&client_secret=" + enc(p.clientSecret)
                 + "&code=" + enc(code) + "&redirect_uri=" + enc(callbackUrl(providerName))
                 + "&grant_type=authorization_code";
-        HttpPost                     post = new HttpPost(p.tokenUrl);
+
+        HttpPost post = new HttpPost(p.tokenUrl);
+        post.setHeader("Accept", "application/json");
         post.setEntity(new StringEntity(body, ContentType.APPLICATION_FORM_URLENCODED));
+
         JSONObject token       = executeJson(post);
         String     accessToken = token.getString("access_token");
 
@@ -91,28 +97,63 @@ public class OAuthService implements AutoCloseable {
             userInfo.addParameter("fields", "id,email,first_name,last_name").addParameter("access_token", accessToken);
         }
         HttpGet get = new HttpGet(userInfo.build());
-        if (!providerName.equalsIgnoreCase("meta"))
-            get.setHeader("Authorization", "Bearer " + accessToken);
+        get.setHeader("Accept", "application/json");
+        get.setHeader("Authorization", "Bearer " + accessToken);
         JSONObject profile = executeJson(get);
         if (providerName.equalsIgnoreCase("google")) {
-            return new OAuthProfile("GOOGLE", profile.getString("sub"), profile.optString("email", null),
-                    profile.optBoolean("email_verified", false), profile.optString("given_name", null), profile.optString("family_name", null));
+            return new OAuthProfile(
+                    "GOOGLE",
+                    profile.getString("sub"),
+                    profile.optString("email", null),
+                    profile.optBoolean("email_verified", false),
+                    profile.optString("given_name", null),
+                    profile.optString("family_name", null));
         }
-        return new OAuthProfile("META", profile.getString("id"), profile.optString("email", null), true,
-                profile.optString("first_name", null), profile.optString("last_name", null));
+        if (providerName.equalsIgnoreCase("github")) {
+            return githubProfile(profile, accessToken);
+        }
+        if (providerName.equalsIgnoreCase("meta")) {
+            return new OAuthProfile(
+                    "META",
+                    profile.getString("id"),
+                    profile.optString("email", null),
+                    true,
+                    profile.optString("first_name", null),
+                    profile.optString("last_name", null));
+        }
+        throw new IllegalArgumentException("OAuth provider is not configured: " + providerName);
     }
 
     private JSONObject executeJson(org.apache.http.client.methods.HttpUriRequest request) throws IOException {
         try (CloseableHttpResponse response = http.execute(request)) {
-            String body = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
-            if (response.getStatusLine().getStatusCode() / 100 != 2)
-                throw new IOException("OAuth endpoint returned " + response.getStatusLine().getStatusCode());
-            return new JSONObject(body);
+            String body   = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+            int    status = response.getStatusLine().getStatusCode();
+
+            if (status / 100 != 2) {
+                throw new IOException("OAuth endpoint returned " + status
+                        + " for " + request.getMethod() + " " + request.getURI()
+                        + ": " + truncateForLog(body, 1000));
+            }
+
+            String trimmed = body == null ? "" : body.trim();
+            if (!trimmed.startsWith("{")) {
+                throw new IOException("OAuth endpoint did not return JSON for "
+                        + request.getMethod() + " " + request.getURI()
+                        + ": " + truncateForLog(trimmed, 1000));
+            }
+
+            return new JSONObject(trimmed);
         }
     }
 
+    private static String truncateForLog(String value, int max) {
+        if (value == null)
+            return "";
+        return value.length() <= max ? value : value.substring(0, max) + "...";
+    }
+
     private NovelKmsConfig.OAuthProvider provider(String name) {
-        NovelKmsConfig.OAuthProvider p = name.equalsIgnoreCase("google") ? auth.google : name.equalsIgnoreCase("meta") ? auth.meta : null;
+        NovelKmsConfig.OAuthProvider p = name.equalsIgnoreCase("google") ? auth.google : name.equalsIgnoreCase("github") ? auth.github : name.equalsIgnoreCase("meta") ? auth.meta : null;
         if (p == null || p.clientId == null || p.clientSecret == null)
             throw new IllegalArgumentException("OAuth provider is not configured: " + name);
         return p;
@@ -133,5 +174,48 @@ public class OAuthService implements AutoCloseable {
     @Override
     public void close() throws Exception {
         http.close();
+    }
+
+    private OAuthProfile githubProfile(JSONObject profile, String accessToken) throws Exception {
+        String  subject  = String.valueOf(profile.get("id"));
+        String  email    = profile.optString("email", null);
+        boolean verified = false;
+
+        if (email != null && !email.isBlank()) {
+            verified = true; // GitHub's /user email is generally usable, but /user/emails is better.
+        }
+
+        if (email == null || email.isBlank() || !verified) {
+            HttpGet emailsGet = new HttpGet("https://api.github.com/user/emails");
+            emailsGet.setHeader("Authorization", "Bearer " + accessToken);
+            emailsGet.setHeader("Accept", "application/vnd.github+json");
+
+            JSONArray emails = executeJsonArray(emailsGet);
+
+            for (int i = 0; i < emails.length(); i++) {
+                JSONObject e = emails.getJSONObject(i);
+                if (e.optBoolean("primary", false) && e.optBoolean("verified", false)) {
+                    email = e.optString("email", null);
+                    verified = email != null && !email.isBlank();
+                    break;
+                }
+            }
+        }
+
+        String name  = profile.optString("name", null);
+        String login = profile.optString("login", null);
+
+        // GitHub doesn't give reliable first/last names.
+        // You could use login as suggested display name later, but OAuthProfile doesn't currently carry displayName.
+        return new OAuthProfile("GITHUB", subject, email, verified, login, name);
+    }
+
+    private JSONArray executeJsonArray(HttpUriRequest request) throws IOException {
+        try (CloseableHttpResponse response = http.execute(request)) {
+            String body = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+            if (response.getStatusLine().getStatusCode() / 100 != 2)
+                throw new IOException("OAuth endpoint returned " + response.getStatusLine().getStatusCode());
+            return new JSONArray(body);
+        }
     }
 }
