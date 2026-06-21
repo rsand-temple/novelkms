@@ -83,9 +83,10 @@ export function useDeleteCodex() {
     const qc = useQueryClient()
     return useMutation({
         mutationFn: ({ id }) => codexApi.delete(id),
-        onSuccess:  (_d, { projectId, bookId }) => {
-            if (projectId) qc.invalidateQueries({ queryKey: CODEX_KEYS.byProject(projectId) })
-            if (bookId)    qc.invalidateQueries({ queryKey: CODEX_KEYS.byBook(bookId) })
+        onSuccess:  () => {
+            // Broad invalidation covers both project-level and book-level queries
+            // so the toolbar delete doesn't need to know the codex's owner scope.
+            qc.invalidateQueries({ queryKey: ['codex'] })
         },
     })
 }

@@ -12,12 +12,14 @@ import AddChapterDialog       from './dialogs/AddChapterDialog'
 import AddSceneDialog         from './dialogs/AddSceneDialog'
 import AddPartDialog          from './dialogs/AddPartDialog'
 import AddPartChapterDialog   from './dialogs/AddPartChapterDialog'
+import AddCodexEntryDialog    from './dialogs/AddCodexEntryDialog'
 import DeleteConfirmDialog    from './dialogs/DeleteConfirmDialog'
 import ExportDialog          from './dialogs/ExportDialog'
 
 import { useScenes,       useReorderScenes,       useDeleteScene   } from '../../hooks/useScenes'
 import { useChapters,     useReorderChapters,     useDeleteChapter } from '../../hooks/useChapters'
 import { useDeleteBook }                                              from '../../hooks/useBooks'
+import { useDeleteCodex, useProjectCodex, useBookCodex, useCreateProjectCodex, useCreateBookCodex } from '../../hooks/useCodex'
 import {
 	useParts, usePartChapters,
 	useReorderParts, useReorderPartChapters,
@@ -58,6 +60,11 @@ function getDeleteContext(type, title) {
 			label: 'Delete Book',
 			message: `Delete book ${q}? This will permanently delete the book and all its parts, chapters, and scenes. This cannot be undone.`,
 		}
+		case 'codex':   return {
+			level: 'codex',
+			label: 'Delete Codex',
+			message: `Delete codex ${q}? This permanently deletes all categories and entries. This cannot be undone.`,
+		}
 		default: return null
 	}
 }
@@ -96,6 +103,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const [partDialogOpen,        setPartDialogOpen]        = useState(false)
 	const [partChapterDialogOpen, setPartChapterDialogOpen] = useState(false)
 	const [sceneDialogOpen,       setSceneDialogOpen]       = useState(false)
+	const [entryDialogOpen,       setEntryDialogOpen]       = useState(false)
 
 	// ── Sibling lists for Move Up / Down ──────────────────────────────────────
 	// These queries hit the TanStack Query cache already populated by the nav
@@ -135,7 +143,14 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const { mutate: deleteChapter, isPending: deletingChapter } = useDeleteChapter()
 	const { mutate: deletePart,    isPending: deletingPart    } = useDeletePart()
 	const { mutate: deleteBook,    isPending: deletingBook    } = useDeleteBook()
-	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook
+	const { mutate: deleteCodex,   isPending: deletingCodex   } = useDeleteCodex()
+	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook || deletingCodex
+
+	// ── Codex existence (for conditional "Add Codex" in project/book context menus)
+	const { data: ctxProjectCodex } = useProjectCodex(menuNode?.type === 'project' ? menuNode.id : null)
+	const { data: ctxBookCodex }    = useBookCodex(menuNode?.type === 'book' ? menuNode.id : null)
+	const { mutate: createProjectCodex } = useCreateProjectCodex()
+	const { mutate: createBookCodex }    = useCreateBookCodex()
 
 	// ── Public API ────────────────────────────────────────────────────────────
 
@@ -244,6 +259,14 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					setDeleteDialogOpen(false)
 				}},
 			)
+		} else if (deleteCtx.level === 'codex') {
+			deleteCodex(
+				{ id },
+				{ onSuccess: () => {
+					setSelection(s => ({ ...s, codexId: null, codexCategory: null, chapterId: null, sceneId: null }))
+					setDeleteDialogOpen(false)
+				}},
+			)
 		}
 	}
 
@@ -293,13 +316,15 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				}
 				disableRestoreFocus
 			>
-				{/* Rename — always first */}
-				<MenuItem dense onClick={() => menuNode && startRename(menuNode.id)}>
-					<ListItemIcon>
-						<DriveFileRenameOutlineIcon fontSize="small" />
-					</ListItemIcon>
-					<ListItemText>Rename</ListItemText>
-				</MenuItem>
+				{/* Rename — not available for codex categories (fixed) */}
+				{menuNode?.type !== 'codex-category' && (
+					<MenuItem dense onClick={() => menuNode && startRename(menuNode.id)}>
+						<ListItemIcon>
+							<DriveFileRenameOutlineIcon fontSize="small" />
+						</ListItemIcon>
+						<ListItemText>Rename</ListItemText>
+					</MenuItem>
+				)}
 
 				{/* Move Up / Move Down — only for orderable node types */}
 				{canReorder && <Divider />}
@@ -325,6 +350,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 						<ListItemText>Add Book</ListItemText>
 					</MenuItem>
 				)}
+				{menuNode?.type === 'project' && !ctxProjectCodex && (
+					<MenuItem dense onClick={() => { closeMenu(); createProjectCodex({ projectId: menuNode.id, data: {} }) }}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Add Codex</ListItemText>
+					</MenuItem>
+				)}
 				{isBookNode && (
 					<MenuItem dense onClick={() => { closeMenu(); setPartDialogOpen(true) }}>
 						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
@@ -337,6 +368,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 						<ListItemText>Add Chapter</ListItemText>
 					</MenuItem>
 				)}
+				{isBookNode && !ctxBookCodex && (
+					<MenuItem dense onClick={() => { closeMenu(); createBookCodex({ bookId: menuNode.id, data: {} }) }}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Add Codex</ListItemText>
+					</MenuItem>
+				)}
 				{menuNode?.type === 'part' && (
 					<MenuItem dense onClick={() => { closeMenu(); setPartChapterDialogOpen(true) }}>
 						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
@@ -347,6 +384,22 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					<MenuItem dense onClick={handleAddScene}>
 						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Add Scene</ListItemText>
+					</MenuItem>
+				)}
+				{menuNode?.type === 'codex-category' && (
+					<MenuItem dense onClick={() => { closeMenu(); setEntryDialogOpen(true) }}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>
+							{({
+								CHARACTER: 'Add Character',
+								VOICE:     'Add Voice Sheet',
+								PLOT:      'Add Plot Element',
+								WORLD:     'Add World Entry',
+								TIMELINE:  'Add Timeline Entry',
+								CANON:     'Add Canon Entry',
+								NOTES:     'Add Note',
+							})[menuNode.codexCategory] ?? 'Add Entry'}
+						</ListItemText>
 					</MenuItem>
 				)}
 
@@ -415,6 +468,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				open={sceneDialogOpen}
 				onClose={() => setSceneDialogOpen(false)}
 				chapterId={addSceneChapterId}
+			/>
+			<AddCodexEntryDialog
+				open={entryDialogOpen}
+				onClose={() => setEntryDialogOpen(false)}
+				chapterId={menuNode?.type === 'codex-category' ? menuNode.id : null}
+				codexCategory={menuNode?.codexCategory ?? null}
 			/>
 		</NavContextMenuContext.Provider>
 	)

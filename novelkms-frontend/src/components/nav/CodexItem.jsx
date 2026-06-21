@@ -1,51 +1,66 @@
 import { useState } from 'react'
-import { Box, Collapse, ListItemButton, ListItemIcon, ListItemText, IconButton, Tooltip } from '@mui/material'
+import { Box, Collapse, ListItemButton, ListItemIcon, ListItemText } from '@mui/material'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark'
-import AddIcon from '@mui/icons-material/Add'
-import DeleteIcon from '@mui/icons-material/Delete'
-import { useCodexChapters, useDeleteCodex } from '../../hooks/useCodex'
+import { useCodexChapters } from '../../hooks/useCodex'
+import { useNavContextMenu } from './NavContextMenuContext'
 import CodexCategoryItem from './CodexCategoryItem'
-import AddCodexChapterDialog from './dialogs/AddCodexChapterDialog'
-import DeleteConfirmDialog from './dialogs/DeleteConfirmDialog'
 
 /**
- * Codex container node — a Part-like container appearing last under its
- * project/book. Reuses the chapter/scene tables: its categories are chapters
- * (codex_id set, book_id null) and its entries are scenes. Clicking the row
- * only toggles expansion so it never disturbs the editor selection; the
- * inline action buttons add a category or delete the whole codex.
+ * Codex container node. Clicking selects the codex (enabling toolbar delete);
+ * right-click opens the context menu. Categories are rendered as children.
+ * Inline action buttons are intentionally absent — use the toolbar and context
+ * menu instead, matching the pattern of books and parts.
  */
 export default function CodexItem({ codex, scope, selection, setSelection }) {
-    const [open, setOpen]       = useState(true)   // open by default so seeded categories show
-    const [addOpen, setAddOpen] = useState(false)
-    const [delOpen, setDelOpen] = useState(false)
-
+    const [open, setOpen] = useState(true)
     const { data: chapters } = useCodexChapters(open ? codex.id : null)
-    const { mutate: deleteCodex, isPending: deleting } = useDeleteCodex()
+    const { openContextMenu } = useNavContextMenu()
 
     const basePl = scope === 'project' ? 4 : 7
 
-    const handleToggle = () => setOpen(o => !o)
+    const isSelected =
+        selection.codexId === codex.id &&
+        !selection.chapterId &&
+        !selection.sceneId
 
-    const handleDelete = () => {
-        deleteCodex(
-            { id: codex.id, projectId: codex.projectId, bookId: codex.bookId },
-            { onSuccess: () => {
-                setDelOpen(false)
-                // Clear selection if it was pointing inside this codex.
-                if (selection.codexId === codex.id) {
-                    setSelection((prev) => ({ ...prev, chapterId: null, sceneId: null, codexId: null, codexCategory: null }))
-                }
-            } }
-        )
+    const handleExpandToggle = (e) => {
+        e.stopPropagation()
+        setOpen(o => !o)
+    }
+
+    const handleClick = () => {
+        if (!open) setOpen(true)
+        setSelection((prev) => ({
+            ...prev,
+            bookId:        null,
+            partId:        null,
+            chapterId:     null,
+            sceneId:       null,
+            codexId:       codex.id,
+            codexCategory: null,
+        }))
+    }
+
+    const handleContextMenu = (e) => {
+        // Select so toolbar reflects the codex, then open context menu.
+        setSelection((prev) => ({
+            ...prev,
+            bookId: null, partId: null, chapterId: null, sceneId: null,
+            codexId: codex.id, codexCategory: null,
+        }))
+        openContextMenu(e, 'codex', {
+            id:        codex.id,
+            title:     codex.title || 'Codex',
+            projectId: selection.projectId,
+        })
     }
 
     return (
-        <Box sx={{ position: 'relative' }}>
-            <ListItemButton onClick={handleToggle} sx={{ pl: basePl, pr: 9 }}>
-                <ListItemIcon sx={{ minWidth: 28, cursor: 'pointer' }}>
+        <Box>
+            <ListItemButton selected={isSelected} onClick={handleClick} onContextMenu={handleContextMenu} sx={{ pl: basePl }}>
+                <ListItemIcon sx={{ minWidth: 28, cursor: 'pointer' }} onClick={handleExpandToggle}>
                     {open ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
                 </ListItemIcon>
                 <ListItemIcon sx={{ minWidth: 28 }}>
@@ -59,19 +74,6 @@ export default function CodexItem({ codex, scope, selection, setSelection }) {
                     } }}
                 />
             </ListItemButton>
-
-            <Box sx={{ position: 'absolute', right: 4, top: 0, height: 34, display: 'flex', alignItems: 'center' }}>
-                <Tooltip title="Add category">
-                    <IconButton size="small" onClick={() => setAddOpen(true)} aria-label="Add codex category">
-                        <AddIcon fontSize="inherit" />
-                    </IconButton>
-                </Tooltip>
-                <Tooltip title="Delete codex">
-                    <IconButton size="small" onClick={() => setDelOpen(true)} aria-label="Delete codex">
-                        <DeleteIcon fontSize="inherit" />
-                    </IconButton>
-                </Tooltip>
-            </Box>
 
             <Collapse in={open} unmountOnExit>
                 <Box>
@@ -87,16 +89,6 @@ export default function CodexItem({ codex, scope, selection, setSelection }) {
                     ))}
                 </Box>
             </Collapse>
-
-            <AddCodexChapterDialog open={addOpen} onClose={() => setAddOpen(false)} codexId={codex.id} />
-            <DeleteConfirmDialog
-                open={delOpen}
-                onClose={() => setDelOpen(false)}
-                onConfirm={handleDelete}
-                title="Delete Codex"
-                message="Delete this codex? This permanently deletes all of its categories and entries. This cannot be undone."
-                isPending={deleting}
-            />
         </Box>
     )
 }

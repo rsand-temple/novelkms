@@ -617,6 +617,7 @@ export default function App() {
 							sceneId={selection.sceneId}
 							projectId={selection.projectId}
 							bookId={selection.bookId}
+							codexId={selection.codexId}
 							templateType={selection.templateType}
 							templateScope={selection.templateScope}
 							onSelectBook={handleSelectBook}

@@ -192,7 +192,7 @@ function countWords(html) {
  * dimensions (6" × 9" Trade Paperback) so the canvas always renders.
  */
 export default function EditorPanel({
-	partId, chapterId, sceneId, projectId, bookId,
+	partId, chapterId, sceneId, projectId, bookId, codexId,
 	templateType, templateScope, onSelectBook,
 }) {
 	const { settings, updateSettings } = useProjectSettings(projectId);
@@ -202,7 +202,7 @@ export default function EditorPanel({
 	// ── Mode flags ────────────────────────────────────────────────────────────
 	const templateMode = !!templateType;
 	const singleSceneMode = !templateMode && !!sceneId;
-	const multiSceneMode = !templateMode && !singleSceneMode && !!chapterId;
+	const multiSceneMode = !templateMode && !singleSceneMode && !!chapterId && !codexId;
 	const partDraftMode = !templateMode && !chapterId && !sceneId && !!partId && !!bookId;
 	const bookDraftMode = !templateMode && !partId && !chapterId && !sceneId && !!bookId;
 	const aggregateDraftMode = partDraftMode || bookDraftMode;
@@ -235,7 +235,7 @@ export default function EditorPanel({
 
 	// Project shelf: project selected but no book open yet.
 	// Clicking a book card calls onSelectBook to open it.
-	const projectShelfMode = !templateMode && !bookId && !!projectId && !chapterId;
+	const projectShelfMode = !templateMode && !bookId && !chapterId && !sceneId && !!projectId;
 
 	// ── Chapter data for heading (multi-scene mode only) ──────────────────────
 	const { data: chapterData } = useChapter(multiSceneMode ? chapterId : null);
@@ -669,8 +669,11 @@ export default function EditorPanel({
 
 	// ── render ────────────────────────────────────────────────────────────────
 
-	// showEmptyState only when nothing at all is selected (not even a project).
-	const showEmptyState = !templateMode && !chapterId && !sceneId && !inPagePreviewMode && !projectShelfMode;
+	// showEmptyState only when nothing at all is selected (not even a project),
+	// OR when a codex container/category is selected (editing requires an entry).
+	const showEmptyState =
+		(!templateMode && !chapterId && !sceneId && !inPagePreviewMode && !projectShelfMode)
+		|| (!!codexId && !sceneId && !templateMode);
 
 	// Toolbar gets a live editor reference only when actually editing;
 	// preview and shelf modes pass null so the gear icon stays accessible
@@ -711,7 +714,11 @@ export default function EditorPanel({
 				/>
 			) : showEmptyState ? (
 				<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.disabled' }}>
-					<Typography variant="body1">Select a chapter or scene to begin editing.</Typography>
+					<Typography variant="body1">
+						{codexId
+							? 'Select an entry to begin editing, or add a new one.'
+							: 'Select a chapter or scene to begin editing.'}
+					</Typography>
 				</Box>
 			) : isLoading ? (
 				<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

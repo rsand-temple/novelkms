@@ -10,10 +10,12 @@ import AddChapterDialog from './dialogs/AddChapterDialog'
 import AddSceneDialog   from './dialogs/AddSceneDialog'
 import AddPartDialog        from './dialogs/AddPartDialog'
 import AddPartChapterDialog from './dialogs/AddPartChapterDialog'
+import AddCodexEntryDialog  from './dialogs/AddCodexEntryDialog'
 import DeleteConfirmDialog  from './dialogs/DeleteConfirmDialog'
 import { useScenes,   useReorderScenes,   useDeleteScene   } from '../../hooks/useScenes'
 import { useChapters, useReorderChapters, useDeleteChapter } from '../../hooks/useChapters'
 import { useBook,     useDeleteBook                        } from '../../hooks/useBooks'
+import { useDeleteCodex, useProjectCodex, useBookCodex, useCreateProjectCodex, useCreateBookCodex } from '../../hooks/useCodex'
 import {
 	useParts, usePartChapters,
 	useReorderParts, useReorderPartChapters,
@@ -22,11 +24,23 @@ import {
 
 // ── Add-button label ──────────────────────────────────────────────────────────
 
+const ADD_ENTRY_LABELS = {
+	CHARACTER: 'Add Character',
+	VOICE:     'Add Voice Sheet',
+	PLOT:      'Add Plot Element',
+	WORLD:     'Add World Entry',
+	TIMELINE:  'Add Timeline Entry',
+	CANON:     'Add Canon Entry',
+	NOTES:     'Add Note',
+}
+
 const getAddLabel = (selection) => {
+	if (selection.codexId && !selection.chapterId) return null   // codex container — categories are fixed
+	if (selection.codexId && selection.chapterId)  return ADD_ENTRY_LABELS[selection.codexCategory] ?? 'Add Entry'
 	if (selection.chapterId) return 'Add Scene'
 	if (selection.partId)    return 'Add Chapter'
 	if (selection.bookId)    return 'Add\u2026'    // "Add…" — opens a menu
-	if (selection.projectId) return 'Add Book'
+	if (selection.projectId) return 'Add\u2026'   // "Add…" — opens a menu
 	return 'Add Project'
 }
 
@@ -36,13 +50,24 @@ function getDeleteContext(selection, name) {
 	const q = name ? `\u201c${name}\u201d` : ''
 	if (selection.sceneId) return {
 		level:   'scene',
-		label:   'Delete Scene',
-		message: `Delete scene ${q}? This will permanently delete the scene and all its content. This cannot be undone.`,
+		label:   selection.codexId ? 'Delete Entry' : 'Delete Scene',
+		message: selection.codexId
+			? `Delete entry ${q}? This will permanently delete the entry and all its content. This cannot be undone.`
+			: `Delete scene ${q}? This will permanently delete the scene and all its content. This cannot be undone.`,
 	}
-	if (selection.chapterId) return {
-		level:   'chapter',
-		label:   'Delete Chapter',
-		message: `Delete chapter ${q}? This will permanently delete the chapter and all its scenes. This cannot be undone.`,
+	if (selection.chapterId) {
+		// Codex categories are hardcoded — cannot be deleted.
+		if (selection.codexId) return null
+		return {
+			level:   'chapter',
+			label:   'Delete Chapter',
+			message: `Delete chapter ${q}? This will permanently delete the chapter and all its scenes. This cannot be undone.`,
+		}
+	}
+	if (selection.codexId) return {
+		level:   'codex',
+		label:   'Delete Codex',
+		message: `Delete codex ${q}? This permanently deletes all categories and entries. This cannot be undone.`,
 	}
 	if (selection.partId) return {
 		level:   'part',
@@ -69,6 +94,7 @@ export default function NavToolbar({ selection, setSelection }) {
 	const [sceneDialogOpen,      setSceneDialogOpen]      = useState(false)
 	const [partDialogOpen,       setPartDialogOpen]       = useState(false)
 	const [partChapterDialogOpen, setPartChapterDialogOpen] = useState(false)
+	const [entryDialogOpen,      setEntryDialogOpen]      = useState(false)
 	const [deleteDialogOpen,     setDeleteDialogOpen]     = useState(false)
 	const [addMenuAnchor,        setAddMenuAnchor]        = useState(null)
 
@@ -79,6 +105,7 @@ export default function NavToolbar({ selection, setSelection }) {
 	const isDirectChapterContext = isChapterContext && !selection.partId
 	const isPartContext          = !selection.chapterId && !!selection.partId
 	const isBookContext          = !selection.partId && !selection.chapterId && !!selection.bookId
+	const isProjectContext       = !selection.bookId && !selection.partId && !selection.chapterId && !!selection.projectId
 
 	// ── sibling lists (for reordering) ───────────────────────────────────────
 	// Each query is enabled only for the context that needs it to avoid over-fetching.
@@ -88,6 +115,12 @@ export default function NavToolbar({ selection, setSelection }) {
 	const { data: partChapters  } = usePartChapters(isChapterInPartContext ? selection.partId : null)
 	const { data: parts         } = useParts(isPartContext           ? selection.bookId    : null)
 	const { data: book          } = useBook(isBookContext            ? selection.bookId    : null)
+
+	// ── Codex existence (for conditional "Add Codex" in the Add menu) ─────
+	const { data: projectCodex } = useProjectCodex(isProjectContext ? selection.projectId : null)
+	const { data: bookCodex }    = useBookCodex(isBookContext ? selection.bookId : null)
+	const { mutate: createProjectCodex } = useCreateProjectCodex()
+	const { mutate: createBookCodex }    = useCreateBookCodex()
 
 	const { mutate: reorderScenes        } = useReorderScenes()
 	const { mutate: reorderChapters      } = useReorderChapters()
@@ -134,7 +167,8 @@ export default function NavToolbar({ selection, setSelection }) {
 	const { mutate: deleteChapter, isPending: deletingChapter } = useDeleteChapter()
 	const { mutate: deletePart,    isPending: deletingPart    } = useDeletePart()
 	const { mutate: deleteBook,    isPending: deletingBook    } = useDeleteBook()
-	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook
+	const { mutate: deleteCodex,   isPending: deletingCodex   } = useDeleteCodex()
+	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook || deletingCodex
 
 	// ── reorder handlers ──────────────────────────────────────────────────────
 
@@ -191,6 +225,11 @@ export default function NavToolbar({ selection, setSelection }) {
 				{ id: selection.bookId, projectId: selection.projectId },
 				{ onSuccess: () => { setSelection(s => ({ ...s, bookId: null, partId: null, chapterId: null, sceneId: null })); setDeleteDialogOpen(false) } }
 			)
+		} else if (level === 'codex') {
+			deleteCodex(
+				{ id: selection.codexId },
+				{ onSuccess: () => { setSelection(s => ({ ...s, codexId: null, codexCategory: null, chapterId: null, sceneId: null })); setDeleteDialogOpen(false) } }
+			)
 		}
 	}
 
@@ -199,10 +238,11 @@ export default function NavToolbar({ selection, setSelection }) {
 	const label = getAddLabel(selection)
 
 	const handleAdd = (e) => {
-		if (selection.chapterId)      setSceneDialogOpen(true)
+		if (selection.codexId && selection.chapterId) setEntryDialogOpen(true)
+		else if (selection.chapterId)      setSceneDialogOpen(true)
 		else if (selection.partId)    setPartChapterDialogOpen(true)
 		else if (selection.bookId)    setAddMenuAnchor(e.currentTarget)  // opens menu
-		else if (selection.projectId) setBookDialogOpen(true)
+		else if (selection.projectId) setAddMenuAnchor(e.currentTarget)  // opens menu
 		else                          setProjectDialogOpen(true)
 	}
 
@@ -245,13 +285,15 @@ export default function NavToolbar({ selection, setSelection }) {
 			</Box>
 
 			{/* Right: Add button */}
-			<Tooltip title={label}>
-				<Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={handleAdd}>
-					{label}
+			{label && (
+				<Tooltip title={label}>
+					<Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={handleAdd}>
+						{label}
 				</Button>
 			</Tooltip>
+			)}
 
-			{/* Book-context add menu: Add Part / Add Chapter */}
+			{/* Context-sensitive add menu: Project or Book scope */}
 			<Menu
 				anchorEl={addMenuAnchor}
 				open={Boolean(addMenuAnchor)}
@@ -259,12 +301,33 @@ export default function NavToolbar({ selection, setSelection }) {
 				anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
 				transformOrigin={{ vertical: 'top', horizontal: 'right' }}
 			>
-				<MenuItem dense onClick={() => { setAddMenuAnchor(null); setPartDialogOpen(true) }}>
-					Add Part
-				</MenuItem>
-				<MenuItem dense onClick={() => { setAddMenuAnchor(null); setChapterDialogOpen(true) }}>
-					Add Chapter
-				</MenuItem>
+				{/* Project-scope items */}
+				{isProjectContext && (
+					<MenuItem dense onClick={() => { setAddMenuAnchor(null); setBookDialogOpen(true) }}>
+						Add Book
+					</MenuItem>
+				)}
+				{isProjectContext && !projectCodex && (
+					<MenuItem dense onClick={() => { setAddMenuAnchor(null); createProjectCodex({ projectId: selection.projectId, data: {} }) }}>
+						Add Codex
+					</MenuItem>
+				)}
+				{/* Book-scope items */}
+				{isBookContext && (
+					<MenuItem dense onClick={() => { setAddMenuAnchor(null); setPartDialogOpen(true) }}>
+						Add Part
+					</MenuItem>
+				)}
+				{isBookContext && (
+					<MenuItem dense onClick={() => { setAddMenuAnchor(null); setChapterDialogOpen(true) }}>
+						Add Chapter
+					</MenuItem>
+				)}
+				{isBookContext && !bookCodex && (
+					<MenuItem dense onClick={() => { setAddMenuAnchor(null); createBookCodex({ bookId: selection.bookId, data: {} }) }}>
+						Add Codex
+					</MenuItem>
+				)}
 			</Menu>
 
 			{/* Add dialogs */}
@@ -272,6 +335,7 @@ export default function NavToolbar({ selection, setSelection }) {
 			<AddBookDialog    open={bookDialogOpen}    onClose={() => setBookDialogOpen(false)}    projectId={selection.projectId} />
 			<AddChapterDialog open={chapterDialogOpen} onClose={() => setChapterDialogOpen(false)} bookId={selection.bookId} />
 			<AddSceneDialog   open={sceneDialogOpen}   onClose={() => setSceneDialogOpen(false)}   chapterId={selection.chapterId} />
+			<AddCodexEntryDialog open={entryDialogOpen} onClose={() => setEntryDialogOpen(false)} chapterId={selection.chapterId} codexCategory={selection.codexCategory} />
 			<AddPartDialog
 				open={partDialogOpen}
 				onClose={() => setPartDialogOpen(false)}
