@@ -22,11 +22,13 @@ server:
   requestLog:
     appenders:
       - type: console
-#      - type: file
-#        timeZone: America/New_York
-#        currentLogFilename: /logs/novelkms-access.log
-#        archivedLogFilenamePattern: /logs/novelkms-access-%d.log.gz
-#        archivedFileCount: 14
+{% if LOGTOFILE == "true" %}
+      - type: file
+        timeZone: America/New_York
+        currentLogFilename: {{ LOGPATH | d('/logs', true)}}/novelkms-access.log
+        archivedLogFilenamePattern: {{ LOGPATH | d('/logs', true)}}/novelkms-access-%d.log.gz
+        archivedFileCount: 14
+{% endif %}
 
 logging:
   level: INFO
@@ -35,27 +37,38 @@ logging:
     timeZone: America/New_York
   appenders:
     - type: console
-#    - type: file
-#      currentLogFilename: /logs/novelkms.log
-#      archivedLogFilenamePattern: /logs/novelkms-%d.log.gz
-#      archivedFileCount: 14
+{% if LOGTOFILE == "true" %}
+    - type: file
+      currentLogFilename: {{ LOGPATH | d('/logs', true)}}/novelkms.log
+      archivedLogFilenamePattern: {{ LOGPATH | d('/logs', true)}}/novelkms-%d.log.gz
+      archivedFileCount: 14
+{% endif %}
   
 database:
   #url: jdbc:postgresql://localhost:5432/postgres
-  adminUser: admin
-  adminPwd: admin123
-  url: jdbc:h2:C:/dev/temp/novelkmsdb;MODE=PostgreSQL;AUTO_SERVER=TRUE
+  #url: jdbc:h2:C:/dev/temp/novelkmsdb;MODE=PostgreSQL;AUTO_SERVER=TRUE
+  adminUser: {{DB_USER | d('admin')}}
+  adminPwd: {{DB_PASSWORD | d('admin123')}}
+  url: {{DB_URL | d('jdbc:h2:C:/dev/temp/novelkmsdb;MODE=PostgreSQL;AUTO_SERVER=TRUE')}}
 
 auth:
-  publicBaseUrl: http://localhost:8080
-  frontendBaseUrl: http://localhost:3000
-  secureCookies: false
+  publicBaseUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:8080', true)}}
+  frontendBaseUrl: {{NOVELKMS_FRONTEND_BASE_URL | d('http://localhost:3000', true)}}
+  secureCookies: {{NOVELKMS_SECURE_COOKIES | d('false', true)}}
   sessionDays: 30
 
   google:
-    clientId: ${GOOGLE_CLIENT_ID}
-    clientSecret: ${GOOGLE_CLIENT_SECRET}
+    clientId: {{GOOGLE_CLIENT_ID}}
+    clientSecret: {{GOOGLE_CLIENT_SECRET}}
     authorizationUrl: https://accounts.google.com/o/oauth2/v2/auth
     tokenUrl: https://oauth2.googleapis.com/token
     userInfoUrl: https://openidconnect.googleapis.com/v1/userinfo
-    scope: openid email profile 
+    scope: openid email profile
+
+  github:
+    clientId: {{GITHUB_CLIENT_ID}}
+    clientSecret: {{GITHUB_CLIENT_SECRET}}
+    authorizationUrl: https://accounts.google.com/o/oauth2/v2/auth
+    tokenUrl: https://oauth2.googleapis.com/token
+    userInfoUrl: https://openidconnect.googleapis.com/v1/userinfo
+    scope: openid email profile

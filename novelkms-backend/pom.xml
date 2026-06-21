@@ -30,6 +30,7 @@
 		<javax.mail>1.6.2</javax.mail>
 		<jersey.version>3.0.18</jersey.version>
 		<jetty.version>9.4.58.v20250814</jetty.version>
+		<jinjava.version>2.8.3</jinjava.version>
 		<json.version>20240303</json.version>
 		<jsoup.version>1.22.2</jsoup.version>
 		<junit.version>5.14.4</junit.version>
@@ -259,6 +260,12 @@
 			<groupId>org.apache.poi</groupId>
 			<artifactId>poi-ooxml</artifactId>
 			<version>${poi-ooxml.version}</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>com.hubspot.jinjava</groupId>
+			<artifactId>jinjava</artifactId>
+			<version>${jinjava.version}</version>
 		</dependency>
 
 		<!-- Jsoup HTML parser — used by ExportService to convert TipTap HTML to DOCX -->

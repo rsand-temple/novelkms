@@ -32,6 +32,7 @@ public class NovelKmsConfig extends Configuration {
         public int           sessionDays     = 30;
         public OAuthProvider google;
         public OAuthProvider meta;
+        public OAuthProvider github;
     }
 
     @JsonProperty

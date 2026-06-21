@@ -42,22 +42,19 @@ import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 
 import io.dropwizard.assets.AssetsBundle;
-import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
-import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
 
 public class NovelKmsServer extends Application<NovelKmsConfig> {
-    private final Logger          logger     = LoggerFactory.getLogger(getClass());
+    private static final Logger          logger     = LoggerFactory.getLogger(NovelKmsServer.class);
     private boolean               isPostgres = false;
     private final BasicDataSource ds         = new BasicDataSource();
 
     @Override
     public void initialize(Bootstrap<NovelKmsConfig> bootstrap) {
-        bootstrap.setConfigurationSourceProvider(new SubstitutingSourceProvider(
-                bootstrap.getConfigurationSourceProvider(),
-                new EnvironmentVariableSubstitutor(true)));
+        bootstrap.setConfigurationSourceProvider(
+                new Jinja2ConfigurationSourceProvider(bootstrap.getConfigurationSourceProvider()));
 
         bootstrap.addBundle(
                 new AssetsBundle(
@@ -80,6 +77,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
             ds.setDriverClassName("org.h2.Driver");
         }
 
+        logger.info("Database URL: {}", jdbcUrl);
         ds.setUrl(jdbcUrl);
         ds.setUsername(adminUser);
         ds.setPassword(adminPwd);
@@ -107,17 +105,17 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 .load()
                 .migrate();
 
-        ProjectDao      projectDao      = new ProjectDao(ds);
-        BookDao         bookDao         = new BookDao(ds);
-        PartDao         partDao         = new PartDao(ds);
-        ChapterDao      chapterDao      = new ChapterDao(ds);
-        CodexDao        codexDao        = new CodexDao(ds);
+        ProjectDao       projectDao       = new ProjectDao(ds);
+        BookDao          bookDao          = new BookDao(ds);
+        PartDao          partDao          = new PartDao(ds);
+        ChapterDao       chapterDao       = new ChapterDao(ds);
+        CodexDao         codexDao         = new CodexDao(ds);
         CodexCategoryDao codexCategoryDao = new CodexCategoryDao(ds);
-        SceneDao        sceneDao        = new SceneDao(ds);
-        TemplateDao     templateDao     = new TemplateDao(ds);
-        UserStyleDao    userStyleDao    = new UserStyleDao(ds);
-        AuthDao         authDao         = new AuthDao(ds);
-        TenantAccessDao tenantAccessDao = new TenantAccessDao(ds);
+        SceneDao         sceneDao         = new SceneDao(ds);
+        TemplateDao      templateDao      = new TemplateDao(ds);
+        UserStyleDao     userStyleDao     = new UserStyleDao(ds);
+        AuthDao          authDao          = new AuthDao(ds);
+        TenantAccessDao  tenantAccessDao  = new TenantAccessDao(ds);
 
         ImportService  importService  = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
         ExportService  exportService  = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao);
