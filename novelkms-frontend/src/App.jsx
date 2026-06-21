@@ -17,6 +17,7 @@ import EditorPanel from './components/layout/EditorPanel'
 import PropertiesPanel from './components/layout/PropertiesPanel'
 import ImportDialog from './components/nav/dialogs/ImportDialog'
 import ExportDialog from './components/nav/dialogs/ExportDialog'
+import { LogoMark } from './components/branding/Logo'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
 
@@ -309,23 +310,26 @@ export default function App() {
 			}}>
 				<AppBar position="static" elevation={0}>
 					<Toolbar sx={{ minHeight: '54px !important', px: 2 }}>
-						<Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
-							<Typography
-								variant="h6"
-								sx={{ fontWeight: 750, letterSpacing: 0.5, lineHeight: 1 }}
-							>
-								NovelKMS
-							</Typography>
-							<Typography
-								variant="caption"
-								sx={{
-									display: { xs: 'none', md: 'block' },
-									color: 'rgba(255,255,255,0.62)',
-									letterSpacing: 0.25,
-								}}
-							>
-								Novel Authoring Workspace
-							</Typography>
+						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+							<LogoMark size={34} />
+							<Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
+								<Typography
+									variant="h6"
+									sx={{ fontWeight: 750, letterSpacing: 0.5, lineHeight: 1 }}
+								>
+									NovelKMS
+								</Typography>
+								<Typography
+									variant="caption"
+									sx={{
+										display: { xs: 'none', md: 'block' },
+										color: 'rgba(255,255,255,0.62)',
+										letterSpacing: 0.25,
+									}}
+								>
+									Novel Authoring Workspace
+								</Typography>
+							</Box>
 						</Box>
 
 						<Box sx={{ flexGrow: 1 }} />

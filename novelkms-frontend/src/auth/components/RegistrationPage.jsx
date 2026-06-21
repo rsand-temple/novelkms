@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../../api/auth'
 import { useAuth } from '../AuthContext'
+import { LogoMark } from '../../components/branding/Logo'
 
 export default function RegistrationPage() {
   const { registration, refresh } = useAuth()
@@ -36,6 +37,12 @@ export default function RegistrationPage() {
     <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', bgcolor: 'background.default', p: 2 }}>
       <Paper component="form" onSubmit={submit} elevation={3} sx={{ width: '100%', maxWidth: 520, p: 4 }}>
         <Stack spacing={2}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+            <LogoMark size={28} onDark={false} />
+            <Typography sx={{ fontFamily: 'Georgia, "Times New Roman", serif', fontWeight: 700, color: 'primary.main' }}>
+              NovelKMS
+            </Typography>
+          </Box>
           <Box>
             <Typography variant="h5" fontWeight={700}>Complete registration</Typography>
             <Typography color="text.secondary">Your OAuth provider verified your identity. Choose how you appear in NovelKMS.</Typography>

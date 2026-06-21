@@ -4,35 +4,40 @@ import { alpha, createTheme } from '@mui/material/styles'
  * NovelKMS application theme.
  *
  * The intent is a restrained writing/research workspace rather than a
- * stock Material dashboard: warm paper-like surfaces, slate application
+ * stock Material dashboard: warm paper-like surfaces, navy application
  * chrome, compact controls, subtle borders, and minimal elevation.
+ *
+ * Palette is keyed off the commissioned brand assets (public/brand/) -
+ * navyDark matches the icon's flattened background almost exactly so the
+ * mark drops into the AppBar with no visible seam; paper matches the
+ * assets' cream background the same way.
  */
 const colors = {
-	ink: '#26343D',
-	inkDark: '#1C282F',
-	inkLight: '#526570',
-	copper: '#9A6846',
-	copperDark: '#744A30',
-	desk: '#E6E3DC',
-	paper: '#FAF9F5',
-	panel: '#F4F2EC',
-	line: '#D2CEC4',
-	text: '#272C2F',
-	muted: '#687076',
+	navy: '#1E3050',
+	navyDark: '#0E1B31',
+	navyLight: '#56647F',
+	gold: '#B8915C',
+	goldDark: '#8A6738',
+	desk: '#ECE4D6',
+	paper: '#FBF4EC',
+	panel: '#F7F0E5',
+	line: '#DED2BC',
+	text: '#23293A',
+	muted: '#6E6A5F',
 }
 
 const theme = createTheme({
 	palette: {
 		mode: 'light',
 		primary: {
-			main: colors.ink,
-			dark: colors.inkDark,
-			light: colors.inkLight,
+			main: colors.navy,
+			dark: colors.navyDark,
+			light: colors.navyLight,
 			contrastText: '#FFFFFF',
 		},
 		secondary: {
-			main: colors.copper,
-			dark: colors.copperDark,
+			main: colors.gold,
+			dark: colors.goldDark,
 			contrastText: '#FFFFFF',
 		},
 		background: {
@@ -45,9 +50,9 @@ const theme = createTheme({
 		},
 		divider: colors.line,
 		action: {
-			hover: alpha(colors.ink, 0.065),
-			selected: alpha(colors.copper, 0.14),
-			focus: alpha(colors.copper, 0.20),
+			hover: alpha(colors.navy, 0.065),
+			selected: alpha(colors.gold, 0.14),
+			focus: alpha(colors.gold, 0.20),
 		},
 	},
 
@@ -96,11 +101,11 @@ const theme = createTheme({
 
 	shadows: [
 		'none',
-		'0 1px 2px rgba(28, 40, 47, 0.10)',
-		'0 2px 6px rgba(28, 40, 47, 0.11)',
-		'0 4px 10px rgba(28, 40, 47, 0.12)',
-		'0 6px 14px rgba(28, 40, 47, 0.13)',
-		...Array(20).fill('0 8px 20px rgba(28, 40, 47, 0.14)'),
+		'0 1px 2px rgba(14, 27, 49, 0.12)',
+		'0 2px 6px rgba(14, 27, 49, 0.13)',
+		'0 4px 10px rgba(14, 27, 49, 0.14)',
+		'0 6px 14px rgba(14, 27, 49, 0.15)',
+		...Array(20).fill('0 8px 20px rgba(14, 27, 49, 0.16)'),
 	],
 
 	components: {
@@ -111,29 +116,29 @@ const theme = createTheme({
 				},
 				'*': {
 					scrollbarWidth: 'thin',
-					scrollbarColor: `${alpha(colors.ink, 0.30)} transparent`,
+					scrollbarColor: `${alpha(colors.navy, 0.30)} transparent`,
 				},
 				'*::-webkit-scrollbar': {
 					width: 10,
 					height: 10,
 				},
 				'*::-webkit-scrollbar-thumb': {
-					backgroundColor: alpha(colors.ink, 0.24),
+					backgroundColor: alpha(colors.navy, 0.24),
 					border: '3px solid transparent',
 					backgroundClip: 'padding-box',
 					borderRadius: 10,
 				},
 				'*::-webkit-scrollbar-thumb:hover': {
-					backgroundColor: alpha(colors.ink, 0.38),
+					backgroundColor: alpha(colors.navy, 0.38),
 					backgroundClip: 'padding-box',
 				},
 				'.MuiToolbar-root + .MuiToolbar-root': {
-					borderTopColor: alpha(colors.ink, 0.10),
+					borderTopColor: alpha(colors.navy, 0.10),
 				},
 				'.MuiToolbar-root .MuiDivider-vertical': {
 					marginTop: 5,
 					marginBottom: 5,
-					borderColor: alpha(colors.ink, 0.14),
+					borderColor: alpha(colors.navy, 0.14),
 				},
 			},
 		},
@@ -144,7 +149,7 @@ const theme = createTheme({
 			},
 			styleOverrides: {
 				root: {
-					backgroundColor: colors.inkDark,
+					backgroundColor: colors.navyDark,
 					backgroundImage: 'none',
 					borderBottom: `1px solid ${alpha('#FFFFFF', 0.11)}`,
 				},
@@ -217,8 +222,8 @@ const theme = createTheme({
 					border: '1px solid transparent',
 					transition: 'background-color 120ms ease, border-color 120ms ease, color 120ms ease',
 					'&:hover': {
-						backgroundColor: alpha(colors.ink, 0.075),
-						borderColor: alpha(colors.ink, 0.10),
+						backgroundColor: alpha(colors.navy, 0.075),
+						borderColor: alpha(colors.navy, 0.10),
 					},
 					'&.Mui-disabled': {
 						borderColor: 'transparent',
@@ -260,7 +265,7 @@ const theme = createTheme({
 					},
 					'&:hover': {
 						backgroundColor: '#FFFFFF',
-						borderColor: colors.inkLight,
+						borderColor: colors.navyLight,
 					},
 					'&:focus': {
 						backgroundColor: '#FFFFFF',
@@ -290,7 +295,7 @@ const theme = createTheme({
 				root: {
 					backgroundColor: alpha('#FFFFFF', 0.55),
 					'&:hover .MuiOutlinedInput-notchedOutline': {
-						borderColor: colors.inkLight,
+						borderColor: colors.navyLight,
 					},
 					'&.Mui-focused .MuiOutlinedInput-notchedOutline': {
 						borderWidth: 1,
@@ -332,10 +337,10 @@ const theme = createTheme({
 					minHeight: 34,
 					fontSize: '0.875rem',
 					'&.Mui-selected': {
-						backgroundColor: alpha(colors.copper, 0.14),
+						backgroundColor: alpha(colors.gold, 0.14),
 					},
 					'&.Mui-selected:hover': {
-						backgroundColor: alpha(colors.copper, 0.20),
+						backgroundColor: alpha(colors.gold, 0.20),
 					},
 				},
 			},
@@ -348,9 +353,9 @@ const theme = createTheme({
 					marginLeft: 4,
 					marginRight: 4,
 					'&.Mui-selected': {
-						backgroundColor: alpha(colors.copper, 0.15),
+						backgroundColor: alpha(colors.gold, 0.15),
 						'&:hover': {
-							backgroundColor: alpha(colors.copper, 0.21),
+							backgroundColor: alpha(colors.gold, 0.21),
 						},
 					},
 				},
@@ -407,11 +412,11 @@ const theme = createTheme({
 			},
 			styleOverrides: {
 				tooltip: {
-					backgroundColor: colors.inkDark,
+					backgroundColor: colors.navyDark,
 					fontSize: '0.75rem',
 				},
 				arrow: {
-					color: colors.inkDark,
+					color: colors.navyDark,
 				},
 			},
 		},
@@ -427,7 +432,7 @@ const theme = createTheme({
 		MuiTabs: {
 			styleOverrides: {
 				indicator: {
-					backgroundColor: colors.copper,
+					backgroundColor: colors.gold,
 					height: 2,
 				},
 			},
