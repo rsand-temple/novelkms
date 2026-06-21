@@ -11,9 +11,9 @@ import java.util.UUID;
 
 import javax.sql.DataSource;
 
-import com.richardsand.novelkms.auth.EmailNormalizer;
 import com.richardsand.novelkms.auth.OAuthProfile;
 import com.richardsand.novelkms.model.AppUser;
+import com.richardsand.novelkms.utils.EmailNormalizer;
 
 public class AuthDao {
     public record OAuthState(String stateHash, String provider, String returnPath, Instant expiresAt) {}

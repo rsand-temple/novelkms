@@ -1,4 +1,4 @@
-package com.richardsand.novelkms.auth;
+package com.richardsand.novelkms.utils;
 
 import java.util.Locale;
 
