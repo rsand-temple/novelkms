@@ -17,10 +17,13 @@ import { useSearch } from '../../search/SearchContext'
  *
  * DnD listeners are disabled while the inline rename InputBase is active.
  *
- * handleClick sets partId + chapterId + sceneId atomically so NavToolbar always
- * has the correct sibling-list context for the ↑↓ arrows.
+ * handleClick sets bookId + partId + chapterId + sceneId atomically so
+ * NavToolbar always has the correct sibling-list context for the ↑↓ arrows,
+ * and so EditorPanel never falls back to a stale/unset prev.bookId. bookId
+ * defaults to null for codex entries (which are not book-scoped); ChapterItem
+ * passes its real bookId for manuscript scenes.
  */
-export default function SceneItem({ scene, chapterId, partId, selection, setSelection, depth = 0 }) {
+export default function SceneItem({ scene, chapterId, partId, bookId = null, selection, setSelection, depth = 0 }) {
 	const isSelected = selection.sceneId === scene.id
 	const search = useSearch()
 	const matchCount = search.counts.scene[scene.id] ?? 0
@@ -83,6 +86,7 @@ export default function SceneItem({ scene, chapterId, partId, selection, setSele
 	const handleClick = () => {
 		setSelection((prev) => ({
 			...prev,
+			bookId,
 			partId:    partId ?? null,
 			chapterId,
 			sceneId:   scene.id,
@@ -92,6 +96,7 @@ export default function SceneItem({ scene, chapterId, partId, selection, setSele
 	const handleContextMenu = (e) => {
 		setSelection((prev) => ({
 			...prev,
+			bookId,
 			partId:    partId ?? null,
 			chapterId,
 			sceneId:   scene.id,
@@ -101,7 +106,7 @@ export default function SceneItem({ scene, chapterId, partId, selection, setSele
 			title:     scene.title,
 			chapterId,
 			partId:    partId ?? null,
-			bookId:    selection.bookId,
+			bookId,
 			projectId: selection.projectId,
 		})
 	}

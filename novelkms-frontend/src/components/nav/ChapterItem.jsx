@@ -99,8 +99,12 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 
 	const handleClick = () => {
 		if (!open) setOpen(true)
+		// Always set bookId explicitly — the user may have expanded the book
+		// node via the arrow without clicking the row, leaving prev.bookId
+		// unset (or stale from a previously selected book).
 		setSelection((prev) => ({
 			...prev,
+			bookId,
 			partId:    chapter.partId ?? null,
 			chapterId: chapter.id,
 			sceneId:   null,
@@ -110,6 +114,7 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 	const handleContextMenu = (e) => {
 		setSelection((prev) => ({
 			...prev,
+			bookId,
 			partId:    chapter.partId ?? null,
 			chapterId: chapter.id,
 			sceneId:   null,
@@ -192,6 +197,7 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 							scene={scene}
 							chapterId={chapter.id}
 							partId={partId}
+							bookId={bookId}
 							selection={selection}
 							setSelection={setSelection}
 							depth={depth}

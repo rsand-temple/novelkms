@@ -19,7 +19,7 @@ const colors = {
 	gold: '#B8915C',
 	goldDark: '#8A6738',
 	desk: '#ECE4D6',
-	paper: '#FBF4EC',
+	paper: '#FDFAF5',
 	panel: '#F7F0E5',
 	line: '#DED2BC',
 	text: '#23293A',

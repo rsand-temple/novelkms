@@ -80,11 +80,14 @@ export default function BookItem({ book, selection, setSelection }) {
 
 	const handleClick = () => {
 		if (!open) setOpen(true)
-		setSelection((prev) => ({ ...prev, bookId: book.id, partId: null, chapterId: null, sceneId: null }))
+		// Always set projectId explicitly — the user may have expanded the
+		// project node via the arrow without clicking the row, leaving
+		// prev.projectId unset (or stale from a previously selected project).
+		setSelection((prev) => ({ ...prev, projectId: book.projectId, bookId: book.id, partId: null, chapterId: null, sceneId: null }))
 	}
 
 	const handleContextMenu = (e) => {
-		setSelection((prev) => ({ ...prev, bookId: book.id, partId: null, chapterId: null, sceneId: null }))
+		setSelection((prev) => ({ ...prev, projectId: book.projectId, bookId: book.id, partId: null, chapterId: null, sceneId: null }))
 		openContextMenu(e, 'book', {
 			id:        book.id,
 			title:     book.title,
