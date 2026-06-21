@@ -30,7 +30,11 @@ import jakarta.ws.rs.core.Response;
 @Path("/auth")
 @Produces(MediaType.APPLICATION_JSON)
 public class AuthResource {
-    public record RegistrationRequest(@NotBlank String displayName, String firstName, String lastName, String mobileNumber) {
+    public record RegistrationRequest(
+            @NotBlank String displayName,
+            String firstName,
+            String lastName,
+            String mobileNumber) {
     }
 
     private final OAuthService        oauth;
