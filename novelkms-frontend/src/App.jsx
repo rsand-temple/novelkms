@@ -7,6 +7,7 @@ import DescriptionIcon from '@mui/icons-material/Description'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import FileUploadIcon from '@mui/icons-material/FileUpload'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
@@ -17,6 +18,8 @@ import EditorPanel from './components/layout/EditorPanel'
 import PropertiesPanel from './components/layout/PropertiesPanel'
 import ImportDialog from './components/nav/dialogs/ImportDialog'
 import ExportDialog from './components/nav/dialogs/ExportDialog'
+import AiSettingsDialog from './components/ai/AiSettingsDialog'
+import AiReviewDialog from './components/ai/AiReviewDialog'
 import { LogoMark } from './components/branding/Logo'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
@@ -167,6 +170,9 @@ export default function App() {
 	const [exportAnchor, setExportAnchor] = useState(null)
 	const [exportDialog, setExportDialog] = useState({ open: false, url: null, suggestedName: '' })
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
+	const [aiAnchor, setAiAnchor] = useState(null)
+	const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
+	const [aiReviewOpen, setAiReviewOpen] = useState(false)
 
 	const [navWidth, setNavWidth] = useState(() =>
 		clamp(readStoredNumber('novelkms.navWidth', DEFAULT_NAV_WIDTH), MIN_NAV_WIDTH, MAX_NAV_WIDTH)
@@ -299,6 +305,17 @@ export default function App() {
 		setImportDialogOpen(true)
 	}
 
+	const openAiSettings = () => {
+		setAiAnchor(null)
+		setAiReviewOpen(false)
+		setAiSettingsOpen(true)
+	}
+
+	const openAiReview = () => {
+		setAiAnchor(null)
+		setAiReviewOpen(true)
+	}
+
 	return (
 		<SearchProvider selection={selection}>
 			<Box sx={{
@@ -390,7 +407,7 @@ export default function App() {
 							startIcon={<DescriptionIcon fontSize="small" />}
 							endIcon={<ArrowDropDownIcon />}
 							onClick={(e) => setTplAnchor(e.currentTarget)}
-							sx={{ ...topBarButtonSx, mr: 0 }}
+							sx={topBarButtonSx}
 						>
 							Templates
 						</Button>
@@ -398,6 +415,23 @@ export default function App() {
 							<MenuItem disabled sx={{ fontSize: '0.75rem', opacity: 0.7 }}>Global defaults</MenuItem>
 							<MenuItem onClick={() => openGlobalTemplate('cover')}>Cover Page</MenuItem>
 							<MenuItem onClick={() => openGlobalTemplate('part')}>Part Page</MenuItem>
+						</Menu>
+
+						<Button
+							color="inherit"
+							size="small"
+							startIcon={<AutoAwesomeOutlinedIcon fontSize="small" />}
+							endIcon={<ArrowDropDownIcon />}
+							onClick={(e) => setAiAnchor(e.currentTarget)}
+							sx={{ ...topBarButtonSx, mr: 0 }}
+						>
+							AI
+						</Button>
+						<Menu anchorEl={aiAnchor} open={!!aiAnchor} onClose={() => setAiAnchor(null)}>
+							<MenuItem onClick={openAiReview} disabled={!selection.chapterId}>
+								Review Chapter…
+							</MenuItem>
+							<MenuItem onClick={openAiSettings}>AI Settings…</MenuItem>
 						</Menu>
 					</Toolbar>
 				</AppBar>
@@ -757,6 +791,19 @@ export default function App() {
 					onClose={() => setExportDialog(d => ({ ...d, open: false }))}
 					url={exportDialog.url}
 					suggestedName={exportDialog.suggestedName}
+				/>
+
+				<AiSettingsDialog
+					open={aiSettingsOpen}
+					onClose={() => setAiSettingsOpen(false)}
+				/>
+
+				<AiReviewDialog
+					open={aiReviewOpen}
+					onClose={() => setAiReviewOpen(false)}
+					chapterId={selection.chapterId}
+					chapterLabel=""
+					onOpenSettings={openAiSettings}
 				/>
 			</Box>
 		</SearchProvider>
