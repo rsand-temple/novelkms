@@ -186,6 +186,18 @@ function countWords(html) {
  *   5. single-scene mode  — sceneId set; no chapter heading
  *   6. multi-scene mode   — chapterId set; chapter title/subtitle shown above prose
  *
+ * Codex entries are scenes (single-scene mode) whose parent chapter is a codex
+ * category. "Is this a codex entry?" is determined from chapterData.codexCategory
+ * (a plain field on the Chapter row — categories are chapter rows with codex_id
+ * set and book_id null) rather than from selection.codexId, because several nav
+ * click handlers carry codexId/codexCategory forward via `...prev` and can leave
+ * it stale when navigating between the codex tree and the manuscript tree.
+ * Reading the ground-truth field off the fetched chapter avoids that entirely.
+ * When true, the entry's own scene title is rendered above the prose as a
+ * non-editable heading (chapter-title styling); editing the title in the
+ * Properties panel updates SCENE_KEYS.detail(sceneId), which this component
+ * already subscribes to via useScene, so the heading stays in sync automatically.
+ *
  * The book cover and part page previews activate whenever a book or part is
  * selected, regardless of whether page layout is enabled on the book.  When
  * page layout is not configured, DEFAULT_PAGE_CONFIG provides fallback
@@ -237,8 +249,11 @@ export default function EditorPanel({
 	// Clicking a book card calls onSelectBook to open it.
 	const projectShelfMode = !templateMode && !bookId && !chapterId && !sceneId && !!projectId;
 
-	// ── Chapter data for heading (multi-scene mode only) ──────────────────────
-	const { data: chapterData } = useChapter(multiSceneMode ? chapterId : null);
+	// ── Chapter data for heading ───────────────────────────────────────────────
+	// Fetched in multi-scene mode (chapter title/subtitle heading) AND in
+	// single-scene mode (to read codexCategory off the parent chapter so we can
+	// tell a codex entry apart from a manuscript scene — see isCodexEntry below).
+	const { data: chapterData } = useChapter((multiSceneMode || singleSceneMode) ? chapterId : null);
 
 	// ── Scene / template data ─────────────────────────────────────────────────
 	const { data: scenes, isLoading: scenesLoading } = useScenes(multiSceneMode ? chapterId : null);
@@ -680,10 +695,18 @@ export default function EditorPanel({
 	// but formatting controls are inactive.
 	const toolbarEditor = projectShelfMode ? null : editor;
 
-	const chapterHeadingTitle = chapterData
+	const chapterHeadingTitle = (multiSceneMode && chapterData)
 		? (chapterData.title?.trim() || `Chapter ${chapterData.chapterNumber}`)
 		: null;
-	const chapterHeadingSubtitle = chapterData?.subtitle?.trim() || null;
+	const chapterHeadingSubtitle = (multiSceneMode && chapterData?.subtitle?.trim()) || null;
+
+	// A codex entry is a scene (single-scene mode) whose parent chapter is a
+	// codex category — ground-truthed via chapterData.codexCategory rather than
+	// selection.codexId (see the mode comment above the component for why).
+	const isCodexEntry = singleSceneMode && !!chapterData?.codexCategory;
+	const codexEntryHeadingTitle = isCodexEntry
+		? (singleScene?.title?.trim() || 'Untitled Entry')
+		: null;
 
 	return (
 		<Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -863,6 +886,30 @@ export default function EditorPanel({
 										{chapterHeadingSubtitle}
 									</Typography>
 								)}
+							</Box>
+						)}
+
+						{isCodexEntry && codexEntryHeadingTitle && (
+							<Box
+								sx={{
+									textAlign: 'center',
+									maxWidth: '72ch',
+									mx: 'auto',
+									px: 1,
+									mb: 5,
+								}}
+							>
+								<Typography
+									sx={{
+										fontFamily: 'var(--nkms-font-family)',
+										fontSize: '1.75rem',
+										fontWeight: 700,
+										lineHeight: 1.2,
+										color: 'text.primary',
+									}}
+								>
+									{codexEntryHeadingTitle}
+								</Typography>
 							</Box>
 						)}
 
