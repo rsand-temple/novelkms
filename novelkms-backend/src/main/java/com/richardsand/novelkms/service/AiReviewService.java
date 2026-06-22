@@ -147,7 +147,8 @@ public class AiReviewService {
      * recommendations) so the panel can reflect the new promoted state.
      */
     public AiReview promoteRecommendation(UUID userId, UUID reviewId, UUID recId,
-            String codexCategoryOverride) throws SQLException {
+            String codexCategoryOverride,
+            String codexTitleOverride) throws SQLException {
         AiReview review = reviewDao.findByIdForUser(reviewId, userId)
                 .orElseThrow(() -> new ReviewException(404, "not_found", "Review not found."));
 
@@ -173,7 +174,11 @@ public class AiReviewService {
         }
 
         String category = resolveCodexCategory(firstNonBlank(codexCategoryOverride, rec.getCodexCategory()));
-        String title    = firstNonBlank(rec.getCodexTitle(), truncate(rec.getRecommendation(), 80), "Untitled");
+        String title    = firstNonBlank(
+                codexTitleOverride,
+                rec.getCodexTitle(),
+                truncate(rec.getRecommendation(), 80),
+                "Untitled");
         String content  = "<p>" + escapeHtml(rec.getRecommendation()) + "</p>";
 
         Codex   codex           = getOrCreateProjectCodex(projectId);

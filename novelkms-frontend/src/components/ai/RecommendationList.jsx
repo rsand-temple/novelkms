@@ -3,8 +3,16 @@ import {
 	Alert,
 	Box,
 	Button,
+	ButtonGroup,
+	Checkbox,
 	Chip,
+	Dialog,
+	DialogActions,
+	DialogContent,
+	DialogTitle,
+	FormControlLabel,
 	IconButton,
+	Menu,
 	MenuItem,
 	TextField,
 	ToggleButton,
@@ -12,8 +20,8 @@ import {
 	Tooltip,
 	Typography,
 } from '@mui/material'
-import { EventOutlined } from '@mui/icons-material'
-import { DeleteOutlined } from '@mui/icons-material';
+import DeleteIcon from '@mui/icons-material/Delete'
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 
 const CATEGORY_LABELS = {
 	CHARACTER: 'Characters',
@@ -51,11 +59,8 @@ function normalizeCategory(value) {
 	if (!raw) return 'NOTES'
 
 	const upper = raw.toUpperCase()
-
-	// Direct enum match from backend/model.
 	if (CATEGORY_LABELS[upper]) return upper
 
-	// Friendly label / plural label match.
 	const compact = upper.replace(/[^A-Z]/g, '')
 
 	switch (compact) {
@@ -83,14 +88,38 @@ function normalizeCategory(value) {
 	}
 }
 
-
 function codexLabel(key) {
 	return CATEGORY_LABELS[normalizeCategory(key)] ?? 'Notes'
 }
 
-function RecommendationRow({ rec, onSetStatus, onPromote, promotingId }) {
+function defaultTitle(rec) {
+	const title = (rec.codexTitle ?? '').trim()
+	if (title) return title
+
+	const text = (rec.recommendation ?? '').trim()
+	if (!text) return 'Untitled'
+	return text.length <= 80 ? text : text.slice(0, 80).trim()
+}
+
+function RecommendationRow({
+	rec,
+	onSetStatus,
+	onPromote,
+	promotingId,
+	skipDeleteConfirm,
+	setSkipDeleteConfirm,
+}) {
 	const initialCategory = useMemo(() => normalizeCategory(rec.codexCategory), [rec.codexCategory])
+	const initialTitle = useMemo(() => defaultTitle(rec), [rec])
+	
+	const [categoryMenuAnchor, setCategoryMenuAnchor] = useState(null)
+	const categoryMenuOpen = Boolean(categoryMenuAnchor)
 	const [selectedCategory, setSelectedCategory] = useState(initialCategory)
+	const [addOpen, setAddOpen] = useState(false)
+	const [deleteOpen, setDeleteOpen] = useState(false)
+	const [draftTitle, setDraftTitle] = useState(initialTitle)
+	const [draftCategory, setDraftCategory] = useState(initialCategory)
+	const [squelchDelete, setSquelchDelete] = useState(skipDeleteConfirm)
 
 	const status = (rec.status ?? 'OPEN').toUpperCase()
 	const statusValue =
@@ -98,8 +127,51 @@ function RecommendationRow({ rec, onSetStatus, onPromote, promotingId }) {
 			? status
 			: null
 
-	const addLabel = codexLabel(selectedCategory)
 	const isPromoting = promotingId === rec.id
+	const deleteDisabled = status === 'ACCEPTED' || status === 'FUTURE'
+	const addDisabled = status === 'REJECTED'
+
+	const openAddDialog = () => {
+		setDraftTitle(defaultTitle(rec))
+		setDraftCategory(selectedCategory)
+		setAddOpen(true)
+	}
+
+	const confirmAdd = () => {
+		const title = draftTitle.trim() || defaultTitle(rec)
+		setSelectedCategory(draftCategory)
+		setAddOpen(false)
+		onPromote(rec, draftCategory, title)
+	}
+
+	const requestDelete = () => {
+		if (deleteDisabled) return
+		if (skipDeleteConfirm) {
+			onSetStatus(rec, 'DELETED')
+			return
+		}
+		setSquelchDelete(skipDeleteConfirm)
+		setDeleteOpen(true)
+	}
+
+	const confirmDelete = () => {
+		if (squelchDelete) setSkipDeleteConfirm(true)
+		setDeleteOpen(false)
+		onSetStatus(rec, 'DELETED')
+	}
+	
+	const openCategoryMenu = (event) => {
+		setCategoryMenuAnchor(event.currentTarget)
+	}
+
+	const closeCategoryMenu = () => {
+		setCategoryMenuAnchor(null)
+	}
+
+	const chooseCategory = (category) => {
+		setSelectedCategory(category)
+		setCategoryMenuAnchor(null)
+	}
 
 	return (
 		<Box sx={{ mb: 1.5, pb: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -108,7 +180,7 @@ function RecommendationRow({ rec, onSetStatus, onPromote, promotingId }) {
 				{rec.category && <Chip label={rec.category} size="small" variant="outlined" />}
 				{rec.severity && <Chip label={rec.severity} size="small" color={severityColor(rec.severity)} />}
 				{status === 'FUTURE' && (
-					<Chip icon={<EventOutlined />} label="Future" size="small" color="secondary" variant="outlined" />
+					<Chip label="Future" size="small" color="secondary" variant="outlined" />
 				)}
 			</Box>
 
@@ -140,52 +212,141 @@ function RecommendationRow({ rec, onSetStatus, onPromote, promotingId }) {
 					<ToggleButton value="FUTURE" color="secondary">Future</ToggleButton>
 				</ToggleButtonGroup>
 
-				<Tooltip title="Remove this finding from the working list">
-					<IconButton
-						size="small"
-						onClick={() => onSetStatus(rec, 'DELETED')}
-						aria-label="Delete finding"
-					>
-						<DeleteOutlined fontSize="small" />
-					</IconButton>
+				<Tooltip title={deleteDisabled ? 'Accepted and future findings cannot be deleted' : 'Delete finding'}>
+					<span>
+						<IconButton
+							size="small"
+							color="default"
+							disabled={deleteDisabled}
+							onClick={requestDelete}
+							aria-label="Delete finding"
+						>
+							<DeleteIcon fontSize="small" />
+						</IconButton>
+					</span>
 				</Tooltip>
 			</Box>
 
 			<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-				<TextField
-					select
-					size="small"
-					label="Add to"
-					value={selectedCategory}
-					onChange={(e) => setSelectedCategory(e.target.value)}
-					sx={{ minWidth: 145 }}
-				>
-					{CATEGORY_OPTIONS.map(opt => (
-						<MenuItem key={opt.key} value={opt.key}>{opt.label}</MenuItem>
-					))}
-				</TextField>
-
-				<Button
+				<ButtonGroup
 					size="small"
 					variant="outlined"
-					onClick={() => onPromote(rec, selectedCategory)}
-					disabled={isPromoting}
+					disabled={isPromoting || addDisabled}
 				>
-					{isPromoting ? 'Adding…' : `Add to ${addLabel}`}
-				</Button>
+					<Button onClick={openAddDialog}>
+						{isPromoting ? 'Adding…' : `Add to ${codexLabel(selectedCategory)}`}
+					</Button>
+
+					<Button
+						size="small"
+						aria-label="Choose codex category"
+						aria-haspopup="menu"
+						aria-expanded={categoryMenuOpen ? 'true' : undefined}
+						onClick={openCategoryMenu}
+					>
+						<ArrowDropDownIcon fontSize="small" />
+					</Button>
+				</ButtonGroup>
+
+				<Menu
+					anchorEl={categoryMenuAnchor}
+					open={categoryMenuOpen}
+					onClose={closeCategoryMenu}
+				>
+					{CATEGORY_OPTIONS.map(opt => (
+						<MenuItem
+							key={opt.key}
+							selected={opt.key === selectedCategory}
+							onClick={() => chooseCategory(opt.key)}
+						>
+							{opt.label}
+						</MenuItem>
+					))}
+				</Menu>
 			</Box>
+			
+			<Dialog open={addOpen} onClose={() => setAddOpen(false)} fullWidth maxWidth="sm">
+				<DialogTitle>Add AI Finding to Codex</DialogTitle>
+				<DialogContent sx={{ pt: 1 }}>
+					<Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+						Review and adjust the proposed Codex entry before adding it.
+					</Typography>
+
+					<TextField
+						label="Title"
+						fullWidth
+						size="small"
+						value={draftTitle}
+						onChange={(e) => setDraftTitle(e.target.value)}
+						sx={{ mb: 2 }}
+					/>
+
+					<TextField
+						select
+						label="Category"
+						fullWidth
+						size="small"
+						value={draftCategory}
+						onChange={(e) => setDraftCategory(e.target.value)}
+						sx={{ mb: 2 }}
+					>
+						{CATEGORY_OPTIONS.map(opt => (
+							<MenuItem key={opt.key} value={opt.key}>{opt.label}</MenuItem>
+						))}
+					</TextField>
+
+					<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+						Finding
+					</Typography>
+					<Typography variant="body2">
+						{rec.recommendation}
+					</Typography>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setAddOpen(false)}>Cancel</Button>
+					<Button variant="contained" onClick={confirmAdd} disabled={isPromoting}>
+						Add to {codexLabel(draftCategory)}
+					</Button>
+				</DialogActions>
+			</Dialog>
+
+			<Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
+				<DialogTitle>Delete this AI finding?</DialogTitle>
+				<DialogContent>
+					<Typography variant="body2" sx={{ mb: 1.5 }}>
+						This will remove the finding from the working review list. The review history remains preserved.
+					</Typography>
+					<FormControlLabel
+						control={
+							<Checkbox
+								checked={squelchDelete}
+								onChange={(e) => setSquelchDelete(e.target.checked)}
+							/>
+						}
+						label="Don’t ask again for future deletes"
+					/>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
+					<Button color="error" variant="contained" onClick={confirmDelete}>
+						Delete
+					</Button>
+				</DialogActions>
+			</Dialog>
 		</Box>
 	)
 }
 
-/**
- * Renders the active recommendations of a completed review.
- *
- * Hidden from the working list:
- *   DELETED  — author removed it
- *   PROMOTED — author added it to Codex
- */
 export default function RecommendationList({ review, onSetStatus, onPromote, promotingId }) {
+	const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(() =>
+		window.localStorage.getItem('ai.skipDeleteConfirm') === 'true',
+	)
+
+	const persistSkipDeleteConfirm = (value) => {
+		setSkipDeleteConfirm(value)
+		window.localStorage.setItem('ai.skipDeleteConfirm', value ? 'true' : 'false')
+	}
+
 	if (!review) return null
 
 	if (review.status === 'FAILED') {
@@ -216,7 +377,10 @@ export default function RecommendationList({ review, onSetStatus, onPromote, pro
 					onSetStatus={onSetStatus}
 					onPromote={onPromote}
 					promotingId={promotingId}
-				/>))}
+					skipDeleteConfirm={skipDeleteConfirm}
+					setSkipDeleteConfirm={persistSkipDeleteConfirm}
+				/>
+			))}
 		</Box>
 	)
 }

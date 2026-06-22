@@ -75,11 +75,11 @@ export default function ChapterReviewPanel({ chapterId }) {
 		setRecStatus({ reviewId: detail.id, recId: rec.id, status: value ?? 'OPEN', chapterId })
 	}
 
-	const handlePromote = (rec, codexCategory) => {
+	const handlePromote = (rec, codexCategory, codexTitle) => {
 		if (!detail) return
 		setPromotingId(rec.id)
 		promote(
-			{ reviewId: detail.id, recId: rec.id, codexCategory, chapterId },
+			{ reviewId: detail.id, recId: rec.id, codexCategory, codexTitle, chapterId },
 			{ onSettled: () => setPromotingId(null), onError: (e) => setRunError(errMessage(e)) },
 		)
 	}

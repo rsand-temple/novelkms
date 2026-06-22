@@ -75,6 +75,8 @@ public class AiReviewResource {
     public static class PromoteRequest {
         @JsonProperty
         public String codexCategory;
+        @JsonProperty
+        public String codexTitle;
     }
 
     @POST
@@ -111,7 +113,12 @@ public class AiReviewResource {
         UUID   userId        = CurrentUser.id(request);
         String codexCategory = body == null ? null : body.codexCategory;
         try {
-            AiReview review = service.promoteRecommendation(userId, reviewId, recId, codexCategory);
+            AiReview review = service.promoteRecommendation(
+                    userId,
+                    reviewId,
+                    recId,
+                    body == null ? null : body.codexCategory,
+                    body == null ? null : body.codexTitle);
             return Response.ok(review).build();
         } catch (ReviewException e) {
             return Response.status(e.status())
