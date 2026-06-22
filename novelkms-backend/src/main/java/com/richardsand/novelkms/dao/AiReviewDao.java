@@ -29,7 +29,8 @@ public class AiReviewDao {
             + "submitted_at, completed_at, prompt_version, error_message";
 
     /** DAO-local carrier so this layer does not depend on the {@code ai} package. */
-    public record NewRecommendation(String category, String severity, String location, String recommendation) {}
+    public record NewRecommendation(String category, String severity, String location, String recommendation,
+                                    String codexCategory, String codexTitle) {}
 
     private final DataSource dataSource;
 
@@ -64,6 +65,9 @@ public class AiReviewDao {
                 .location(rs.getString("location"))
                 .recommendation(rs.getString("recommendation"))
                 .status(rs.getString("status"))
+                .codexCategory(rs.getString("codex_category"))
+                .codexTitle(rs.getString("codex_title"))
+                .promotedSceneId(rs.getObject("promoted_scene_id", UUID.class))
                 .createdAt(toInstant(rs.getTimestamp("created_at")))
                 .updatedAt(toInstant(rs.getTimestamp("updated_at")))
                 .build();
@@ -110,8 +114,9 @@ public class AiReviewDao {
                 }
                 if (recommendations != null && !recommendations.isEmpty()) {
                     String insert = "INSERT INTO ai_review_recommendation "
-                            + "(id, review_id, seq, category, severity, location, recommendation, status, created_at, updated_at) "
-                            + "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?)";
+                            + "(id, review_id, seq, category, severity, location, recommendation, status, "
+                            + " codex_category, codex_title, created_at, updated_at) "
+                            + "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?)";
                     try (PreparedStatement ps = c.prepareStatement(insert)) {
                         int seq = 1;
                         for (NewRecommendation r : recommendations) {
@@ -122,8 +127,10 @@ public class AiReviewDao {
                             ps.setString(5, r.severity());
                             ps.setString(6, r.location());
                             ps.setString(7, r.recommendation());
-                            ps.setTimestamp(8, Timestamp.from(now));
-                            ps.setTimestamp(9, Timestamp.from(now));
+                            ps.setString(8, r.codexCategory());
+                            ps.setString(9, r.codexTitle());
+                            ps.setTimestamp(10, Timestamp.from(now));
+                            ps.setTimestamp(11, Timestamp.from(now));
                             ps.addBatch();
                         }
                         ps.executeBatch();
@@ -195,8 +202,22 @@ public class AiReviewDao {
         }
     }
 
+    /** Records the codex entry created when a recommendation is promoted. */
+    public boolean markPromoted(UUID recId, UUID reviewId, UUID sceneId) throws SQLException {
+        String sql = "UPDATE ai_review_recommendation SET promoted_scene_id = ?, updated_at = ? "
+                + "WHERE id = ? AND review_id = ?";
+        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, sceneId);
+            ps.setTimestamp(2, Timestamp.from(Instant.now()));
+            ps.setObject(3, recId);
+            ps.setObject(4, reviewId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
     private List<AiReviewRecommendation> findRecommendations(Connection c, UUID reviewId) throws SQLException {
         String sql = "SELECT id, review_id, seq, category, severity, location, recommendation, status, "
+                + "codex_category, codex_title, promoted_scene_id, "
                 + "created_at, updated_at FROM ai_review_recommendation WHERE review_id = ? ORDER BY seq";
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, reviewId);

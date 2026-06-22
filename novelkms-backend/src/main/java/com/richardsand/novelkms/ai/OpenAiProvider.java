@@ -132,9 +132,19 @@ public class OpenAiProvider implements AiProvider {
                 - fall under one of these categories: %s;
                 - carry a severity of LOW, MEDIUM, or HIGH.
 
+                For each recommendation also suggest how it could be filed in the project's \
+                knowledge base (the "codex"), so the author can save it in one click:
+                - codexCategory: exactly one of CHARACTER, VOICE, PLOT, WORLD, TIMELINE, CANON, NOTES. \
+                  Use CANON for established facts, rules, or continuity points the author should lock in \
+                  (e.g. a detail that must stay consistent later); CHARACTER for character facts/arcs; \
+                  VOICE for how a character speaks; WORLD for setting/institutions/objects; \
+                  TIMELINE for dates and ordering; PLOT for plot threads; NOTES for anything else.
+                - codexTitle: a short (3-8 word) title for that codex entry.
+
                 Respond with a single JSON object and nothing else, in exactly this shape:
                 {"recommendations":[{"category":"...","severity":"LOW|MEDIUM|HIGH",\
-                "location":"where in the chapter this applies","recommendation":"the note"}]}
+                "location":"where in the chapter this applies","recommendation":"the note",\
+                "codexCategory":"CANON","codexTitle":"short entry title"}]}
 
                 If the chapter is strong and you have no substantive notes, return \
                 {"recommendations":[]}.""".formatted(categoryList);
@@ -185,8 +195,11 @@ public class OpenAiProvider implements AiProvider {
                 String severity       = textOrNull(node, "severity");
                 String location       = textOrNull(node, "location");
                 String recommendation = textOrNull(node, "recommendation");
+                String codexCategory  = textOrNull(node, "codexCategory");
+                String codexTitle     = textOrNull(node, "codexTitle");
                 if (recommendation == null || recommendation.isBlank()) continue;
-                result.add(new ReviewResult.Recommendation(category, severity, location, recommendation));
+                result.add(new ReviewResult.Recommendation(
+                        category, severity, location, recommendation, codexCategory, codexTitle));
             }
             return result;
         } catch (AiProviderException e) {

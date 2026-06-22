@@ -2,7 +2,6 @@ package com.richardsand.novelkms;
 
 import java.sql.SQLException;
 import java.time.Duration;
-import java.util.EnumSet;
 import java.util.Map;
 
 import org.apache.commons.dbcp2.BasicDataSource;
@@ -34,7 +33,6 @@ import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dao.TenantAccessDao;
 import com.richardsand.novelkms.dao.UserStyleDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
-import com.richardsand.novelkms.dropwizard.web.SpaFallbackFilter;
 import com.richardsand.novelkms.resource.AiCredentialResource;
 import com.richardsand.novelkms.resource.AiReviewResource;
 import com.richardsand.novelkms.resource.AuthResource;
@@ -56,7 +54,6 @@ import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
-import jakarta.servlet.DispatcherType;
 
 public class NovelKmsServer extends Application<NovelKmsConfig> {
     private static final Logger          logger     = LoggerFactory.getLogger(NovelKmsServer.class);
@@ -141,7 +138,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         OpenAiProvider  openAiProvider  = new OpenAiProvider();
         Map<String, AiProvider> aiProviders = Map.of(openAiProvider.providerKey(), openAiProvider);
         AiReviewService aiReviewService = new AiReviewService(
-                chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao, aiProviders);
+                chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao,
+                codexDao, codexCategoryDao, aiProviders);
 
         env.lifecycle().manage(new io.dropwizard.lifecycle.Managed() {
             @Override
@@ -153,18 +151,6 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 oauthService.close();
             }
         });
-
-        // SPA history-mode fallback: the AssetsBundle below only resolves files
-        // that exist under /webapp (plus index.html for "/"). Client-side routes
-        // such as /register and /login exist only in the React Router route
-        // table, so without this filter Dropwizard returns 404 for them whenever
-        // they are hit directly (deep link, browser refresh, or the OAuth
-        // callback redirect in AuthResource). The filter is mapped only to the
-        // REQUEST dispatcher type so the internal forward to /index.html is not
-        // re-processed by this same filter.
-        env.servlets()
-                .addFilter("spa-fallback", new SpaFallbackFilter())
-                .addMappingForUrlPatterns(EnumSet.of(DispatcherType.REQUEST), true, "/*");
 
         env.jersey().register(MultiPartFeature.class);
         env.jersey().register(AuthResource.class);

@@ -51,6 +51,18 @@ public class AiReviewRecommendation {
     @JsonProperty
     private String status;
 
+    /** Model-suggested codex category for one-click promotion (CHARACTER, CANON, …). */
+    @JsonProperty
+    private String codexCategory;
+
+    /** Model-suggested concise title for the codex entry if promoted. */
+    @JsonProperty
+    private String codexTitle;
+
+    /** Set once promoted: the scene id of the created codex entry (null otherwise). */
+    @JsonProperty
+    private UUID promotedSceneId;
+
     @JsonProperty
     private Instant createdAt;
 

@@ -50,3 +50,18 @@ export function useSetRecommendationStatus() {
 		},
 	})
 }
+
+export function usePromoteRecommendation() {
+	const qc = useQueryClient()
+	return useMutation({
+		mutationFn: ({ reviewId, recId }) =>
+			aiApi.promoteRecommendation(reviewId, recId),
+		onSuccess: (review, { chapterId }) => {
+			// Returns the updated review with the recommendation now marked promoted.
+			if (review?.id) qc.setQueryData(AI_REVIEW_KEYS.detail(review.id), review)
+			if (chapterId) qc.invalidateQueries({ queryKey: AI_REVIEW_KEYS.byChapter(chapterId) })
+			// A new codex entry was created — refresh codex queries so it appears.
+			qc.invalidateQueries({ queryKey: ['codex'] })
+		},
+	})
+}

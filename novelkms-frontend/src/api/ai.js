@@ -18,4 +18,6 @@ export const aiApi = {
 	listChapterReviews:  (chapterId)       => client.get(`/chapters/${chapterId}/reviews`).then(r => r.data),
 	setRecommendationStatus: (reviewId, recId, status) =>
 		client.put(`/ai/reviews/${reviewId}/recommendations/${recId}`, { status }).then(r => r.data),
+	promoteRecommendation: (reviewId, recId) =>
+		client.post(`/ai/reviews/${reviewId}/recommendations/${recId}/promote`).then(r => r.data),
 }

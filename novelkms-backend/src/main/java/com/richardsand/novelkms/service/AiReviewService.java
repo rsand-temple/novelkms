@@ -22,11 +22,16 @@ import com.richardsand.novelkms.dao.AiCredentialDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
+import com.richardsand.novelkms.dao.CodexCategoryDao;
+import com.richardsand.novelkms.dao.CodexDao;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.model.AiCredential;
 import com.richardsand.novelkms.model.AiReview;
+import com.richardsand.novelkms.model.AiReviewRecommendation;
 import com.richardsand.novelkms.model.Book;
 import com.richardsand.novelkms.model.Chapter;
+import com.richardsand.novelkms.model.Codex;
+import com.richardsand.novelkms.model.CodexCategory;
 import com.richardsand.novelkms.model.Scene;
 
 /**
@@ -52,16 +57,21 @@ public class AiReviewService {
     private final BookDao                bookDao;
     private final AiCredentialDao        credentialDao;
     private final AiReviewDao            reviewDao;
+    private final CodexDao               codexDao;
+    private final CodexCategoryDao       codexCategoryDao;
     private final Map<String, AiProvider> providers;
 
     public AiReviewService(ChapterDao chapterDao, SceneDao sceneDao, BookDao bookDao,
                            AiCredentialDao credentialDao, AiReviewDao reviewDao,
+                           CodexDao codexDao, CodexCategoryDao codexCategoryDao,
                            Map<String, AiProvider> providers) {
         this.chapterDao = chapterDao;
         this.sceneDao = sceneDao;
         this.bookDao = bookDao;
         this.credentialDao = credentialDao;
         this.reviewDao = reviewDao;
+        this.codexDao = codexDao;
+        this.codexCategoryDao = codexCategoryDao;
         this.providers = providers;
     }
 
@@ -118,7 +128,8 @@ public class AiReviewService {
             List<AiReviewDao.NewRecommendation> recs = new ArrayList<>();
             for (ReviewResult.Recommendation r : result.recommendations()) {
                 recs.add(new AiReviewDao.NewRecommendation(
-                        r.category(), r.severity(), r.location(), r.recommendation()));
+                        r.category(), r.severity(), r.location(), r.recommendation(),
+                        r.codexCategory(), r.codexTitle()));
             }
             reviewDao.completeReview(reviewId, result.promptVersion(), result.rawJson(), recs);
         } catch (AiProviderException e) {
@@ -127,6 +138,83 @@ public class AiReviewService {
         }
 
         return reviewDao.findByIdForUser(reviewId, userId).orElseThrow();
+    }
+
+    /**
+     * Promotes a recommendation into the project Codex as a new entry, using the
+     * model's suggested category and title. Idempotent: a recommendation already
+     * promoted is returned unchanged. Returns the updated review (with
+     * recommendations) so the panel can reflect the new promoted state.
+     */
+    public AiReview promoteRecommendation(UUID userId, UUID reviewId, UUID recId) throws SQLException {
+        AiReview review = reviewDao.findByIdForUser(reviewId, userId)
+                .orElseThrow(() -> new ReviewException(404, "not_found", "Review not found."));
+
+        AiReviewRecommendation rec = null;
+        if (review.getRecommendations() != null) {
+            for (AiReviewRecommendation r : review.getRecommendations()) {
+                if (r.getId().equals(recId)) { rec = r; break; }
+            }
+        }
+        if (rec == null) {
+            throw new ReviewException(404, "recommendation_not_found", "Recommendation not found.");
+        }
+        if (rec.getPromotedSceneId() != null) {
+            return review; // already promoted — idempotent
+        }
+
+        UUID projectId = review.getProjectId();
+        if (projectId == null) {
+            throw new ReviewException(400, "no_project", "This review is not associated with a project.");
+        }
+
+        String category = resolveCodexCategory(rec.getCodexCategory());
+        String title = firstNonBlank(rec.getCodexTitle(), truncate(rec.getRecommendation(), 80), "Untitled");
+        String content = "<p>" + escapeHtml(rec.getRecommendation()) + "</p>";
+
+        Codex codex = getOrCreateProjectCodex(projectId);
+        Chapter categoryChapter = getOrCreateCategoryChapter(codex.getId(), category);
+
+        Scene entry = sceneDao.create(categoryChapter.getId(), title, null);
+        sceneDao.saveContent(entry.getId(), content, countWords(rec.getRecommendation()));
+
+        reviewDao.markPromoted(recId, reviewId, entry.getId());
+        return reviewDao.findByIdForUser(reviewId, userId).orElseThrow();
+    }
+
+    private Codex getOrCreateProjectCodex(UUID projectId) throws SQLException {
+        Optional<Codex> existing = codexDao.findByProjectId(projectId);
+        if (existing.isPresent()) return existing.get();
+        Codex codex = codexDao.createForProject(projectId, null);
+        // Seed the default category chapters, matching normal codex creation.
+        for (CodexCategory cat : codexCategoryDao.findDefaults()) {
+            chapterDao.createCodexChapter(codex.getId(), cat.getCategoryKey(), cat.getLabel());
+        }
+        return codex;
+    }
+
+    private Chapter getOrCreateCategoryChapter(UUID codexId, String categoryKey) throws SQLException {
+        for (Chapter ch : chapterDao.findByCodexId(codexId)) {
+            if (categoryKey.equals(ch.getCodexCategory())) return ch;
+        }
+        return chapterDao.createCodexChapter(codexId, categoryKey, labelFor(categoryKey));
+    }
+
+    private String resolveCodexCategory(String suggested) throws SQLException {
+        if (suggested != null && !suggested.isBlank()) {
+            String key = suggested.trim();
+            for (CodexCategory cat : codexCategoryDao.findAll()) {
+                if (cat.getCategoryKey().equalsIgnoreCase(key)) return cat.getCategoryKey();
+            }
+        }
+        return "NOTES";
+    }
+
+    private String labelFor(String categoryKey) throws SQLException {
+        for (CodexCategory cat : codexCategoryDao.findAll()) {
+            if (cat.getCategoryKey().equalsIgnoreCase(categoryKey)) return cat.getLabel();
+        }
+        return categoryKey;
     }
 
     private AiCredential resolveCredential(UUID userId, UUID credentialId) throws SQLException {
@@ -187,5 +275,25 @@ public class AiReviewService {
             if (value != null && !value.isBlank()) return value.trim();
         }
         return "";
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.length() <= max ? trimmed : trimmed.substring(0, max).trim();
+    }
+
+    private static int countWords(String text) {
+        if (text == null) return 0;
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) return 0;
+        return trimmed.split("\\s+").length;
+    }
+
+    private static String escapeHtml(String text) {
+        if (text == null) return "";
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
     }
 }

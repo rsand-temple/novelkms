@@ -21,6 +21,8 @@ public record ReviewResult(
             String category,
             String severity,
             String location,
-            String recommendation) {
+            String recommendation,
+            String codexCategory,
+            String codexTitle) {
     }
 }

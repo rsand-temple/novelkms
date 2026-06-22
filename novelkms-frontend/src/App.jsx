@@ -18,7 +18,6 @@ import PropertiesPanel from './components/layout/PropertiesPanel'
 import ImportDialog from './components/nav/dialogs/ImportDialog'
 import ExportDialog from './components/nav/dialogs/ExportDialog'
 import AiSettingsDialog from './components/ai/AiSettingsDialog'
-import AiReviewDialog from './components/ai/AiReviewDialog'
 import { LogoMark } from './components/branding/Logo'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
@@ -171,7 +170,6 @@ export default function App() {
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
 	const [aiAnchor, setAiAnchor] = useState(null)
 	const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
-	const [aiReviewOpen, setAiReviewOpen] = useState(false)
 
 	const [navWidth, setNavWidth] = useState(() =>
 		clamp(readStoredNumber('novelkms.navWidth', DEFAULT_NAV_WIDTH), MIN_NAV_WIDTH, MAX_NAV_WIDTH)
@@ -306,13 +304,7 @@ export default function App() {
 
 	const openAiSettings = () => {
 		setAiAnchor(null)
-		setAiReviewOpen(false)
 		setAiSettingsOpen(true)
-	}
-
-	const openAiReview = () => {
-		setAiAnchor(null)
-		setAiReviewOpen(true)
 	}
 
 	return (
@@ -426,9 +418,6 @@ export default function App() {
 							AI
 						</Button>
 						<Menu anchorEl={aiAnchor} open={!!aiAnchor} onClose={() => setAiAnchor(null)}>
-							<MenuItem onClick={openAiReview} disabled={!selection.chapterId}>
-								Review Chapter…
-							</MenuItem>
 							<MenuItem onClick={openAiSettings}>AI Settings…</MenuItem>
 						</Menu>
 					</Toolbar>
@@ -794,14 +783,6 @@ export default function App() {
 				<AiSettingsDialog
 					open={aiSettingsOpen}
 					onClose={() => setAiSettingsOpen(false)}
-				/>
-
-				<AiReviewDialog
-					open={aiReviewOpen}
-					onClose={() => setAiReviewOpen(false)}
-					chapterId={selection.chapterId}
-					chapterLabel=""
-					onOpenSettings={openAiSettings}
 				/>
 			</Box>
 		</SearchProvider>

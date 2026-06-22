@@ -88,6 +88,23 @@ public class AiReviewResource {
                 .orElseGet(() -> notFound()));
     }
 
+    @POST
+    @Path("/ai/reviews/{reviewId}/recommendations/{recId}/promote")
+    public Response promoteRecommendation(@PathParam("reviewId") UUID reviewId,
+                                          @PathParam("recId") UUID recId) {
+        UUID userId = CurrentUser.id(request);
+        try {
+            AiReview review = service.promoteRecommendation(userId, reviewId, recId);
+            return Response.ok(review).build();
+        } catch (ReviewException e) {
+            return Response.status(e.status())
+                    .entity(Map.of("error", e.code(), "message", e.getMessage()))
+                    .build();
+        } catch (SQLException e) {
+            return Response.serverError().entity(Map.of("error", "server_error")).build();
+        }
+    }
+
     @GET
     @Path("/chapters/{chapterId}/reviews")
     public Response listForChapter(@PathParam("chapterId") UUID chapterId) {
