@@ -10,8 +10,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.model.Book;
+import com.richardsand.novelkms.service.TrashService;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -22,6 +24,8 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
@@ -31,13 +35,15 @@ import jakarta.ws.rs.core.Response;
 public class BookResource {
     private static final Logger logger = LoggerFactory.getLogger(BookResource.class);
     private final BookDao       bookDao;
+    private final TrashService  trashService;
 
     /** One year in seconds — used for immutable image cache responses. */
     private static final int CACHE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 
     @Inject
-    public BookResource(BookDao bookDao) {
+    public BookResource(BookDao bookDao, TrashService trashService) {
         this.bookDao = bookDao;
+        this.trashService = trashService;
     }
 
     // -------------------------------------------------------------------------
@@ -156,9 +162,9 @@ public class BookResource {
 
     @DELETE
     @Path("/books/{id}")
-    public Response deleteBook(@PathParam("id") UUID id) {
+    public Response deleteBook(@PathParam("id") UUID id, @Context ContainerRequestContext request) {
         try {
-            return bookDao.delete(id)
+            return trashService.trashBook(CurrentUser.id(request), id).isPresent()
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
         } catch (SQLException e) {

@@ -31,6 +31,7 @@ import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dao.TenantAccessDao;
+import com.richardsand.novelkms.dao.TrashDao;
 import com.richardsand.novelkms.dao.UserStyleDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
 import com.richardsand.novelkms.resource.AiCredentialResource;
@@ -46,9 +47,11 @@ import com.richardsand.novelkms.resource.ProjectResource;
 import com.richardsand.novelkms.resource.SceneResource;
 import com.richardsand.novelkms.resource.StyleResource;
 import com.richardsand.novelkms.resource.TemplateResource;
+import com.richardsand.novelkms.resource.TrashResource;
 import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
+import com.richardsand.novelkms.service.TrashService;
 
 import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.core.Application;
@@ -125,6 +128,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         UserStyleDao     userStyleDao     = new UserStyleDao(ds);
         AuthDao          authDao          = new AuthDao(ds);
         TenantAccessDao  tenantAccessDao  = new TenantAccessDao(ds);
+        TrashDao         trashDao         = new TrashDao(ds);
 
         ImportService  importService  = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
         ExportService  exportService  = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao);
@@ -140,6 +144,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         AiReviewService aiReviewService = new AiReviewService(
                 chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao,
                 codexDao, codexCategoryDao, aiProviders);
+
+        TrashService trashService = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
 
         env.lifecycle().manage(new io.dropwizard.lifecycle.Managed() {
             @Override
@@ -168,6 +174,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(StyleResource.class);
         env.jersey().register(AiCredentialResource.class);
         env.jersey().register(AiReviewResource.class);
+        env.jersey().register(TrashResource.class);
 
         ObjectMapper mapper = env.getObjectMapper();
         mapper.findAndRegisterModules();
@@ -196,6 +203,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(aiCredentialDao).to(AiCredentialDao.class);
                 bind(aiReviewDao).to(AiReviewDao.class);
                 bind(aiReviewService).to(AiReviewService.class);
+                bind(trashDao).to(TrashDao.class);
+                bind(trashService).to(TrashService.class);
             }
         });
 

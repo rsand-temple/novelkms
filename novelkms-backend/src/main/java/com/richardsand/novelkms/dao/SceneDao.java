@@ -46,7 +46,7 @@ public class SceneDao {
     // -------------------------------------------------------------------------
 
     public List<Scene> findByChapterId(UUID chapterId) throws SQLException {
-        String      sql    = "SELECT * FROM scene WHERE chapter_id = ? ORDER BY display_order, title";
+        String      sql    = "SELECT * FROM scene WHERE chapter_id = ? AND deleted_at IS NULL ORDER BY display_order, title";
         List<Scene> result = new ArrayList<>();
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
@@ -61,7 +61,7 @@ public class SceneDao {
     }
 
     public Optional<Scene> findById(UUID id) throws SQLException {
-        String sql = "SELECT * FROM scene WHERE id = ?";
+        String sql = "SELECT * FROM scene WHERE id = ? AND deleted_at IS NULL";
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
@@ -104,7 +104,7 @@ public class SceneDao {
                 "FROM scene s " +
                 "JOIN chapter c ON s.chapter_id = c.id " +
                 "LEFT JOIN part p ON c.part_id = p.id " +
-                "WHERE c.book_id = ? " +
+                "WHERE c.book_id = ? AND s.deleted_at IS NULL AND c.deleted_at IS NULL " +
                 "ORDER BY " +
                 "  CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END, " +
                 "  p.display_order, " +

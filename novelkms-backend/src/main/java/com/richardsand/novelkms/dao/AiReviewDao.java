@@ -159,7 +159,7 @@ public class AiReviewDao {
 
     /** Loads a review (with recommendations) scoped to the owning user. */
     public Optional<AiReview> findByIdForUser(UUID reviewId, UUID userId) throws SQLException {
-        String sql = "SELECT " + REVIEW_COLUMNS + " FROM ai_review WHERE id = ? AND user_id = ?";
+        String sql = "SELECT " + REVIEW_COLUMNS + " FROM ai_review WHERE id = ? AND user_id = ? AND deleted_at IS NULL";
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, reviewId);
             ps.setObject(2, userId);
@@ -174,7 +174,7 @@ public class AiReviewDao {
 
     /** Lists reviews for a chapter (newest first), without recommendations. */
     public List<AiReview> findByChapter(UUID chapterId) throws SQLException {
-        String sql = "SELECT " + REVIEW_COLUMNS + " FROM ai_review WHERE chapter_id = ? ORDER BY submitted_at DESC";
+        String sql = "SELECT " + REVIEW_COLUMNS + " FROM ai_review WHERE chapter_id = ? AND deleted_at IS NULL ORDER BY submitted_at DESC";
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, chapterId);
             try (ResultSet rs = ps.executeQuery()) {

@@ -40,7 +40,7 @@ public class ProjectDao {
 
     /** Tenant-scoped project list. This is the only list method resources should call. */
     public List<Project> findAllForUser(UUID userId) throws SQLException {
-        String sql = "SELECT * FROM project WHERE owner_user_id = ? ORDER BY title";
+        String sql = "SELECT * FROM project WHERE owner_user_id = ? AND deleted_at IS NULL ORDER BY title";
         List<Project> result = new ArrayList<>();
         try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, userId);
@@ -52,7 +52,7 @@ public class ProjectDao {
     }
 
     public Optional<Project> findByIdForUser(UUID id, UUID userId) throws SQLException {
-        String sql = "SELECT * FROM project WHERE id = ? AND owner_user_id = ?";
+        String sql = "SELECT * FROM project WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL";
         try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
             ps.setObject(2, userId);

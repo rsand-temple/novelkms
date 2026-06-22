@@ -9,8 +9,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.model.Scene;
+import com.richardsand.novelkms.service.TrashService;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -21,6 +23,8 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
@@ -31,10 +35,12 @@ public class SceneResource {
     private static final Logger logger = LoggerFactory.getLogger(SceneResource.class);
 
     private final SceneDao sceneDao;
+    private final TrashService trashService;
 
     @Inject
-    public SceneResource(SceneDao sceneDao) {
+    public SceneResource(SceneDao sceneDao, TrashService trashService) {
         this.sceneDao = sceneDao;
+        this.trashService = trashService;
     }
 
     // -------------------------------------------------------------------------
@@ -146,9 +152,9 @@ public class SceneResource {
 
     @DELETE
     @Path("/scenes/{id}")
-    public Response deleteScene(@PathParam("id") UUID id) {
+    public Response deleteScene(@PathParam("id") UUID id, @Context ContainerRequestContext request) {
         try {
-            return sceneDao.delete(id)
+            return trashService.trashScene(CurrentUser.id(request), id).isPresent()
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
         } catch (SQLException sqle) {

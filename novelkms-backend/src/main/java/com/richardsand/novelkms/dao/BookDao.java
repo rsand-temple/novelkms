@@ -90,7 +90,7 @@ public class BookDao {
     // -------------------------------------------------------------------------
 
     public List<Book> findByProjectId(UUID projectId) throws SQLException {
-        String     sql    = SELECT_COLUMNS + "WHERE project_id = ? ORDER BY display_order, title";
+        String     sql    = SELECT_COLUMNS + "WHERE project_id = ? AND deleted_at IS NULL ORDER BY display_order, title";
         List<Book> result = new ArrayList<>();
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
@@ -105,7 +105,7 @@ public class BookDao {
     }
 
     public Optional<Book> findById(UUID id) throws SQLException {
-        String sql = SELECT_COLUMNS + "WHERE id = ?";
+        String sql = SELECT_COLUMNS + "WHERE id = ? AND deleted_at IS NULL";
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
@@ -292,7 +292,7 @@ public class BookDao {
                 SELECT COALESCE(SUM(s.word_count), 0)
                 FROM scene s
                 JOIN chapter ch ON ch.id = s.chapter_id
-                WHERE ch.book_id = ?
+                WHERE ch.book_id = ? AND ch.deleted_at IS NULL AND s.deleted_at IS NULL
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sceneSql)) {
@@ -304,7 +304,7 @@ public class BookDao {
         }
 
         // 2. Chapter heading words — blank title counts as 2 ("Chapter N")
-        String chapterSql = "SELECT title, subtitle FROM chapter WHERE book_id = ?";
+        String chapterSql = "SELECT title, subtitle FROM chapter WHERE book_id = ? AND deleted_at IS NULL";
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(chapterSql)) {
             ps.setObject(1, bookId);

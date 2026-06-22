@@ -216,7 +216,7 @@ public class PartDao {
                 SELECT COALESCE(SUM(s.word_count), 0)
                 FROM scene s
                 JOIN chapter ch ON ch.id = s.chapter_id
-                WHERE ch.part_id = ?
+                WHERE ch.part_id = ? AND ch.deleted_at IS NULL AND s.deleted_at IS NULL
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sceneSql)) {
@@ -227,7 +227,7 @@ public class PartDao {
         }
 
         // 3. Chapter heading words for chapters in this part
-        String chapterSql = "SELECT title, subtitle FROM chapter WHERE part_id = ?";
+        String chapterSql = "SELECT title, subtitle FROM chapter WHERE part_id = ? AND deleted_at IS NULL";
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(chapterSql)) {
             ps.setObject(1, partId);

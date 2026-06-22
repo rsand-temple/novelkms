@@ -13,6 +13,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.model.Project;
+import com.richardsand.novelkms.service.TrashService;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -35,10 +36,12 @@ import lombok.ToString;
 public class ProjectResource {
     private static final Logger logger = LoggerFactory.getLogger(ProjectResource.class);
     private final ProjectDao projectDao;
+    private final TrashService trashService;
 
     @Inject
-    public ProjectResource(ProjectDao projectDao) {
+    public ProjectResource(ProjectDao projectDao, TrashService trashService) {
         this.projectDao = projectDao;
+        this.trashService = trashService;
     }
 
     @ToString
@@ -142,7 +145,7 @@ public class ProjectResource {
     public Response deleteProject(@PathParam("id") UUID id,
                                   @Context ContainerRequestContext request) {
         try {
-            return projectDao.deleteForUser(CurrentUser.id(request), id)
+            return trashService.trashProject(CurrentUser.id(request), id).isPresent()
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
         } catch (SQLException e) {

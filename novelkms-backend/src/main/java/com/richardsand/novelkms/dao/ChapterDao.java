@@ -59,7 +59,7 @@ public class ChapterDao {
                 "    c.display_order AS chapter_order " +
                 "  FROM chapter c " +
                 "  LEFT JOIN part p ON c.part_id = p.id " +
-                "  WHERE c.book_id = ? " +
+                "  WHERE c.book_id = ? AND c.deleted_at IS NULL " +
                 "), " +
                 "grouped AS ( " +
                 "  SELECT id, sort_bucket, part_order, chapter_order, " +
@@ -83,7 +83,7 @@ public class ChapterDao {
                 "       n.chapter_number " +
                 "FROM chapter c " +
                 "JOIN numbered n ON c.id = n.id " +
-                "WHERE c.book_id = ? AND c.part_id IS NULL AND c.codex_id IS NULL " +
+                "WHERE c.book_id = ? AND c.part_id IS NULL AND c.codex_id IS NULL AND c.deleted_at IS NULL " +
                 "ORDER BY n.chapter_number";
 
         List<Chapter> result = new ArrayList<>();
@@ -108,7 +108,7 @@ public class ChapterDao {
                 "    c.display_order AS chapter_order " +
                 "  FROM chapter c " +
                 "  LEFT JOIN part p ON c.part_id = p.id " +
-                "  WHERE c.book_id = (SELECT book_id FROM part WHERE id = ?) " +
+                "  WHERE c.book_id = (SELECT book_id FROM part WHERE id = ?) AND c.deleted_at IS NULL " +
                 "), " +
                 "grouped AS ( " +
                 "  SELECT id, sort_bucket, part_order, chapter_order, " +
@@ -132,7 +132,7 @@ public class ChapterDao {
                 "       n.chapter_number " +
                 "FROM chapter c " +
                 "JOIN numbered n ON c.id = n.id " +
-                "WHERE c.part_id = ? " +
+                "WHERE c.part_id = ? AND c.deleted_at IS NULL " +
                 "ORDER BY n.chapter_number";
 
         List<Chapter> result = new ArrayList<>();
@@ -159,7 +159,7 @@ public class ChapterDao {
                 "       c.display_order, c.created_at, c.updated_at, " +
                 "       0 AS chapter_number " +
                 "FROM chapter c " +
-                "WHERE c.codex_id = ? " +
+                "WHERE c.codex_id = ? AND c.deleted_at IS NULL " +
                 "ORDER BY c.display_order";
 
         List<Chapter> result = new ArrayList<>();
@@ -187,7 +187,7 @@ public class ChapterDao {
                 "    c.display_order AS chapter_order " +
                 "  FROM chapter c " +
                 "  LEFT JOIN part p ON c.part_id = p.id " +
-                "  WHERE c.book_id = (SELECT book_id FROM chapter WHERE id = ?) " +
+                "  WHERE c.book_id = (SELECT book_id FROM chapter WHERE id = ?) AND c.deleted_at IS NULL " +
                 "), " +
                 "grouped AS ( " +
                 "  SELECT id, sort_bucket, part_order, chapter_order, " +
@@ -211,7 +211,7 @@ public class ChapterDao {
                 "       COALESCE(n.chapter_number, 0) AS chapter_number " +
                 "FROM chapter c " +
                 "LEFT JOIN numbered n ON c.id = n.id " +
-                "WHERE c.id = ?";
+                "WHERE c.id = ? AND c.deleted_at IS NULL";
 
         try (Connection conn = ds.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {

@@ -11,9 +11,11 @@ import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.model.AiReview;
 import com.richardsand.novelkms.service.AiReviewService;
+import com.richardsand.novelkms.service.TrashService;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
@@ -50,14 +52,16 @@ public class AiReviewResource {
 
     private final AiReviewService service;
     private final AiReviewDao     reviewDao;
+    private final TrashService    trashService;
 
     @Context
     ContainerRequestContext request;
 
     @Inject
-    public AiReviewResource(AiReviewService service, AiReviewDao reviewDao) {
+    public AiReviewResource(AiReviewService service, AiReviewDao reviewDao, TrashService trashService) {
         this.service = service;
         this.reviewDao = reviewDao;
+        this.trashService = trashService;
     }
 
     public static class RunRequest {
@@ -105,13 +109,25 @@ public class AiReviewResource {
                 .orElseGet(() -> notFound()));
     }
 
+    /**
+     * Moves a whole review artifact to the per-user trash. Ownership is enforced
+     * by {@link TrashService} (the trash context query is scoped to the caller's
+     * user id), so this path does not rely on the tenant filter.
+     */
+    @DELETE
+    @Path("/ai/reviews/{reviewId}")
+    public Response deleteReview(@PathParam("reviewId") UUID reviewId) {
+        return run(() -> trashService.trashReview(CurrentUser.id(request), reviewId).isPresent()
+                ? Response.noContent().build()
+                : notFound());
+    }
+
     @POST
     @Path("/ai/reviews/{reviewId}/recommendations/{recId}/promote")
     public Response promoteRecommendation(@PathParam("reviewId") UUID reviewId,
             @PathParam("recId") UUID recId,
             PromoteRequest body) {
-        UUID   userId        = CurrentUser.id(request);
-        String codexCategory = body == null ? null : body.codexCategory;
+        UUID userId = CurrentUser.id(request);
         try {
             AiReview review = service.promoteRecommendation(
                     userId,
