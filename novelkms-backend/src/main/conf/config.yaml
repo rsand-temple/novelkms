@@ -52,6 +52,14 @@ database:
   adminUser: {{DB_USER | d('admin')}}
   adminPwd: {{DB_PASSWORD | d('admin123')}}
 
+# Master key for encrypting secrets at rest (BYOK AI provider API keys).
+# Set NOVELKMS_ENCRYPTION_KEY to a Base64-encoded 32-byte key in any real
+# deployment. When left blank, an INSECURE development key is used and a
+# warning is logged at startup — fine for local Eclipse runs, never for prod.
+#   Generate one with:  openssl rand -base64 32
+security:
+  encryptionKey: {{NOVELKMS_ENCRYPTION_KEY | d('')}}
+
 auth:
   publicBaseUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:8080', true)}}
   frontendBaseUrl: {{NOVELKMS_FRONTEND_BASE_URL | d('http://localhost:3000', true)}}

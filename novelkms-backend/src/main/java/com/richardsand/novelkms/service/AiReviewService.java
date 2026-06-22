@@ -1,0 +1,191 @@
+package com.richardsand.novelkms.service;
+
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.richardsand.novelkms.ai.AiProvider;
+import com.richardsand.novelkms.ai.AiProviderException;
+import com.richardsand.novelkms.ai.ChapterReviewRequest;
+import com.richardsand.novelkms.ai.ReviewException;
+import com.richardsand.novelkms.ai.ReviewResult;
+import com.richardsand.novelkms.dao.AiCredentialDao;
+import com.richardsand.novelkms.dao.AiReviewDao;
+import com.richardsand.novelkms.dao.BookDao;
+import com.richardsand.novelkms.dao.ChapterDao;
+import com.richardsand.novelkms.dao.SceneDao;
+import com.richardsand.novelkms.model.AiCredential;
+import com.richardsand.novelkms.model.AiReview;
+import com.richardsand.novelkms.model.Book;
+import com.richardsand.novelkms.model.Chapter;
+import com.richardsand.novelkms.model.Scene;
+
+/**
+ * Orchestrates a synchronous chapter review: assembles the chapter text from its
+ * scenes, resolves the user's AI credential and model, calls the provider, and
+ * persists the result as an immutable review artifact. Configuration problems
+ * (no credential, non-manuscript chapter, empty chapter, unsupported provider)
+ * are signalled via {@link ReviewException}; a provider call failure is recorded
+ * as a FAILED review and returned normally so it appears in history.
+ */
+public class AiReviewService {
+    private static final Logger logger = LoggerFactory.getLogger(AiReviewService.class);
+
+    /** Default review categories sent to the provider. */
+    public static final List<String> DEFAULT_CATEGORIES = List.of(
+            "Continuity", "Characterization", "Pacing", "Dialogue",
+            "Historical Accuracy", "Technical Accuracy", "Clarity", "Grammar", "General Notes");
+
+    private static final String SCENE_BREAK = "\n\n* * *\n\n";
+
+    private final ChapterDao             chapterDao;
+    private final SceneDao               sceneDao;
+    private final BookDao                bookDao;
+    private final AiCredentialDao        credentialDao;
+    private final AiReviewDao            reviewDao;
+    private final Map<String, AiProvider> providers;
+
+    public AiReviewService(ChapterDao chapterDao, SceneDao sceneDao, BookDao bookDao,
+                           AiCredentialDao credentialDao, AiReviewDao reviewDao,
+                           Map<String, AiProvider> providers) {
+        this.chapterDao = chapterDao;
+        this.sceneDao = sceneDao;
+        this.bookDao = bookDao;
+        this.credentialDao = credentialDao;
+        this.reviewDao = reviewDao;
+        this.providers = providers;
+    }
+
+    /**
+     * Runs a chapter review and returns the resulting artifact (COMPLETED or
+     * FAILED). Chapter ownership has already been enforced by the tenant filter
+     * for the {@code chapters/{id}} path segment.
+     *
+     * @param credentialId optional explicit credential; null = the user's default
+     * @param modelOverride optional model override; null/blank = credential or provider default
+     */
+    public AiReview runChapterReview(UUID userId, UUID chapterId, UUID credentialId,
+                                     String modelOverride) throws SQLException {
+        Chapter chapter = chapterDao.findById(chapterId)
+                .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
+
+        UUID bookId = chapter.getBookId();
+        if (bookId == null) {
+            throw new ReviewException(400, "not_manuscript",
+                    "AI review is only available for manuscript chapters.");
+        }
+
+        String chapterText = assembleChapterText(chapterId);
+        if (chapterText.isBlank()) {
+            throw new ReviewException(400, "empty_chapter",
+                    "This chapter has no text to review yet.");
+        }
+
+        AiCredential credential = resolveCredential(userId, credentialId);
+        AiProvider provider = providers.get(credential.getProvider());
+        if (provider == null) {
+            throw new ReviewException(400, "unsupported_provider",
+                    "Provider " + credential.getProvider() + " is not supported yet.");
+        }
+
+        String model = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+        UUID projectId = resolveProjectId(bookId);
+
+        UUID reviewId = reviewDao.createPending(userId, projectId, bookId, chapterId,
+                provider.providerKey(), model);
+
+        String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
+        if (apiKey == null || apiKey.isBlank()) {
+            reviewDao.failReview(reviewId, "Stored API key could not be read.");
+            return reviewDao.findByIdForUser(reviewId, userId).orElseThrow();
+        }
+
+        ChapterReviewRequest request = new ChapterReviewRequest(
+                apiKey, model, chapterLabel(chapter), chapter.getSubtitle(),
+                chapterText, DEFAULT_CATEGORIES);
+
+        try {
+            ReviewResult result = provider.reviewChapter(request);
+            List<AiReviewDao.NewRecommendation> recs = new ArrayList<>();
+            for (ReviewResult.Recommendation r : result.recommendations()) {
+                recs.add(new AiReviewDao.NewRecommendation(
+                        r.category(), r.severity(), r.location(), r.recommendation()));
+            }
+            reviewDao.completeReview(reviewId, result.promptVersion(), result.rawJson(), recs);
+        } catch (AiProviderException e) {
+            logger.warn("AI review {} failed: {}", reviewId, e.getMessage());
+            reviewDao.failReview(reviewId, e.getMessage());
+        }
+
+        return reviewDao.findByIdForUser(reviewId, userId).orElseThrow();
+    }
+
+    private AiCredential resolveCredential(UUID userId, UUID credentialId) throws SQLException {
+        if (credentialId != null) {
+            return credentialDao.findById(credentialId, userId)
+                    .orElseThrow(() -> new ReviewException(404, "credential_not_found",
+                            "The selected AI credential was not found."));
+        }
+        return credentialDao.findDefault(userId)
+                .orElseThrow(() -> new ReviewException(409, "no_ai_credential",
+                        "No AI provider key is configured. Add one in Settings."));
+    }
+
+    private UUID resolveProjectId(UUID bookId) throws SQLException {
+        Optional<Book> book = bookDao.findById(bookId);
+        return book.map(Book::getProjectId).orElse(null);
+    }
+
+    private String assembleChapterText(UUID chapterId) throws SQLException {
+        List<Scene> scenes = sceneDao.findByChapterId(chapterId);
+        List<String> chunks = new ArrayList<>();
+        for (Scene scene : scenes) {
+            String text = htmlToPlainText(scene.getContent());
+            if (!text.isBlank()) chunks.add(text);
+        }
+        return String.join(SCENE_BREAK, chunks);
+    }
+
+    /**
+     * Strips TipTap HTML to plain text, preserving block boundaries as blank
+     * lines so the model sees paragraph structure. Inline image data URLs and
+     * other markup are discarded.
+     */
+    private String htmlToPlainText(String html) {
+        if (html == null || html.isBlank()) return "";
+        Document doc = Jsoup.parse(html);
+        StringBuilder sb = new StringBuilder();
+        for (Element el : doc.body().select("p, h1, h2, h3, h4, blockquote, li")) {
+            String text = el.text().trim();
+            if (!text.isEmpty()) sb.append(text).append("\n\n");
+        }
+        String result = sb.toString().trim();
+        if (result.isEmpty()) {
+            // Fallback for content without recognized block elements.
+            result = doc.text().trim();
+        }
+        return result;
+    }
+
+    private String chapterLabel(Chapter chapter) {
+        String title = chapter.getTitle();
+        if (title != null && !title.isBlank()) return title.trim();
+        return "Chapter " + chapter.getChapterNumber();
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value.trim();
+        }
+        return "";
+    }
+}

@@ -2,6 +2,7 @@ package com.richardsand.novelkms;
 
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.Map;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.flywaydb.core.Flyway;
@@ -11,10 +12,15 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.richardsand.novelkms.ai.AiProvider;
+import com.richardsand.novelkms.ai.OpenAiProvider;
 import com.richardsand.novelkms.auth.AuthenticationFilter;
 import com.richardsand.novelkms.auth.OAuthService;
+import com.richardsand.novelkms.auth.SecretCipher;
 import com.richardsand.novelkms.auth.SessionService;
 import com.richardsand.novelkms.auth.TenantAuthorizationFilter;
+import com.richardsand.novelkms.dao.AiCredentialDao;
+import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.AuthDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
@@ -27,6 +33,8 @@ import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dao.TenantAccessDao;
 import com.richardsand.novelkms.dao.UserStyleDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
+import com.richardsand.novelkms.resource.AiCredentialResource;
+import com.richardsand.novelkms.resource.AiReviewResource;
 import com.richardsand.novelkms.resource.AuthResource;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterResource;
@@ -38,6 +46,7 @@ import com.richardsand.novelkms.resource.ProjectResource;
 import com.richardsand.novelkms.resource.SceneResource;
 import com.richardsand.novelkms.resource.StyleResource;
 import com.richardsand.novelkms.resource.TemplateResource;
+import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 
@@ -122,6 +131,15 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         SessionService sessionService = new SessionService(authDao, config.getAuth());
         OAuthService   oauthService   = new OAuthService(config.getAuth(), authDao);
 
+        SecretCipher    secretCipher    = new SecretCipher(
+                config.getSecurity() != null ? config.getSecurity().encryptionKey : null);
+        AiCredentialDao aiCredentialDao = new AiCredentialDao(ds, secretCipher);
+        AiReviewDao     aiReviewDao     = new AiReviewDao(ds);
+        OpenAiProvider  openAiProvider  = new OpenAiProvider();
+        Map<String, AiProvider> aiProviders = Map.of(openAiProvider.providerKey(), openAiProvider);
+        AiReviewService aiReviewService = new AiReviewService(
+                chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao, aiProviders);
+
         env.lifecycle().manage(new io.dropwizard.lifecycle.Managed() {
             @Override
             public void start() {
@@ -147,6 +165,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(SceneResource.class);
         env.jersey().register(TemplateResource.class);
         env.jersey().register(StyleResource.class);
+        env.jersey().register(AiCredentialResource.class);
+        env.jersey().register(AiReviewResource.class);
 
         ObjectMapper mapper = env.getObjectMapper();
         mapper.findAndRegisterModules();
@@ -172,6 +192,9 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(exportService).to(ExportService.class);
                 bind(sessionService).to(SessionService.class);
                 bind(oauthService).to(OAuthService.class);
+                bind(aiCredentialDao).to(AiCredentialDao.class);
+                bind(aiReviewDao).to(AiReviewDao.class);
+                bind(aiReviewService).to(AiReviewService.class);
             }
         });
 

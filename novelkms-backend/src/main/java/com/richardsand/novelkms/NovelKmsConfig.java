@@ -35,9 +35,24 @@ public class NovelKmsConfig extends Configuration {
         public OAuthProvider github;
     }
 
+    @Getter
+    public static class Security {
+        /**
+         * Master key for encrypting secrets at rest (BYOK AI provider API keys).
+         * Normally injected from the NOVELKMS_ENCRYPTION_KEY environment variable.
+         * A Base64 16/24/32-byte key is used directly; any other non-blank value
+         * is treated as a passphrase (SHA-256 derived). Blank uses an INSECURE
+         * development key — override before storing real secrets.
+         */
+        public String encryptionKey;
+    }
+
     @JsonProperty
     Database database;
 
     @JsonProperty
     Auth auth;
+
+    @JsonProperty
+    Security security;
 }
