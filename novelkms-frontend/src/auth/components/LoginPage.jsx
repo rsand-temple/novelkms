@@ -74,7 +74,7 @@ export default function LoginPage() {
 				<Box sx={{ maxWidth: 480 }}>
 					<LogoLockup width={340} />
 					<Typography sx={{ mt: 2, color: 'text.secondary', fontSize: '1rem' }}>
-						NovelKMS keeps your manuscript, characters, canon, and timeline in one place —
+						NovelKMS (Novel Knowledge Management System) keeps your manuscript, characters, canon, and timeline in one place —
 						built for authors who want structure without losing the words.
 					</Typography>
 				</Box>
