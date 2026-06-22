@@ -327,7 +327,7 @@ export default function App() {
 										letterSpacing: 0.25,
 									}}
 								>
-									Novel Authoring Workspace
+									Novel Knowledge Management System
 								</Typography>
 							</Box>
 						</Box>
