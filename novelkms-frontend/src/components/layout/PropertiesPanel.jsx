@@ -664,7 +664,7 @@ export default function PropertiesPanel({ selection, setSelection, selectTemplat
 				<>
 					<Divider />
 					<Box sx={{ p: 2 }}>
-						<ChapterReviewPanel chapterId={chapterId} />
+						<ChapterReviewPanel key={chapterId} chapterId={chapterId} />
 					</Box>
 				</>
 			)}

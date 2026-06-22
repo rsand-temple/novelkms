@@ -54,8 +54,8 @@ export function useSetRecommendationStatus() {
 export function usePromoteRecommendation() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ reviewId, recId }) =>
-			aiApi.promoteRecommendation(reviewId, recId),
+		mutationFn: ({ reviewId, recId, codexCategory }) =>
+			aiApi.promoteRecommendation(reviewId, recId, { codexCategory: codexCategory ?? null }),
 		onSuccess: (review, { chapterId }) => {
 			// Returns the updated review with the recommendation now marked promoted.
 			if (review?.id) qc.setQueryData(AI_REVIEW_KEYS.detail(review.id), review)

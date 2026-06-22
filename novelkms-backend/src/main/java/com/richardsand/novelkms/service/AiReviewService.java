@@ -52,19 +52,19 @@ public class AiReviewService {
 
     private static final String SCENE_BREAK = "\n\n* * *\n\n";
 
-    private final ChapterDao             chapterDao;
-    private final SceneDao               sceneDao;
-    private final BookDao                bookDao;
-    private final AiCredentialDao        credentialDao;
-    private final AiReviewDao            reviewDao;
-    private final CodexDao               codexDao;
-    private final CodexCategoryDao       codexCategoryDao;
+    private final ChapterDao              chapterDao;
+    private final SceneDao                sceneDao;
+    private final BookDao                 bookDao;
+    private final AiCredentialDao         credentialDao;
+    private final AiReviewDao             reviewDao;
+    private final CodexDao                codexDao;
+    private final CodexCategoryDao        codexCategoryDao;
     private final Map<String, AiProvider> providers;
 
     public AiReviewService(ChapterDao chapterDao, SceneDao sceneDao, BookDao bookDao,
-                           AiCredentialDao credentialDao, AiReviewDao reviewDao,
-                           CodexDao codexDao, CodexCategoryDao codexCategoryDao,
-                           Map<String, AiProvider> providers) {
+            AiCredentialDao credentialDao, AiReviewDao reviewDao,
+            CodexDao codexDao, CodexCategoryDao codexCategoryDao,
+            Map<String, AiProvider> providers) {
         this.chapterDao = chapterDao;
         this.sceneDao = sceneDao;
         this.bookDao = bookDao;
@@ -80,11 +80,11 @@ public class AiReviewService {
      * FAILED). Chapter ownership has already been enforced by the tenant filter
      * for the {@code chapters/{id}} path segment.
      *
-     * @param credentialId optional explicit credential; null = the user's default
+     * @param credentialId  optional explicit credential; null = the user's default
      * @param modelOverride optional model override; null/blank = credential or provider default
      */
     public AiReview runChapterReview(UUID userId, UUID chapterId, UUID credentialId,
-                                     String modelOverride) throws SQLException {
+            String modelOverride) throws SQLException {
         Chapter chapter = chapterDao.findById(chapterId)
                 .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
 
@@ -101,14 +101,14 @@ public class AiReviewService {
         }
 
         AiCredential credential = resolveCredential(userId, credentialId);
-        AiProvider provider = providers.get(credential.getProvider());
+        AiProvider   provider   = providers.get(credential.getProvider());
         if (provider == null) {
             throw new ReviewException(400, "unsupported_provider",
                     "Provider " + credential.getProvider() + " is not supported yet.");
         }
 
-        String model = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
-        UUID projectId = resolveProjectId(bookId);
+        String model     = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+        UUID   projectId = resolveProjectId(bookId);
 
         UUID reviewId = reviewDao.createPending(userId, projectId, bookId, chapterId,
                 provider.providerKey(), model);
@@ -124,8 +124,8 @@ public class AiReviewService {
                 chapterText, DEFAULT_CATEGORIES);
 
         try {
-            ReviewResult result = provider.reviewChapter(request);
-            List<AiReviewDao.NewRecommendation> recs = new ArrayList<>();
+            ReviewResult                        result = provider.reviewChapter(request);
+            List<AiReviewDao.NewRecommendation> recs   = new ArrayList<>();
             for (ReviewResult.Recommendation r : result.recommendations()) {
                 recs.add(new AiReviewDao.NewRecommendation(
                         r.category(), r.severity(), r.location(), r.recommendation(),
@@ -146,14 +146,18 @@ public class AiReviewService {
      * promoted is returned unchanged. Returns the updated review (with
      * recommendations) so the panel can reflect the new promoted state.
      */
-    public AiReview promoteRecommendation(UUID userId, UUID reviewId, UUID recId) throws SQLException {
+    public AiReview promoteRecommendation(UUID userId, UUID reviewId, UUID recId,
+            String codexCategoryOverride) throws SQLException {
         AiReview review = reviewDao.findByIdForUser(reviewId, userId)
                 .orElseThrow(() -> new ReviewException(404, "not_found", "Review not found."));
 
         AiReviewRecommendation rec = null;
         if (review.getRecommendations() != null) {
             for (AiReviewRecommendation r : review.getRecommendations()) {
-                if (r.getId().equals(recId)) { rec = r; break; }
+                if (r.getId().equals(recId)) {
+                    rec = r;
+                    break;
+                }
             }
         }
         if (rec == null) {
@@ -168,23 +172,25 @@ public class AiReviewService {
             throw new ReviewException(400, "no_project", "This review is not associated with a project.");
         }
 
-        String category = resolveCodexCategory(rec.getCodexCategory());
-        String title = firstNonBlank(rec.getCodexTitle(), truncate(rec.getRecommendation(), 80), "Untitled");
-        String content = "<p>" + escapeHtml(rec.getRecommendation()) + "</p>";
+        String category = resolveCodexCategory(firstNonBlank(codexCategoryOverride, rec.getCodexCategory()));
+        String title    = firstNonBlank(rec.getCodexTitle(), truncate(rec.getRecommendation(), 80), "Untitled");
+        String content  = "<p>" + escapeHtml(rec.getRecommendation()) + "</p>";
 
-        Codex codex = getOrCreateProjectCodex(projectId);
+        Codex   codex           = getOrCreateProjectCodex(projectId);
         Chapter categoryChapter = getOrCreateCategoryChapter(codex.getId(), category);
 
         Scene entry = sceneDao.create(categoryChapter.getId(), title, null);
         sceneDao.saveContent(entry.getId(), content, countWords(rec.getRecommendation()));
 
         reviewDao.markPromoted(recId, reviewId, entry.getId());
+        reviewDao.updateRecommendationStatus(recId, reviewId, "PROMOTED");
         return reviewDao.findByIdForUser(reviewId, userId).orElseThrow();
     }
 
     private Codex getOrCreateProjectCodex(UUID projectId) throws SQLException {
         Optional<Codex> existing = codexDao.findByProjectId(projectId);
-        if (existing.isPresent()) return existing.get();
+        if (existing.isPresent())
+            return existing.get();
         Codex codex = codexDao.createForProject(projectId, null);
         // Seed the default category chapters, matching normal codex creation.
         for (CodexCategory cat : codexCategoryDao.findDefaults()) {
@@ -195,7 +201,8 @@ public class AiReviewService {
 
     private Chapter getOrCreateCategoryChapter(UUID codexId, String categoryKey) throws SQLException {
         for (Chapter ch : chapterDao.findByCodexId(codexId)) {
-            if (categoryKey.equals(ch.getCodexCategory())) return ch;
+            if (categoryKey.equals(ch.getCodexCategory()))
+                return ch;
         }
         return chapterDao.createCodexChapter(codexId, categoryKey, labelFor(categoryKey));
     }
@@ -204,7 +211,8 @@ public class AiReviewService {
         if (suggested != null && !suggested.isBlank()) {
             String key = suggested.trim();
             for (CodexCategory cat : codexCategoryDao.findAll()) {
-                if (cat.getCategoryKey().equalsIgnoreCase(key)) return cat.getCategoryKey();
+                if (cat.getCategoryKey().equalsIgnoreCase(key))
+                    return cat.getCategoryKey();
             }
         }
         return "NOTES";
@@ -212,7 +220,8 @@ public class AiReviewService {
 
     private String labelFor(String categoryKey) throws SQLException {
         for (CodexCategory cat : codexCategoryDao.findAll()) {
-            if (cat.getCategoryKey().equalsIgnoreCase(categoryKey)) return cat.getLabel();
+            if (cat.getCategoryKey().equalsIgnoreCase(categoryKey))
+                return cat.getLabel();
         }
         return categoryKey;
     }
@@ -234,11 +243,12 @@ public class AiReviewService {
     }
 
     private String assembleChapterText(UUID chapterId) throws SQLException {
-        List<Scene> scenes = sceneDao.findByChapterId(chapterId);
+        List<Scene>  scenes = sceneDao.findByChapterId(chapterId);
         List<String> chunks = new ArrayList<>();
         for (Scene scene : scenes) {
             String text = htmlToPlainText(scene.getContent());
-            if (!text.isBlank()) chunks.add(text);
+            if (!text.isBlank())
+                chunks.add(text);
         }
         return String.join(SCENE_BREAK, chunks);
     }
@@ -249,12 +259,14 @@ public class AiReviewService {
      * other markup are discarded.
      */
     private String htmlToPlainText(String html) {
-        if (html == null || html.isBlank()) return "";
-        Document doc = Jsoup.parse(html);
-        StringBuilder sb = new StringBuilder();
+        if (html == null || html.isBlank())
+            return "";
+        Document      doc = Jsoup.parse(html);
+        StringBuilder sb  = new StringBuilder();
         for (Element el : doc.body().select("p, h1, h2, h3, h4, blockquote, li")) {
             String text = el.text().trim();
-            if (!text.isEmpty()) sb.append(text).append("\n\n");
+            if (!text.isEmpty())
+                sb.append(text).append("\n\n");
         }
         String result = sb.toString().trim();
         if (result.isEmpty()) {
@@ -266,32 +278,38 @@ public class AiReviewService {
 
     private String chapterLabel(Chapter chapter) {
         String title = chapter.getTitle();
-        if (title != null && !title.isBlank()) return title.trim();
+        if (title != null && !title.isBlank())
+            return title.trim();
         return "Chapter " + chapter.getChapterNumber();
     }
 
     private static String firstNonBlank(String... values) {
         for (String value : values) {
-            if (value != null && !value.isBlank()) return value.trim();
+            if (value != null && !value.isBlank())
+                return value.trim();
         }
         return "";
     }
 
     private static String truncate(String value, int max) {
-        if (value == null) return null;
+        if (value == null)
+            return null;
         String trimmed = value.trim();
         return trimmed.length() <= max ? trimmed : trimmed.substring(0, max).trim();
     }
 
     private static int countWords(String text) {
-        if (text == null) return 0;
+        if (text == null)
+            return 0;
         String trimmed = text.trim();
-        if (trimmed.isEmpty()) return 0;
+        if (trimmed.isEmpty())
+            return 0;
         return trimmed.split("\\s+").length;
     }
 
     private static String escapeHtml(String text) {
-        if (text == null) return "";
+        if (text == null)
+            return "";
         return text.replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;");

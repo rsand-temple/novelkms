@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
 	Alert,
 	Box,
@@ -39,13 +39,14 @@ function formatTime(iso) {
  *   chapterId {string}
  */
 export default function ChapterReviewPanel({ chapterId }) {
-	const [selectedReviewId, setSelectedReviewId] = useState(null)
+	const [explicitReviewId, setExplicitReviewId] = useState(null)
 	const [credentialId, setCredentialId] = useState(null)
 	const [runError, setRunError] = useState(null)
 	const [promotingId, setPromotingId] = useState(null)
 
 	const { data: credentials = [] } = useAiCredentials()
 	const { data: reviews = [], isLoading: loadingReviews } = useChapterReviews(chapterId)
+	const selectedReviewId = explicitReviewId ?? reviews[0]?.id ?? null
 	const { data: detail, isLoading: loadingDetail } = useAiReview(selectedReviewId, !!selectedReviewId)
 	const { mutate: runReview, isPending: running } = useRunChapterReview()
 	const { mutate: setRecStatus } = useSetRecommendationStatus()
@@ -58,25 +59,12 @@ export default function ChapterReviewPanel({ chapterId }) {
 	const effectiveCredId = credentialId ?? defaultCredId
 	const hasCredentials = credentials.length > 0
 
-	// Default the selected review to the most recent, and reset on chapter change.
-	useEffect(() => {
-		setSelectedReviewId(null)
-		setRunError(null)
-		setCredentialId(null)
-	}, [chapterId])
-
-	useEffect(() => {
-		if (!selectedReviewId && reviews.length > 0) {
-			setSelectedReviewId(reviews[0].id)
-		}
-	}, [reviews, selectedReviewId])
-
 	const handleRun = () => {
 		setRunError(null)
 		runReview(
 			{ chapterId, credentialId: effectiveCredId, model: null },
 			{
-				onSuccess: (review) => setSelectedReviewId(review.id),
+				onSuccess: (review) => setExplicitReviewId(review.id),
 				onError: (e) => setRunError(errMessage(e)),
 			},
 		)
@@ -87,11 +75,11 @@ export default function ChapterReviewPanel({ chapterId }) {
 		setRecStatus({ reviewId: detail.id, recId: rec.id, status: value ?? 'OPEN', chapterId })
 	}
 
-	const handlePromote = (rec) => {
+	const handlePromote = (rec, codexCategory) => {
 		if (!detail) return
 		setPromotingId(rec.id)
 		promote(
-			{ reviewId: detail.id, recId: rec.id, chapterId },
+			{ reviewId: detail.id, recId: rec.id, codexCategory, chapterId },
 			{ onSettled: () => setPromotingId(null), onError: (e) => setRunError(errMessage(e)) },
 		)
 	}
@@ -135,7 +123,7 @@ export default function ChapterReviewPanel({ chapterId }) {
 						<TextField
 							select label="Review" size="small" fullWidth sx={{ mt: 1.5 }}
 							value={selectedReviewId ?? ''}
-							onChange={(e) => setSelectedReviewId(e.target.value)}
+							onChange={(e) => setExplicitReviewId(e.target.value)}
 						>
 							{reviews.map(r => (
 								<MenuItem key={r.id} value={r.id}>

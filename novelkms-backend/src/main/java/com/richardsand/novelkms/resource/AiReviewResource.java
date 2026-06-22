@@ -28,7 +28,8 @@ import jakarta.ws.rs.core.Response;
 /**
  * AI chapter review endpoints.
  *
- * <p>Authorization: {@code POST /ai/reviews/chapters/{chapterId}} and
+ * <p>
+ * Authorization: {@code POST /ai/reviews/chapters/{chapterId}} and
  * {@code GET /chapters/{chapterId}/reviews} are covered by the tenant filter
  * (the {@code chapters/{id}} segment triggers an ownership check). The
  * {@code reviews/{id}} paths are NOT covered by the filter, so review ownership
@@ -39,7 +40,13 @@ import jakarta.ws.rs.core.Response;
 @Consumes(MediaType.APPLICATION_JSON)
 public class AiReviewResource {
 
-    private static final Set<String> VALID_STATUSES = Set.of("OPEN", "ACCEPTED", "REJECTED");
+    private static final Set<String> VALID_STATUSES = Set.of(
+            "OPEN",
+            "ACCEPTED",
+            "REJECTED",
+            "FUTURE",
+            "DELETED",
+            "PROMOTED");
 
     private final AiReviewService service;
     private final AiReviewDao     reviewDao;
@@ -54,20 +61,28 @@ public class AiReviewResource {
     }
 
     public static class RunRequest {
-        @JsonProperty public UUID   credentialId;
-        @JsonProperty public String model;
+        @JsonProperty
+        public UUID   credentialId;
+        @JsonProperty
+        public String model;
     }
 
     public static class StatusRequest {
-        @JsonProperty public String status;
+        @JsonProperty
+        public String status;
+    }
+
+    public static class PromoteRequest {
+        @JsonProperty
+        public String codexCategory;
     }
 
     @POST
     @Path("/ai/reviews/chapters/{chapterId}")
     public Response runChapterReview(@PathParam("chapterId") UUID chapterId, RunRequest body) {
-        UUID userId = CurrentUser.id(request);
-        UUID credentialId = body == null ? null : body.credentialId;
-        String model = body == null ? null : body.model;
+        UUID   userId       = CurrentUser.id(request);
+        UUID   credentialId = body == null ? null : body.credentialId;
+        String model        = body == null ? null : body.model;
         try {
             AiReview review = service.runChapterReview(userId, chapterId, credentialId, model);
             return Response.ok(review).build();
@@ -91,10 +106,12 @@ public class AiReviewResource {
     @POST
     @Path("/ai/reviews/{reviewId}/recommendations/{recId}/promote")
     public Response promoteRecommendation(@PathParam("reviewId") UUID reviewId,
-                                          @PathParam("recId") UUID recId) {
-        UUID userId = CurrentUser.id(request);
+            @PathParam("recId") UUID recId,
+            PromoteRequest body) {
+        UUID   userId        = CurrentUser.id(request);
+        String codexCategory = body == null ? null : body.codexCategory;
         try {
-            AiReview review = service.promoteRecommendation(userId, reviewId, recId);
+            AiReview review = service.promoteRecommendation(userId, reviewId, recId, codexCategory);
             return Response.ok(review).build();
         } catch (ReviewException e) {
             return Response.status(e.status())
@@ -114,14 +131,15 @@ public class AiReviewResource {
     @PUT
     @Path("/ai/reviews/{reviewId}/recommendations/{recId}")
     public Response setRecommendationStatus(@PathParam("reviewId") UUID reviewId,
-                                            @PathParam("recId") UUID recId,
-                                            StatusRequest body) {
+            @PathParam("recId") UUID recId,
+            StatusRequest body) {
         if (body == null || body.status == null) {
             return error(400, "bad_request", "A status is required.");
         }
         String status = body.status.trim().toUpperCase();
         if (!VALID_STATUSES.contains(status)) {
-            return error(400, "invalid_status", "status must be OPEN, ACCEPTED, or REJECTED.");
+            return error(400, "invalid_status",
+                    "status must be OPEN, ACCEPTED, REJECTED, FUTURE, DELETED, or PROMOTED.");
         }
         return run(() -> {
             UUID userId = CurrentUser.id(request);
