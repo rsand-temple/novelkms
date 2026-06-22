@@ -7,7 +7,6 @@ import DescriptionIcon from '@mui/icons-material/Description'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import FileUploadIcon from '@mui/icons-material/FileUpload'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
@@ -420,7 +419,6 @@ export default function App() {
 						<Button
 							color="inherit"
 							size="small"
-							startIcon={<AutoAwesomeOutlinedIcon fontSize="small" />}
 							endIcon={<ArrowDropDownIcon />}
 							onClick={(e) => setAiAnchor(e.currentTarget)}
 							sx={{ ...topBarButtonSx, mr: 0 }}

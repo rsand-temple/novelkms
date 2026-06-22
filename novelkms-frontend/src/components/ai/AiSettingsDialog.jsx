@@ -18,11 +18,9 @@ import {
 	Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import StarIcon from '@mui/icons-material/Star'
-import StarBorderIcon from '@mui/icons-material/StarBorder'
-import VpnKeyOutlinedIcon from '@mui/icons-material/VpnKeyOutlined'
+import DeleteIcon from '@mui/icons-material/Delete'
+import RenameIcon from '@mui/icons-material/DriveFileRenameOutline'
+import SettingsIcon from '@mui/icons-material/Settings'
 import {
 	useAiCredentials,
 	useCreateAiCredential,
@@ -103,7 +101,7 @@ export default function AiSettingsDialog({ open, onClose }) {
 	return (
 		<Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
 			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-				<VpnKeyOutlinedIcon fontSize="small" />
+				<SettingsIcon fontSize="small" />
 				AI Settings
 			</DialogTitle>
 
@@ -115,7 +113,7 @@ export default function AiSettingsDialog({ open, onClose }) {
 
 				{errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
 
-				{/* ── List view ─────────────────────────────────────────────── */}
+				{/* List view */}
 				{!form && (
 					<>
 						{isLoading ? (
@@ -137,15 +135,6 @@ export default function AiSettingsDialog({ open, onClose }) {
 											borderBottom: '1px solid', borderColor: 'divider',
 										}}
 									>
-										<IconButton
-											size="small"
-											title={c.defaultCredential ? 'Default key' : 'Make default'}
-											onClick={() => !c.defaultCredential && setDefault({ id: c.id })}
-											color={c.defaultCredential ? 'warning' : 'default'}
-										>
-											{c.defaultCredential ? <StarIcon fontSize="small" /> : <StarBorderIcon fontSize="small" />}
-										</IconButton>
-
 										<Box sx={{ flexGrow: 1, minWidth: 0 }}>
 											<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 												<Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{c.label}</Typography>
@@ -169,11 +158,16 @@ export default function AiSettingsDialog({ open, onClose }) {
 											</Box>
 										) : (
 											<>
+												{!c.defaultCredential && (
+													<Button size="small" onClick={() => setDefault({ id: c.id })}>
+														Make default
+													</Button>
+												)}
 												<IconButton size="small" title="Edit" onClick={() => startEdit(c)}>
-													<EditOutlinedIcon fontSize="small" />
+													<RenameIcon fontSize="small" />
 												</IconButton>
 												<IconButton size="small" title="Delete" onClick={() => setConfirmId(c.id)}>
-													<DeleteOutlineIcon fontSize="small" />
+													<DeleteIcon fontSize="small" />
 												</IconButton>
 											</>
 										)}
@@ -188,7 +182,7 @@ export default function AiSettingsDialog({ open, onClose }) {
 					</>
 				)}
 
-				{/* ── Add / edit form ───────────────────────────────────────── */}
+				{/* Add / edit form */}
 				{form && (
 					<Box>
 						<Typography variant="subtitle2" sx={{ mb: 1.5 }}>

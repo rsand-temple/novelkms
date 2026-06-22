@@ -16,12 +16,9 @@ import {
 	ToggleButtonGroup,
 	Typography,
 } from '@mui/material'
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
-import CheckIcon from '@mui/icons-material/Check'
-import CloseIcon from '@mui/icons-material/Close'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import ScheduleIcon from '@mui/icons-material/Schedule'
 import {
 	useChapterReviews,
 	useAiReview,
@@ -51,8 +48,8 @@ function severityColor(severity) {
 
 function StatusIcon({ status }) {
 	if (status === 'COMPLETED') return <CheckCircleOutlinedIcon fontSize="small" color="success" />
-	if (status === 'FAILED')    return <ErrorOutlineIcon fontSize="small" color="error" />
-	return <HourglassEmptyIcon fontSize="small" color="disabled" />
+	if (status === 'FAILED')    return <WarningAmberIcon fontSize="small" color="error" />
+	return <ScheduleIcon fontSize="small" color="disabled" />
 }
 
 /**
@@ -118,8 +115,7 @@ export default function AiReviewDialog({ open, onClose, chapterId, chapterLabel,
 
 	return (
 		<Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-				<AutoAwesomeOutlinedIcon fontSize="small" />
+			<DialogTitle>
 				AI Review
 				{chapterLabel && (
 					<Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
@@ -140,7 +136,7 @@ export default function AiReviewDialog({ open, onClose, chapterId, chapterLabel,
 					</Box>
 				) : (
 					<>
-						{/* ── Run control ──────────────────────────────────────── */}
+						{/* Run control */}
 						<Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flexWrap: 'wrap', mb: 1 }}>
 							{credentials.length > 1 && (
 								<TextField
@@ -165,7 +161,7 @@ export default function AiReviewDialog({ open, onClose, chapterId, chapterLabel,
 							/>
 							<Button
 								variant="contained"
-								startIcon={running ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeOutlinedIcon />}
+								startIcon={running ? <CircularProgress size={16} color="inherit" /> : null}
 								onClick={handleRun}
 								disabled={running}
 								sx={{ mt: 0.25 }}
@@ -179,7 +175,7 @@ export default function AiReviewDialog({ open, onClose, chapterId, chapterLabel,
 						<Divider sx={{ my: 1.5 }} />
 
 						<Box sx={{ display: 'flex', gap: 2, minHeight: 360 }}>
-							{/* ── History list ──────────────────────────────────── */}
+							{/* History list */}
 							<Box sx={{ width: 200, flexShrink: 0, borderRight: '1px solid', borderColor: 'divider', pr: 1, overflowY: 'auto', maxHeight: 460 }}>
 								<Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
 									Past reviews
@@ -213,7 +209,7 @@ export default function AiReviewDialog({ open, onClose, chapterId, chapterLabel,
 								)}
 							</Box>
 
-							{/* ── Detail ────────────────────────────────────────── */}
+							{/* Detail */}
 							<Box sx={{ flexGrow: 1, minWidth: 0, overflowY: 'auto', maxHeight: 460 }}>
 								{!selectedReviewId ? (
 									<Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>
@@ -249,12 +245,8 @@ export default function AiReviewDialog({ open, onClose, chapterId, chapterLabel,
 													exclusive size="small" value={value}
 													onChange={(_e, val) => handleSetStatus(rec, val)}
 												>
-													<ToggleButton value="ACCEPTED" color="success">
-														<CheckIcon fontSize="small" sx={{ mr: 0.5 }} /> Accept
-													</ToggleButton>
-													<ToggleButton value="REJECTED" color="error">
-														<CloseIcon fontSize="small" sx={{ mr: 0.5 }} /> Reject
-													</ToggleButton>
+													<ToggleButton value="ACCEPTED" color="success">Accept</ToggleButton>
+													<ToggleButton value="REJECTED" color="error">Reject</ToggleButton>
 												</ToggleButtonGroup>
 											</Box>
 										)
