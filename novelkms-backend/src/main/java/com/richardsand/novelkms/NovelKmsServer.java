@@ -26,12 +26,14 @@ import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.CodexCategoryDao;
 import com.richardsand.novelkms.dao.CodexDao;
+import com.richardsand.novelkms.dao.EditorSettingsDao;
 import com.richardsand.novelkms.dao.PartDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dao.TenantAccessDao;
 import com.richardsand.novelkms.dao.TrashDao;
+import com.richardsand.novelkms.dao.UserPreferenceDao;
 import com.richardsand.novelkms.dao.UserStyleDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
 import com.richardsand.novelkms.resource.AiCredentialResource;
@@ -40,6 +42,7 @@ import com.richardsand.novelkms.resource.AuthResource;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterResource;
 import com.richardsand.novelkms.resource.CodexResource;
+import com.richardsand.novelkms.resource.EditorSettingsResource;
 import com.richardsand.novelkms.resource.ExportResource;
 import com.richardsand.novelkms.resource.ImportResource;
 import com.richardsand.novelkms.resource.PartResource;
@@ -48,6 +51,7 @@ import com.richardsand.novelkms.resource.SceneResource;
 import com.richardsand.novelkms.resource.StyleResource;
 import com.richardsand.novelkms.resource.TemplateResource;
 import com.richardsand.novelkms.resource.TrashResource;
+import com.richardsand.novelkms.resource.UserPreferenceResource;
 import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
@@ -130,6 +134,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         AuthDao          authDao          = new AuthDao(ds);
         TenantAccessDao  tenantAccessDao  = new TenantAccessDao(ds);
         TrashDao         trashDao         = new TrashDao(ds);
+        EditorSettingsDao editorSettingsDao = new EditorSettingsDao(ds);
+        UserPreferenceDao userPreferenceDao = new UserPreferenceDao(ds);
 
         ImportService     importService     = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
         ExportService     exportService     = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao);
@@ -174,6 +180,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(SceneResource.class);
         env.jersey().register(TemplateResource.class);
         env.jersey().register(StyleResource.class);
+        env.jersey().register(EditorSettingsResource.class);
+        env.jersey().register(UserPreferenceResource.class);
         env.jersey().register(AiCredentialResource.class);
         env.jersey().register(AiReviewResource.class);
         env.jersey().register(TrashResource.class);
@@ -208,6 +216,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(aiReviewService).to(AiReviewService.class);
                 bind(trashDao).to(TrashDao.class);
                 bind(trashService).to(TrashService.class);
+                bind(editorSettingsDao).to(EditorSettingsDao.class);
+                bind(userPreferenceDao).to(UserPreferenceDao.class);
             }
         });
 

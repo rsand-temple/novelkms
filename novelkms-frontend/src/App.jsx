@@ -12,16 +12,19 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined'
+import SettingsIcon from '@mui/icons-material/Settings'
 import NavPanel from './components/layout/NavPanel'
 import EditorPanel from './components/layout/EditorPanel'
 import TrashPanel from './components/trash/TrashPanel'
 import PropertiesPanel from './components/layout/PropertiesPanel'
 import ImportDialog from './components/nav/dialogs/ImportDialog'
 import ExportDialog from './components/nav/dialogs/ExportDialog'
-import AiSettingsDialog from './components/ai/AiSettingsDialog'
+import SettingsDialog from './components/settings/SettingsDialog'
 import { LogoMark } from './components/branding/Logo'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
+import { usePreferences } from './hooks/usePreferences'
+import { hydrateSkipDeleteConfirm } from './utils/deleteConfirmPrefs'
 
 /* eslint-disable no-undef */
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
@@ -171,7 +174,7 @@ export default function App() {
 	const [exportDialog, setExportDialog] = useState({ open: false, url: null, suggestedName: '' })
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
 	const [aiAnchor, setAiAnchor] = useState(null)
-	const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
+	const [settings, setSettings] = useState({ open: false, tab: 'document' })
 
 	const [navWidth, setNavWidth] = useState(() =>
 		clamp(readStoredNumber('novelkms.navWidth', DEFAULT_NAV_WIDTH), MIN_NAV_WIDTH, MAX_NAV_WIDTH)
@@ -187,6 +190,13 @@ export default function App() {
 	)
 
 	const resizeRef = useRef(null)
+
+	// Load per-user preferences once and hydrate the synchronous delete-confirm
+	// mirror that the nav/menu delete handlers read at click time.
+	const { data: preferences } = usePreferences()
+	useEffect(() => {
+		if (preferences) hydrateSkipDeleteConfirm(preferences.skipDeleteConfirm)
+	}, [preferences])
 
 	useEffect(() => {
 		window.localStorage.setItem('novelkms.navWidth', String(navWidth))
@@ -320,7 +330,11 @@ export default function App() {
 
 	const openAiSettings = () => {
 		setAiAnchor(null)
-		setAiSettingsOpen(true)
+		setSettings({ open: true, tab: 'ai' })
+	}
+
+	const openSettings = () => {
+		setSettings({ open: true, tab: 'document' })
 	}
 
 	return (
@@ -429,13 +443,25 @@ export default function App() {
 							size="small"
 							endIcon={<ArrowDropDownIcon />}
 							onClick={(e) => setAiAnchor(e.currentTarget)}
-							sx={{ ...topBarButtonSx, mr: 0 }}
+							sx={topBarButtonSx}
 						>
 							AI
 						</Button>
 						<Menu anchorEl={aiAnchor} open={!!aiAnchor} onClose={() => setAiAnchor(null)}>
 							<MenuItem onClick={openAiSettings}>AI Settings…</MenuItem>
 						</Menu>
+
+						<Tooltip title="Settings">
+							<IconButton
+								color="inherit"
+								size="small"
+								aria-label="Open settings"
+								onClick={openSettings}
+								sx={{ ml: 0.5, color: 'rgba(255,255,255,0.86)', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.09)' } }}
+							>
+								<SettingsIcon fontSize="small" />
+							</IconButton>
+						</Tooltip>
 					</Toolbar>
 				</AppBar>
 
@@ -800,9 +826,11 @@ export default function App() {
 					suggestedName={exportDialog.suggestedName}
 				/>
 
-				<AiSettingsDialog
-					open={aiSettingsOpen}
-					onClose={() => setAiSettingsOpen(false)}
+				<SettingsDialog
+					open={settings.open}
+					initialTab={settings.tab}
+					projectId={selection.projectId}
+					onClose={() => setSettings(s => ({ ...s, open: false }))}
 				/>
 			</Box>
 		</SearchProvider>

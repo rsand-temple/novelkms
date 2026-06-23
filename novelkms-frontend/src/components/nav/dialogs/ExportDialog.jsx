@@ -12,10 +12,14 @@ import {
 } from '@mui/material'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 
+const DEFAULT_ACCEPT = {
+	'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+}
+
 /**
  * ExportDialog
  *
- * Presents a filename field and triggers a .docx download from the server.
+ * Presents a filename field and triggers a binary export download from the server.
  *
  * When the browser supports the File System Access API (Chrome / Edge), clicking
  * "Export" opens a native "Save As" dialog so the user can choose both the
@@ -23,12 +27,25 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload'
  * file is sent to the default downloads folder using a hidden <a download> link.
  *
  * Props:
- *   open          — boolean
- *   onClose       — () => void
- *   url           — string   full API URL, e.g. /api/export/books/{id}/docx
- *   suggestedName — string   pre-populated base name WITHOUT extension (editable)
+ *   open            — boolean
+ *   onClose         — () => void
+ *   url             — string   full API URL, e.g. /api/export/books/{id}/docx
+ *   suggestedName   — string   pre-populated base name WITHOUT extension (editable)
+ *   extension       — string   file extension without dot, e.g. "docx" or "epub"
+ *   dialogTitle     — string   dialog title
+ *   fileDescription — string   native save-dialog file type description
+ *   accept          — object   File System Access API accept map
  */
-export default function ExportDialog({ open, onClose, url, suggestedName }) {
+export default function ExportDialog({
+	open,
+	onClose,
+	url,
+	suggestedName,
+	extension = 'docx',
+	dialogTitle = 'Export as Word (.docx)',
+	fileDescription = 'Word Document',
+	accept = DEFAULT_ACCEPT,
+}) {
 
 	const [filename,   setFilename]   = useState('')
 	const [timestamp,  setTimestamp]  = useState('')
@@ -56,16 +73,18 @@ export default function ExportDialog({ open, onClose, url, suggestedName }) {
 
 	/**
 	 * Builds the full filename the file will be saved as:
-	 *   {base}-{YYYYMMDD-HHmmss}.docx
+	 *   {base}-{YYYYMMDD-HHmmss}.{extension}
 	 * Spaces in the user's typed name become underscores; the timestamp is
 	 * the value locked when the dialog opened.
 	 */
 	const computedFilename = () => {
+		const ext = String(extension || 'docx').replace(/^\./, '')
+		const extPattern = new RegExp(`\\.${ext}$`, 'i')
 		const base = (filename.trim() || 'export')
-			.replace(/\.docx$/i, '')          // strip any .docx the user typed
+			.replace(extPattern, '')           // strip extension if the user typed it
 			.replace(/\s+/g, '_')             // spaces → underscores
 			.replace(/[\\/:*?"<>|]/g, '')     // strip filesystem-illegal chars
-		return `${base}-${timestamp}.docx`
+		return `${base}-${timestamp}.${ext}`
 	}
 
 	const handleExport = async () => {
@@ -81,11 +100,8 @@ export default function ExportDialog({ open, onClose, url, suggestedName }) {
 					fileHandle = await window.showSaveFilePicker({
 						suggestedName: computedFilename(),
 						types: [{
-							description: 'Word Document',
-							accept: {
-								'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-									['.docx'],
-							},
+							description: fileDescription,
+							accept,
 						}],
 					})
 				} catch (err) {
@@ -126,7 +142,7 @@ export default function ExportDialog({ open, onClose, url, suggestedName }) {
 
 	return (
 		<Dialog open={open} onClose={exporting ? undefined : onClose} maxWidth="sm" fullWidth>
-			<DialogTitle>Export as Word (.docx)</DialogTitle>
+			<DialogTitle>{dialogTitle}</DialogTitle>
 
 			<DialogContent>
 				<Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

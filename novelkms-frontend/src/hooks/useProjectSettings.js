@@ -1,7 +1,14 @@
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
+import {
+	useUserEditorSettings,
+	useProjectEditorSettings,
+	useUpdateUserEditorSettings,
+	useUpsertProjectEditorSettings,
+} from './useEditorSettings'
 
-// Project-level editor defaults.  Stored in localStorage keyed by projectId;
-// easy to migrate to a backend project_settings table later.
+// Factory defaults — kept as a fallback so the editor always renders a fully
+// populated settings object, even before the resolved settings have loaded.
+// These mirror the backend EditorSettingsDefaults (the SYSTEM row).
 export const PROJECT_SETTINGS_DEFAULTS = {
 	fontFamily:             'Georgia, serif',
 	fontSize:               '1.0625rem',
@@ -13,39 +20,49 @@ export const PROJECT_SETTINGS_DEFAULTS = {
 	sceneBreakSpacingBelow: '2em',
 }
 
-function storageKey(projectId) {
-	return `novelkms:project:${projectId}:settings`
-}
-
 /**
- * Returns { settings, updateSettings }.
- * settings is always a fully-populated object (merged with defaults).
- * updateSettings(patch) deep-merges and persists immediately.
+ * Resolved document ("editor") settings for the current editing context.
+ *
+ * Returns { settings, updateSettings } — the same shape the previous
+ * localStorage implementation exposed, so the editor, toolbar, and page
+ * previews consume it unchanged.
+ *
+ * Settings are now read from the server through TanStack Query, keyed by
+ * projectId. The query re-fetches automatically whenever projectId changes
+ * (null -> A -> B), so the values can never go stale the way the old
+ * useState(initializer) did — that stale initializer was the cause of settings
+ * appearing to "reset" every session.
+ *
+ * Resolution is the SYSTEM -> USER -> PROJECT cascade:
+ *   - With a project selected, settings resolve PROJECT override -> USER default.
+ *   - updateSettings(patch) writes the merged definition to the PROJECT override
+ *     (copy-on-write), so edits made from the editor's gear apply to this
+ *     project. When no project is selected it writes the USER default instead.
+ *   - The user default and "reset to default" controls live in the global
+ *     Settings dialog (Document tab).
  */
 export function useProjectSettings(projectId) {
-	const [settings, setSettings] = useState(() => {
-		if (!projectId) return { ...PROJECT_SETTINGS_DEFAULTS }
-		try {
-			const raw = localStorage.getItem(storageKey(projectId))
-			return raw
-				? { ...PROJECT_SETTINGS_DEFAULTS, ...JSON.parse(raw) }
-				: { ...PROJECT_SETTINGS_DEFAULTS }
-		} catch {
-			return { ...PROJECT_SETTINGS_DEFAULTS }
-		}
-	})
+	const hasProject = !!projectId
+
+	const { data: projectRow } = useProjectEditorSettings(projectId, hasProject)
+	const { data: userRow }    = useUserEditorSettings(!hasProject)
+
+	const resolved = hasProject ? projectRow : userRow
+	const settings = { ...PROJECT_SETTINGS_DEFAULTS, ...(resolved?.definition ?? {}) }
+
+	const { mutate: upsertProject } = useUpsertProjectEditorSettings()
+	const { mutate: updateUser }    = useUpdateUserEditorSettings()
 
 	const updateSettings = useCallback((patch) => {
-		setSettings(prev => {
-			const next = { ...prev, ...patch }
-			if (projectId) {
-				try {
-					localStorage.setItem(storageKey(projectId), JSON.stringify(next))
-				} catch { /* quota exceeded — silently ignore */ }
-			}
-			return next
-		})
-	}, [projectId])
+		// Build the full definition (the API stores the whole bundle) by merging
+		// the patch onto the current resolved settings.
+		const next = { ...PROJECT_SETTINGS_DEFAULTS, ...(resolved?.definition ?? {}), ...patch }
+		if (hasProject) {
+			upsertProject({ projectId, definition: next })
+		} else {
+			updateUser(next)
+		}
+	}, [hasProject, projectId, resolved, upsertProject, updateUser])
 
 	return { settings, updateSettings }
 }
