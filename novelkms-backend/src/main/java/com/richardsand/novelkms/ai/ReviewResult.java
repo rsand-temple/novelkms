@@ -23,6 +23,7 @@ public record ReviewResult(
             String location,
             String recommendation,
             String codexCategory,
-            String codexTitle) {
+            String codexTitle,
+            String anchorText) {
     }
 }

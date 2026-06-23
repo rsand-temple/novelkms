@@ -38,7 +38,7 @@ public class OpenAiProvider implements AiProvider {
 
     public static final  String PROVIDER_KEY   = "OPENAI";
     public static final  String DEFAULT_MODEL  = "gpt-5.4";
-    public static final  String PROMPT_VERSION = "chapter-review-v1";
+    public static final  String PROMPT_VERSION = "chapter-review-v2";
 
     private static final String ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
@@ -141,10 +141,16 @@ public class OpenAiProvider implements AiProvider {
                   TIMELINE for dates and ordering; PLOT for plot threads; NOTES for anything else.
                 - codexTitle: a short (3-8 word) title for that codex entry.
 
+                For each recommendation, include an anchorText field: a short verbatim quote \
+                (5-30 words) copied exactly from the chapter text that identifies the passage \
+                your recommendation refers to. This quote will be used to scroll the author's \
+                editor to the relevant passage, so it must appear word-for-word in the chapter.
+
                 Respond with a single JSON object and nothing else, in exactly this shape:
                 {"recommendations":[{"category":"...","severity":"LOW|MEDIUM|HIGH",\
                 "location":"where in the chapter this applies","recommendation":"the note",\
-                "codexCategory":"CANON","codexTitle":"short entry title"}]}
+                "codexCategory":"CANON","codexTitle":"short entry title",\
+                "anchorText":"verbatim quote from the chapter"}]}
 
                 If the chapter is strong and you have no substantive notes, return \
                 {"recommendations":[]}.""".formatted(categoryList);
@@ -197,9 +203,11 @@ public class OpenAiProvider implements AiProvider {
                 String recommendation = textOrNull(node, "recommendation");
                 String codexCategory  = textOrNull(node, "codexCategory");
                 String codexTitle     = textOrNull(node, "codexTitle");
+                String anchorText     = textOrNull(node, "anchorText");
                 if (recommendation == null || recommendation.isBlank()) continue;
                 result.add(new ReviewResult.Recommendation(
-                        category, severity, location, recommendation, codexCategory, codexTitle));
+                        category, severity, location, recommendation,
+                        codexCategory, codexTitle, anchorText));
             }
             return result;
         } catch (AiProviderException e) {

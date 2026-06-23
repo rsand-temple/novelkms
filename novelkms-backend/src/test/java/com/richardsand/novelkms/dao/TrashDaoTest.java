@@ -174,8 +174,8 @@ class TrashDaoTest extends NovelKmsTestBase {
         // Complete the review with 2 recommendations
         aiReviewDao.completeReview(reviewId, "chapter-review-v1", "{}",
                 List.of(
-                        new AiReviewDao.NewRecommendation("Pacing", "MEDIUM", "p2", "Speed up", null, null),
-                        new AiReviewDao.NewRecommendation("Clarity", "LOW", "p5", "Reword", null, null)));
+                        new AiReviewDao.NewRecommendation("Pacing", "MEDIUM", "p2", "Speed up", null, null, null),
+                        new AiReviewDao.NewRecommendation("Clarity", "LOW", "p5", "Reword", null, null, null)));
 
         Optional<TrashItem> result = trashDao.trashReview(TEST_USER_ID, reviewId);
 
@@ -329,7 +329,7 @@ class TrashDaoTest extends NovelKmsTestBase {
         UUID reviewId = aiReviewDao.createPending(
                 TEST_USER_ID, project.getId(), book.getId(), chapter.getId(), "OPENAI", "gpt-5.4");
         aiReviewDao.completeReview(reviewId, "v1", "{}",
-                List.of(new AiReviewDao.NewRecommendation("Pacing", "LOW", "p1", "Fix", null, null)));
+                List.of(new AiReviewDao.NewRecommendation("Pacing", "LOW", "p1", "Fix", null, null, null)));
         trashDao.trashReview(TEST_USER_ID, reviewId);
 
         trashDao.purgeReview(reviewId);

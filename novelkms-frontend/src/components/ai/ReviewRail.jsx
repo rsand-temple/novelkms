@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
 	Alert,
 	Badge,
@@ -54,8 +54,9 @@ function formatTime(iso) {
  *
  * Props:
  *   chapterId {string}
+ *   editor    TipTap editor instance (for scroll-to-passage highlights)
  */
-export default function ReviewRail({ chapterId }) {
+export default function ReviewRail({ chapterId, editor }) {
 	const review = useReview()
 
 	const [explicitReviewId, setExplicitReviewId] = useState(null)
@@ -123,6 +124,11 @@ export default function ReviewRail({ chapterId }) {
 			{ onSettled: () => setPromotingId(null), onError: (e) => setRunError(errMessage(e)) },
 		)
 	}
+
+	const handleHighlight = useCallback((anchorText) => {
+		if (!anchorText || !editor) return
+		editor.commands.highlightAnchor(anchorText)
+	}, [editor])
 
 	// ── Collapsed strip ───────────────────────────────────────────────────────
 	if (review.collapsed) {
@@ -296,6 +302,7 @@ export default function ReviewRail({ chapterId }) {
 									promoting={promotingId === rec.id}
 									skipDeleteConfirm={skipDeleteConfirm}
 									setSkipDeleteConfirm={persistSkipDeleteConfirm}
+									onHighlight={handleHighlight}
 								/>
 							))
 						)}

@@ -129,7 +129,7 @@ public class AiReviewService {
             for (ReviewResult.Recommendation r : result.recommendations()) {
                 recs.add(new AiReviewDao.NewRecommendation(
                         r.category(), r.severity(), r.location(), r.recommendation(),
-                        r.codexCategory(), r.codexTitle()));
+                        r.codexCategory(), r.codexTitle(), r.anchorText()));
             }
             reviewDao.completeReview(reviewId, result.promptVersion(), result.rawJson(), recs);
         } catch (AiProviderException e) {

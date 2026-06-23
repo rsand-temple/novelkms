@@ -44,6 +44,7 @@ import {
  *   promoting            boolean — this card's promote is in flight
  *   skipDeleteConfirm    boolean — suppress the delete confirm dialog
  *   setSkipDeleteConfirm fn(bool) — persist the suppression preference
+ *   onHighlight(anchorText) — scroll the editor to the quoted passage
  */
 export default function ReviewCard({
 	rec,
@@ -52,6 +53,7 @@ export default function ReviewCard({
 	promoting,
 	skipDeleteConfirm,
 	setSkipDeleteConfirm,
+	onHighlight,
 }) {
 	const initialCategory = useMemo(() => normalizeCategory(rec.codexCategory), [rec.codexCategory])
 
@@ -143,9 +145,18 @@ export default function ReviewCard({
 				<Typography
 					variant="caption"
 					color="text.secondary"
-					sx={{ display: 'block', mb: 1, fontStyle: 'italic' }}
+					onClick={rec.anchorText ? () => onHighlight?.(rec.anchorText) : undefined}
+					sx={{
+						display: 'block',
+						mb: 1,
+						fontStyle: 'italic',
+						...(rec.anchorText ? {
+							cursor: 'pointer',
+							'&:hover': { color: 'primary.main', textDecoration: 'underline' },
+						} : null),
+					}}
 				>
-					{rec.location}
+					{rec.location}{rec.anchorText ? ' ↗' : ''}
 				</Typography>
 			)}
 

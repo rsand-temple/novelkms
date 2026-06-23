@@ -13,8 +13,9 @@ import lombok.NoArgsConstructor;
 /**
  * A single editorial recommendation produced by an AI review. Recommendations
  * are atomic and independently actionable; each carries a lifecycle status
- * (OPEN -> ACCEPTED | REJECTED) so the author can track which suggestions were
- * applied without the manuscript ever being modified automatically.
+ * (OPEN -> ACCEPTED | REJECTED | FUTURE | DELETED | PROMOTED) so the author
+ * can track which suggestions were applied without the manuscript ever being
+ * modified automatically.
  */
 @Getter
 @Builder
@@ -47,7 +48,7 @@ public class AiReviewRecommendation {
     @JsonProperty
     private String recommendation;
 
-    /** OPEN | ACCEPTED | REJECTED. */
+    /** OPEN | ACCEPTED | REJECTED | FUTURE | DELETED | PROMOTED. */
     @JsonProperty
     private String status;
 
@@ -58,6 +59,15 @@ public class AiReviewRecommendation {
     /** Model-suggested concise title for the codex entry if promoted. */
     @JsonProperty
     private String codexTitle;
+
+    /**
+     * A short verbatim quote from the chapter text that anchors this
+     * recommendation to a specific passage. Used by the frontend to
+     * scroll-to-and-highlight when the user clicks a recommendation card.
+     * Null for reviews created before prompt v2.
+     */
+    @JsonProperty
+    private String anchorText;
 
     /** Set once promoted: the scene id of the created codex entry (null otherwise). */
     @JsonProperty

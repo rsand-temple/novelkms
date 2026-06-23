@@ -15,6 +15,7 @@ import { SceneBreak } from '../../extensions/SceneBreak';
 import { DraftHeading } from '../../extensions/DraftHeading';
 import { TemplateToken } from '../../extensions/TemplateToken';
 import { SearchHighlight, searchHighlightKey } from '../../extensions/SearchHighlight';
+import { ReviewHighlight } from '../../extensions/ReviewHighlight';
 import { useProjectSettings } from '../../hooks/useProjectSettings';
 import { useScenes, useScene, useDeleteScene, SCENE_KEYS } from '../../hooks/useScenes';
 import { useDraftDocument, flattenDraftScenes } from '../../hooks/useDraftDocument';
@@ -495,6 +496,7 @@ export default function EditorPanel({
 			Placeholder.configure({ placeholder: 'Begin your scene…' }),
 			CharacterCount,
 			SearchHighlight,
+			ReviewHighlight,
 		],
 		content: '',
 		onUpdate: ({ editor }) => {
@@ -823,6 +825,13 @@ export default function EditorPanel({
 						'& .tiptap ul, & .tiptap ol': { pl: 3 },
 						'& .nkms-search-match': { bgcolor: 'warning.light', borderRadius: '2px' },
 						'& .nkms-search-active': { bgcolor: 'warning.main', outline: '2px solid', outlineColor: 'warning.dark' },
+						'& .nkms-review-highlight': {
+							bgcolor: 'info.light',
+							borderRadius: '2px',
+							outline: '2px solid',
+							outlineColor: 'info.main',
+							transition: 'background-color 0.3s ease',
+						},
 						'& .nkms-draft-heading': {
 							minHeight: '1.5em',
 							maxWidth: '72ch', mx: 'auto', px: 1, textAlign: 'center',
@@ -947,7 +956,7 @@ export default function EditorPanel({
 			</Box>
 
 			{reviewRailVisible && (
-				<ReviewRail key={chapterId} chapterId={chapterId} />
+				<ReviewRail key={chapterId} chapterId={chapterId} editor={editor} />
 			)}
 			</Box>
 		</Box>
