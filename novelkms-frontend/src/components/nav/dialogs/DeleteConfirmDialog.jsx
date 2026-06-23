@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-	Dialog, DialogTitle, DialogContent, DialogActions,
+	Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 	Button, FormControlLabel, Checkbox,
 } from '@mui/material'
 import { saveSkipDeleteConfirm } from '../../../utils/deleteConfirmPrefs'
@@ -10,6 +10,7 @@ export default function DeleteConfirmDialog({
 	onClose,
 	onConfirm,
 	itemType = 'item',
+	detail = null,
 	isPending,
 }) {
 	const [dontShowAgain, setDontShowAgain] = useState(false)
@@ -24,6 +25,12 @@ export default function DeleteConfirmDialog({
 			<DialogTitle>{`Delete ${itemType}?`}</DialogTitle>
 
 			<DialogContent sx={{ pt: 0 }}>
+				{detail && (
+					<DialogContentText sx={{ mb: 1.5 }}>
+						{detail}
+					</DialogContentText>
+				)}
+
 				<FormControlLabel
 					control={
 						<Checkbox
@@ -35,7 +42,7 @@ export default function DeleteConfirmDialog({
 					label="Don’t show this again"
 				/>
 			</DialogContent>
-
+			
 			<DialogActions>
 				<Button onClick={onClose} disabled={isPending}>
 					Cancel
