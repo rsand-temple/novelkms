@@ -40,12 +40,12 @@ import { exportApi } from '../../api/export'
 
 const CODEX_ENTRY_LABELS = {
 	CHARACTER: 'Character',
-	VOICE:     'Voice Sheet',
-	PLOT:      'Plot Element',
-	WORLD:     'World Entry',
-	TIMELINE:  'Timeline Entry',
-	CANON:     'Canon Entry',
-	NOTES:     'Note',
+	VOICE: 'Voice Sheet',
+	PLOT: 'Plot Element',
+	WORLD: 'World Entry',
+	TIMELINE: 'Timeline Entry',
+	CANON: 'Canon Entry',
+	NOTES: 'Note',
 }
 
 function getDeleteContext(type, title, codexCategory) {
@@ -70,7 +70,6 @@ function getDeleteContext(type, title, codexCategory) {
 			level: 'part',
 			label: 'Delete Part',
 			itemType: 'Part',
-			detail: 'The part will be removed and its chapters will be moved directly under the book. This cannot be undone.',
 		}
 		case 'book': return {
 			level: 'book',

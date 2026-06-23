@@ -90,7 +90,6 @@ function getDeleteContext(selection) {
 		level: 'part',
 		label: 'Delete Part',
 		itemType: 'Part',
-		detail: 'The part will be removed and its chapters will be moved directly under the book. This cannot be undone.',
 	}
 
 	if (selection.bookId) return {

@@ -5,6 +5,7 @@ import {
 } from '@mui/material'
 import { saveSkipDeleteConfirm } from '../../../utils/deleteConfirmPrefs'
 
+
 export default function DeleteConfirmDialog({
 	open,
 	onClose,
@@ -42,7 +43,7 @@ export default function DeleteConfirmDialog({
 					label="Don’t show this again"
 				/>
 			</DialogContent>
-			
+
 			<DialogActions>
 				<Button onClick={onClose} disabled={isPending}>
 					Cancel
