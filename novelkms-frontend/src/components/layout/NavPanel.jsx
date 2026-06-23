@@ -15,6 +15,7 @@ import MenuBookIcon from '@mui/icons-material/MenuBook'
 import ArticleIcon from '@mui/icons-material/Article'
 import NavToolbar from '../nav/NavToolbar'
 import NavTree from '../nav/NavTree'
+import TrashFooter from '../nav/TrashFooter'
 import { useReorderParts, useReorderPartChapters } from '../../hooks/useParts'
 import { useReorderChapters, useMoveChapter } from '../../hooks/useChapters'
 import { useReorderScenes, useMoveScene } from '../../hooks/useScenes'
@@ -236,15 +237,25 @@ export default function NavPanel({ selection, setSelection }) {
 				setSelection={setSelection}
 				navRef={navTreeRef}
 			>
-				<Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+				<Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 					<NavToolbar selection={selection} setSelection={setSelection} />
 					<Divider />
 					<DndStateContext.Provider value={dragState}>
 						{/* navTreeRef goes here so F2 fires only when focus is in the tree */}
-						<Box ref={navTreeRef} sx={{ flex: 1, overflowY: 'auto' }}>
+						<Box
+							ref={navTreeRef}
+							sx={{
+								flex: 1,
+								minHeight: 0,
+								overflowY: 'auto',
+								overflowX: 'hidden',
+							}}
+						>
 							<NavTree selection={selection} setSelection={setSelection} />
 						</Box>
 					</DndStateContext.Provider>
+					<Divider />
+					<TrashFooter selection={selection} setSelection={setSelection} />
 				</Box>
 			</NavContextMenuProvider>
 
