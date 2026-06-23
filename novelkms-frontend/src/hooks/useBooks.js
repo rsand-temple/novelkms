@@ -51,6 +51,7 @@ export const useDeleteBook = () => {
     onSuccess: (_, { projectId }) => {
       queryClient.invalidateQueries({ queryKey: BOOK_KEYS.byProject(projectId) })
       queryClient.invalidateQueries({ queryKey: PROJECT_KEYS.all })
+      queryClient.invalidateQueries({ queryKey: ['trash'] })
     },
   })
 }

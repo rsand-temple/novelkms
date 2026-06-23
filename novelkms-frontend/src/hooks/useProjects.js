@@ -48,6 +48,7 @@ export const useDeleteProject = () => {
 		mutationFn: (id) => projectsApi.delete(id),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: PROJECT_KEYS.all })
+			queryClient.invalidateQueries({ queryKey: ['trash'] })
 		},
 	})
 }

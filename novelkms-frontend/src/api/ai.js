@@ -15,6 +15,7 @@ export const aiApi = {
 	// body: { credentialId?: uuid|null, model?: string|null }
 	runChapterReview: (chapterId, body) => client.post(`/ai/reviews/chapters/${chapterId}`, body ?? {}).then(r => r.data),
 	getReview: (reviewId) => client.get(`/ai/reviews/${reviewId}`).then(r => r.data),
+	deleteReview: (reviewId) => client.delete(`/ai/reviews/${reviewId}`).then(r => r.data),
 	listChapterReviews: (chapterId) => client.get(`/chapters/${chapterId}/reviews`).then(r => r.data),
 	setRecommendationStatus: (reviewId, recId, status) =>
 		client.put(`/ai/reviews/${reviewId}/recommendations/${recId}`, { status }).then(r => r.data),

@@ -64,6 +64,7 @@ export const useDeleteChapter = () => {
 			queryClient.invalidateQueries({ queryKey: CHAPTER_KEYS.byBook(bookId) })
 			queryClient.invalidateQueries({ queryKey: BOOK_KEYS.detail(bookId) })
 			queryClient.invalidateQueries({ queryKey: ['codex'] })
+			queryClient.invalidateQueries({ queryKey: ['trash'] })
 		},
 	})
 }

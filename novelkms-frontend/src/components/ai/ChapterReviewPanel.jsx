@@ -5,16 +5,20 @@ import {
 	Button,
 	CircularProgress,
 	Divider,
+	IconButton,
 	MenuItem,
 	TextField,
+	Tooltip,
 	Typography,
 } from '@mui/material'
+import DeleteIcon from '@mui/icons-material/Delete'
 import {
 	useChapterReviews,
 	useAiReview,
 	useRunChapterReview,
 	useSetRecommendationStatus,
 	usePromoteRecommendation,
+	useDeleteReview,
 } from '../../hooks/useAiReviews'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
 import RecommendationList from './RecommendationList'
@@ -51,6 +55,7 @@ export default function ChapterReviewPanel({ chapterId }) {
 	const { mutate: runReview, isPending: running } = useRunChapterReview()
 	const { mutate: setRecStatus } = useSetRecommendationStatus()
 	const { mutate: promote } = usePromoteRecommendation()
+	const { mutate: deleteReview, isPending: deleting } = useDeleteReview()
 
 	const defaultCredId = useMemo(
 		() => credentials.find(c => c.defaultCredential)?.id ?? credentials[0]?.id ?? null,
@@ -131,6 +136,29 @@ export default function ChapterReviewPanel({ chapterId }) {
 								</MenuItem>
 							))}
 						</TextField>
+					)}
+
+					{/* Delete selected review to trash */}
+					{selectedReviewId && (
+						<Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.75 }}>
+							<Tooltip title="Move this review to trash">
+								<span>
+									<IconButton
+										size="small"
+										disabled={deleting}
+										onClick={() => {
+											setRunError(null)
+											deleteReview(selectedReviewId, {
+												onSuccess: () => setExplicitReviewId(null),
+												onError: (e) => setRunError(errMessage(e)),
+											})
+										}}
+									>
+										<DeleteIcon fontSize="small" />
+									</IconButton>
+								</span>
+							</Tooltip>
+						</Box>
 					)}
 
 					<Divider sx={{ my: 1.5 }} />

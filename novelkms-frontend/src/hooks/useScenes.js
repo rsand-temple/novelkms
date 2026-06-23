@@ -61,6 +61,7 @@ export const useDeleteScene = () => {
 		onSuccess: (_, { chapterId }) => {
 			queryClient.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(chapterId) })
 			queryClient.invalidateQueries({ queryKey: CHAPTER_KEYS.detail(chapterId) })
+			queryClient.invalidateQueries({ queryKey: ['trash'] })
 		},
 	})
 }

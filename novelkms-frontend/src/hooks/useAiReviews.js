@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { aiApi } from '../api/ai'
+import { TRASH_KEYS } from './useTrash'
 
 export const AI_REVIEW_KEYS = {
 	byChapter: (chapterId) => ['ai', 'reviews', 'byChapter', chapterId],
@@ -66,6 +67,20 @@ export function usePromoteRecommendation() {
 			if (chapterId) qc.invalidateQueries({ queryKey: AI_REVIEW_KEYS.byChapter(chapterId) })
 			// A new codex entry was created — refresh codex queries so it appears.
 			qc.invalidateQueries({ queryKey: ['codex'] })
+		},
+	})
+}
+
+/** Soft-delete a review artifact to the per-user trash. */
+export function useDeleteReview() {
+	const qc = useQueryClient()
+	return useMutation({
+		mutationFn: (reviewId) => aiApi.deleteReview(reviewId),
+		onSuccess: (_, reviewId) => {
+			// The review vanishes from the chapter history list.
+			qc.invalidateQueries({ queryKey: ['ai', 'reviews'] })
+			// A new trash_batch row was created.
+			qc.invalidateQueries({ queryKey: TRASH_KEYS.all })
 		},
 	})
 }

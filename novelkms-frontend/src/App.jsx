@@ -14,6 +14,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined'
 import NavPanel from './components/layout/NavPanel'
 import EditorPanel from './components/layout/EditorPanel'
+import TrashPanel from './components/trash/TrashPanel'
 import PropertiesPanel from './components/layout/PropertiesPanel'
 import ImportDialog from './components/nav/dialogs/ImportDialog'
 import ExportDialog from './components/nav/dialogs/ExportDialog'
@@ -57,6 +58,7 @@ const EMPTY_SELECTION = {
 	sceneId: null,
 	codexId: null,        // selected codex (categories/entries live under it)
 	codexCategory: null,  // category key of the selected codex chapter, if any
+	trashSelected: false, // true when the Trash node is selected
 	templateType: null,   // 'cover' | 'part' | null
 	templateScope: null,  // 'global' | 'book' | null
 }
@@ -245,8 +247,9 @@ export default function App() {
 			const base = typeof update === 'function' ? update(prev) : update
 			return {
 				...base,
-				codexId: base.codexId ?? null,
+				codexId:       base.codexId ?? null,
 				codexCategory: base.codexCategory ?? null,
+				trashSelected: base.trashSelected ?? false,
 				templateType: null,
 				templateScope: null,
 			}
@@ -262,6 +265,7 @@ export default function App() {
 			sceneId: null,
 			codexId: null,
 			codexCategory: null,
+			trashSelected: false,
 			templateType: type,
 			templateScope: scope,
 		}))
@@ -295,11 +299,6 @@ export default function App() {
 	const doExport = (url, suggestedName) => {
 		setExportAnchor(null)
 		setExportDialog({ open: true, url, suggestedName })
-	}
-
-	const doDirectExport = (url) => {
-		setExportAnchor(null)
-		exportApi.download(url)
 	}
 
 	const openImportDialog = () => {
@@ -361,9 +360,6 @@ export default function App() {
 							{selection.bookId ? [
 								<MenuItem key="book" onClick={() => doExport(exportApi.bookDocxUrl(selection.bookId), 'Book')}>
 									Book (.docx)
-								</MenuItem>,
-								<MenuItem key="book-epub" onClick={() => doDirectExport(exportApi.bookEpubUrl(selection.bookId))}>
-									Book (.epub)
 								</MenuItem>,
 								selection.partId && (
 									<MenuItem key="part" onClick={() => doExport(exportApi.partDocxUrl(selection.partId), 'Part')}>
@@ -644,6 +640,9 @@ export default function App() {
 						borderRadius: 1.5,
 						boxShadow: 1,
 					}}>
+						{selection.trashSelected ? (
+						<TrashPanel />
+					) : (
 						<EditorPanel
 							partId={selection.partId}
 							chapterId={selection.chapterId}
@@ -655,6 +654,7 @@ export default function App() {
 							templateScope={selection.templateScope}
 							onSelectBook={handleSelectBook}
 						/>
+					)}
 					</Box>
 
 					<ResizeHandle
@@ -770,7 +770,7 @@ export default function App() {
 							userSelect: 'none',
 						}}
 					>
-						{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
+					{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
 					</Typography>
 				</Box>
 
