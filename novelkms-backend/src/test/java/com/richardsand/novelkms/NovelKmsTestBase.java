@@ -20,8 +20,10 @@ import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.TemplateDao;
+import com.richardsand.novelkms.dao.TrashDao;
 import com.richardsand.novelkms.dao.UserStyleDao;
 import com.richardsand.novelkms.model.Project;
+import com.richardsand.novelkms.service.TrashService;
 
 import jakarta.annotation.Priority;
 import jakarta.ws.rs.Priorities;
@@ -62,6 +64,8 @@ public abstract class NovelKmsTestBase {
     protected static final SceneDao        sceneDao;
     protected static final TemplateDao     templateDao;
     protected static final UserStyleDao    styleDao;
+    protected static final TrashDao        trashDao;
+    protected static final TrashService    trashService;
 
     static {
         try {
@@ -87,6 +91,8 @@ public abstract class NovelKmsTestBase {
             sceneDao = new SceneDao(ds);
             templateDao = new TemplateDao(ds);
             styleDao = new UserStyleDao(ds);
+            trashDao = new TrashDao(ds);
+            trashService = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
 
             // Ensure static ResourceExtensions have a valid principal even before
             // the first subclass @BeforeEach executes.

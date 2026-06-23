@@ -125,7 +125,7 @@ public class ProjectDao {
     // Internal unscoped methods retained for services that run only after the resource/filter
     // has already established ownership. New resource code must use the *ForUser variants.
     public List<Project> findAll() throws SQLException {
-        String sql = "SELECT * FROM project ORDER BY title";
+        String sql = "SELECT * FROM project WHERE deleted_at IS NULL ORDER BY title";
         List<Project> result = new ArrayList<>();
         try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) result.add(map(rs));
@@ -134,7 +134,7 @@ public class ProjectDao {
     }
 
     public Optional<Project> findById(UUID id) throws SQLException {
-        String sql = "SELECT * FROM project WHERE id = ?";
+        String sql = "SELECT * FROM project WHERE id = ? AND deleted_at IS NULL";
         try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
             try (ResultSet rs = ps.executeQuery()) {
@@ -184,13 +184,13 @@ public class ProjectDao {
         String sceneSql = """
                 SELECT COALESCE(SUM(s.word_count), 0)
                 FROM scene s JOIN chapter ch ON ch.id = s.chapter_id JOIN book b ON b.id = ch.book_id
-                WHERE b.project_id = ?
+                WHERE b.project_id = ? AND b.deleted_at IS NULL AND ch.deleted_at IS NULL AND s.deleted_at IS NULL
                 """;
         try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sceneSql)) {
             ps.setObject(1, projectId);
             try (ResultSet rs = ps.executeQuery()) { if (rs.next()) total += rs.getInt(1); }
         }
-        String chapterSql = "SELECT ch.title, ch.subtitle FROM chapter ch JOIN book b ON b.id = ch.book_id WHERE b.project_id = ?";
+        String chapterSql = "SELECT ch.title, ch.subtitle FROM chapter ch JOIN book b ON b.id = ch.book_id WHERE b.project_id = ? AND b.deleted_at IS NULL AND ch.deleted_at IS NULL";
         try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(chapterSql)) {
             ps.setObject(1, projectId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -201,7 +201,7 @@ public class ProjectDao {
                 }
             }
         }
-        String partSql = "SELECT pt.title, pt.subtitle FROM part pt JOIN book b ON b.id = pt.book_id WHERE b.project_id = ?";
+        String partSql = "SELECT pt.title, pt.subtitle FROM part pt JOIN book b ON b.id = pt.book_id WHERE b.project_id = ? AND b.deleted_at IS NULL";
         try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(partSql)) {
             ps.setObject(1, projectId);
             try (ResultSet rs = ps.executeQuery()) {

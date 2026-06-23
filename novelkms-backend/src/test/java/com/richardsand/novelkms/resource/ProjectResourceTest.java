@@ -28,7 +28,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
 
     static final ResourceExtension RESOURCES = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter())
-            .addResource(new ProjectResource(projectDao, null))
+            .addResource(new ProjectResource(projectDao, trashService))
             .setMapper(createMapper())
             .build();
 
