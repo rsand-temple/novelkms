@@ -173,7 +173,6 @@ export default function App() {
 	const [exportAnchor, setExportAnchor] = useState(null)
 	const [exportDialog, setExportDialog] = useState({ open: false, url: null, suggestedName: '' })
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
-	const [aiAnchor, setAiAnchor] = useState(null)
 	const [settings, setSettings] = useState({ open: false, tab: 'document' })
 
 	const [navWidth, setNavWidth] = useState(() =>
@@ -253,29 +252,29 @@ export default function App() {
 	}, [navWidth, propsWidth])
 
 	const setSelection = useCallback((update) => {
-	  setSel(prev => {
-	    // Remove transient panel modes before functional updaters spread prev.
-	    // This prevents clicks on normal nav nodes from accidentally preserving
-	    // trash/template mode.
-	    const cleanPrev = {
-	      ...prev,
-	      trashSelected: false,
-	      templateType: null,
-	      templateScope: null,
-	    }
+		setSel(prev => {
+			// Remove transient panel modes before functional updaters spread prev.
+			// This prevents clicks on normal nav nodes from accidentally preserving
+			// trash/template mode.
+			const cleanPrev = {
+				...prev,
+				trashSelected: false,
+				templateType: null,
+				templateScope: null,
+			}
 
-	    const base = typeof update === 'function' ? update(cleanPrev) : update
+			const base = typeof update === 'function' ? update(cleanPrev) : update
 
-	    return {
-	      ...EMPTY_SELECTION,
-	      ...base,
-	      codexId: base.codexId ?? null,
-	      codexCategory: base.codexCategory ?? null,
-	      trashSelected: base.trashSelected === true,
-	      templateType: base.templateType ?? null,
-	      templateScope: base.templateScope ?? null,
-	    }
-	  })
+			return {
+				...EMPTY_SELECTION,
+				...base,
+				codexId: base.codexId ?? null,
+				codexCategory: base.codexCategory ?? null,
+				trashSelected: base.trashSelected === true,
+				templateType: base.templateType ?? null,
+				templateScope: base.templateScope ?? null,
+			}
+		})
 	}, [])
 
 	const selectTemplate = useCallback(({ type, scope, bookId }) => {
@@ -323,14 +322,14 @@ export default function App() {
 		setExportDialog({ open: true, url, suggestedName })
 	}
 
+	const doDirectExport = (url) => {
+		setExportAnchor(null)
+		exportApi.download(url)
+	}
+
 	const openImportDialog = () => {
 		setImportAnchor(null)
 		setImportDialogOpen(true)
-	}
-
-	const openAiSettings = () => {
-		setAiAnchor(null)
-		setSettings({ open: true, tab: 'ai' })
 	}
 
 	const openSettings = () => {
@@ -387,6 +386,9 @@ export default function App() {
 								<MenuItem key="book" onClick={() => doExport(exportApi.bookDocxUrl(selection.bookId), 'Book')}>
 									Book (.docx)
 								</MenuItem>,
+								<MenuItem key="book-epub" onClick={() => doDirectExport(exportApi.bookEpubUrl(selection.bookId))}>
+									Book (.epub)
+								</MenuItem>,
 								selection.partId && (
 									<MenuItem key="part" onClick={() => doExport(exportApi.partDocxUrl(selection.partId), 'Part')}>
 										This Part (.docx)
@@ -436,19 +438,6 @@ export default function App() {
 							<MenuItem disabled sx={{ fontSize: '0.75rem', opacity: 0.7 }}>Global defaults</MenuItem>
 							<MenuItem onClick={() => openGlobalTemplate('cover')}>Cover Page</MenuItem>
 							<MenuItem onClick={() => openGlobalTemplate('part')}>Part Page</MenuItem>
-						</Menu>
-
-						<Button
-							color="inherit"
-							size="small"
-							endIcon={<ArrowDropDownIcon />}
-							onClick={(e) => setAiAnchor(e.currentTarget)}
-							sx={topBarButtonSx}
-						>
-							AI
-						</Button>
-						<Menu anchorEl={aiAnchor} open={!!aiAnchor} onClose={() => setAiAnchor(null)}>
-							<MenuItem onClick={openAiSettings}>AI Settings…</MenuItem>
 						</Menu>
 
 						<Tooltip title="Settings">
@@ -679,20 +668,20 @@ export default function App() {
 						boxShadow: 1,
 					}}>
 						{selection.trashSelected ? (
-						<TrashPanel />
-					) : (
-						<EditorPanel
-							partId={selection.partId}
-							chapterId={selection.chapterId}
-							sceneId={selection.sceneId}
-							projectId={selection.projectId}
-							bookId={selection.bookId}
-							codexId={selection.codexId}
-							templateType={selection.templateType}
-							templateScope={selection.templateScope}
-							onSelectBook={handleSelectBook}
-						/>
-					)}
+							<TrashPanel />
+						) : (
+							<EditorPanel
+								partId={selection.partId}
+								chapterId={selection.chapterId}
+								sceneId={selection.sceneId}
+								projectId={selection.projectId}
+								bookId={selection.bookId}
+								codexId={selection.codexId}
+								templateType={selection.templateType}
+								templateScope={selection.templateScope}
+								onSelectBook={handleSelectBook}
+							/>
+						)}
 					</Box>
 
 					<ResizeHandle
@@ -808,7 +797,7 @@ export default function App() {
 							userSelect: 'none',
 						}}
 					>
-					{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
+						{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
 					</Typography>
 				</Box>
 

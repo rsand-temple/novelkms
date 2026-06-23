@@ -7,6 +7,15 @@ import DocumentSettingsTab from './DocumentSettingsTab'
 import OtherSettingsTab from './OtherSettingsTab'
 import AiCredentialsPanel from '../ai/AiCredentialsPanel'
 
+// Fixed height for the tab body. MUI centers Dialog paper based on its
+// content height, so without a fixed height here the dialog grew/shrank and
+// recentered every time the active tab changed (Document — especially with a
+// project override section — is much taller than Other). Pinning the body to
+// one height keeps the dialog's overall size, and therefore its on-screen
+// position, constant across tab switches; a tab whose content is shorter than
+// this just has empty space below it, and a taller one scrolls internally.
+const TAB_CONTENT_HEIGHT = '55vh'
+
 // Inner content is mounted fresh whenever the dialog opens (see the `{open && …}`
 // guard below), so the active tab always starts at `initialTab` and each tab's
 // own state starts clean — no effect syncing needed.
@@ -25,9 +34,11 @@ function SettingsContent({ initialTab, projectId }) {
 				<Tab value="other" label="Other" />
 			</Tabs>
 
-			{tab === 'document' && <DocumentSettingsTab projectId={projectId} />}
-			{tab === 'ai' && <AiCredentialsPanel />}
-			{tab === 'other' && <OtherSettingsTab />}
+			<Box sx={{ height: TAB_CONTENT_HEIGHT, overflowY: 'auto', pr: 0.5 }}>
+				{tab === 'document' && <DocumentSettingsTab projectId={projectId} />}
+				{tab === 'ai' && <AiCredentialsPanel />}
+				{tab === 'other' && <OtherSettingsTab />}
+			</Box>
 		</>
 	)
 }
@@ -35,8 +46,7 @@ function SettingsContent({ initialTab, projectId }) {
 /**
  * SettingsDialog
  *
- * Global settings, organized into tabs. Opened from the AppBar gear (Document
- * tab) and from the AI menu (AI tab).
+ * Global settings, organized into tabs. Opened from the AppBar gear icon.
  *
  * Props:
  *   open        {boolean}

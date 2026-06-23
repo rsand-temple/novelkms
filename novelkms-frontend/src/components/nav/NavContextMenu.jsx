@@ -322,6 +322,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		}
 	})()
 
+	// ePub export is book-scoped only (there is no part/chapter/scene ePub
+	// endpoint), so this is null for every other node type. It downloads
+	// directly — same pattern as the AppBar's Export menu — rather than going
+	// through ExportDialog's filename picker.
+	const epubUrl = menuNode?.type === 'book' ? exportApi.bookEpubUrl(menuNode.id) : null
+
 	// For the AddSceneDialog chapterId:
 	// - right-clicked a chapter → chapterId = menuNode.id
 	// - right-clicked a scene   → chapterId = menuNode.chapterId
@@ -436,6 +442,14 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					<MenuItem dense onClick={() => { setExportDialogOpen(true); closeMenu() }}>
 						<ListItemIcon><FileDownloadIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Export as Word (.docx)</ListItemText>
+					</MenuItem>
+				)}
+
+				{/* Export as ePub — book-only, direct download (no filename picker) */}
+				{epubUrl && (
+					<MenuItem dense onClick={() => { exportApi.download(epubUrl); closeMenu() }}>
+						<ListItemIcon><FileDownloadIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Export as ePub (.epub)</ListItemText>
 					</MenuItem>
 				)}
 
