@@ -49,6 +49,7 @@ import com.richardsand.novelkms.resource.StyleResource;
 import com.richardsand.novelkms.resource.TemplateResource;
 import com.richardsand.novelkms.resource.TrashResource;
 import com.richardsand.novelkms.service.AiReviewService;
+import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 import com.richardsand.novelkms.service.TrashService;
@@ -130,10 +131,11 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         TenantAccessDao  tenantAccessDao  = new TenantAccessDao(ds);
         TrashDao         trashDao         = new TrashDao(ds);
 
-        ImportService  importService  = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        ExportService  exportService  = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao);
-        SessionService sessionService = new SessionService(authDao, config.getAuth());
-        OAuthService   oauthService   = new OAuthService(config.getAuth(), authDao);
+        ImportService     importService     = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
+        ExportService     exportService     = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao);
+        EpubExportService epubExportService = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
+        SessionService    sessionService    = new SessionService(authDao, config.getAuth());
+        OAuthService      oauthService      = new OAuthService(config.getAuth(), authDao);
 
         SecretCipher    secretCipher    = new SecretCipher(
                 config.getSecurity() != null ? config.getSecurity().encryptionKey : null);
@@ -198,6 +200,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(tenantAccessDao).to(TenantAccessDao.class);
                 bind(importService).to(ImportService.class);
                 bind(exportService).to(ExportService.class);
+                bind(epubExportService).to(EpubExportService.class);
                 bind(sessionService).to(SessionService.class);
                 bind(oauthService).to(OAuthService.class);
                 bind(aiCredentialDao).to(AiCredentialDao.class);

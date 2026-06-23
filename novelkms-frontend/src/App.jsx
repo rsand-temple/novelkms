@@ -245,7 +245,7 @@ export default function App() {
 			const base = typeof update === 'function' ? update(prev) : update
 			return {
 				...base,
-				codexId:       base.codexId ?? null,
+				codexId: base.codexId ?? null,
 				codexCategory: base.codexCategory ?? null,
 				templateType: null,
 				templateScope: null,
@@ -295,6 +295,11 @@ export default function App() {
 	const doExport = (url, suggestedName) => {
 		setExportAnchor(null)
 		setExportDialog({ open: true, url, suggestedName })
+	}
+
+	const doDirectExport = (url) => {
+		setExportAnchor(null)
+		exportApi.download(url)
 	}
 
 	const openImportDialog = () => {
@@ -356,6 +361,9 @@ export default function App() {
 							{selection.bookId ? [
 								<MenuItem key="book" onClick={() => doExport(exportApi.bookDocxUrl(selection.bookId), 'Book')}>
 									Book (.docx)
+								</MenuItem>,
+								<MenuItem key="book-epub" onClick={() => doDirectExport(exportApi.bookEpubUrl(selection.bookId))}>
+									Book (.epub)
 								</MenuItem>,
 								selection.partId && (
 									<MenuItem key="part" onClick={() => doExport(exportApi.partDocxUrl(selection.partId), 'Part')}>
@@ -762,7 +770,7 @@ export default function App() {
 							userSelect: 'none',
 						}}
 					>
-					{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
+						{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
 					</Typography>
 				</Box>
 

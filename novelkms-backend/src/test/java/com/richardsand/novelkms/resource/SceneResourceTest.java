@@ -31,7 +31,7 @@ class SceneResourceTest extends NovelKmsTestBase {
 
     static final ResourceExtension RESOURCES = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter())
-            .addResource(new SceneResource(sceneDao))
+            .addResource(new SceneResource(sceneDao, null))
             .setMapper(createMapper())
             .build();
 

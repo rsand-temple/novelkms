@@ -28,7 +28,7 @@ class BookResourceTest extends NovelKmsTestBase {
 
     static final ResourceExtension RESOURCES = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter())
-            .addResource(new BookResource(bookDao))
+            .addResource(new BookResource(bookDao, null))
             .setMapper(createMapper())
             .build();
 

@@ -31,7 +31,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
 
     static final ResourceExtension RESOURCES = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter())
-            .addResource(new ChapterResource(chapterDao, sceneDao))
+            .addResource(new ChapterResource(chapterDao, sceneDao, null))
             .setMapper(createMapper())
             .build();
 

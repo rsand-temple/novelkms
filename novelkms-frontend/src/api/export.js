@@ -1,13 +1,14 @@
 /**
  * Export API helpers.
  *
- * All four export endpoints return a binary .docx file via HTTP GET, so
- * there is no Axios call — we just construct the URL and trigger a standard
- * browser download by clicking a temporary <a> element.
+ * Export endpoints return binary files via HTTP GET, so there is no Axios call —
+ * we just construct the URL and trigger a standard browser download by clicking
+ * a temporary <a> element.
  */
 export const exportApi = {
 
 	bookDocxUrl:    (bookId)    => `/api/export/books/${bookId}/docx`,
+	bookEpubUrl:    (bookId)    => `/api/export/books/${bookId}/epub`,
 	partDocxUrl:    (partId)    => `/api/export/parts/${partId}/docx`,
 	chapterDocxUrl: (chapterId) => `/api/export/chapters/${chapterId}/docx`,
 	sceneDocxUrl:   (sceneId)   => `/api/export/scenes/${sceneId}/docx`,

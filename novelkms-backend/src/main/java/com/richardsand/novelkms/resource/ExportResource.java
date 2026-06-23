@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ExportService.ExportMeta;
 
@@ -17,16 +18,10 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 /**
- * Download endpoints for exporting manuscript content as Word (.docx) files.
+ * Download endpoints for exporting manuscript content.
  *
- * Four scopes are supported:
- *   GET /api/export/books/{bookId}/docx      — full book
- *   GET /api/export/parts/{partId}/docx      — one part and its chapters
- *   GET /api/export/chapters/{chapterId}/docx — one chapter and its scenes
- *   GET /api/export/scenes/{sceneId}/docx    — one scene
- *
- * All return application/vnd.openxmlformats-officedocument.wordprocessingml.document
- * with a Content-Disposition: attachment header so the browser triggers a download.
+ * Word (.docx) supports book, part, chapter, and scene scopes.
+ * EPUB is intentionally book-only: it is a whole-book reading-copy export.
  */
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
@@ -36,12 +31,15 @@ public class ExportResource {
 
     private static final String DOCX_MIME =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    private static final String EPUB_MIME = "application/epub+zip";
 
-    private final ExportService exportService;
+    private final ExportService     exportService;
+    private final EpubExportService epubExportService;
 
     @Inject
-    public ExportResource(ExportService exportService) {
+    public ExportResource(ExportService exportService, EpubExportService epubExportService) {
         this.exportService = exportService;
+        this.epubExportService = epubExportService;
     }
 
     // -------------------------------------------------------------------------
@@ -54,11 +52,26 @@ public class ExportResource {
     public Response exportBook(@PathParam("bookId") UUID bookId) {
         try {
             ExportMeta meta = exportService.exportBook(bookId);
-            return download(meta);
+            return download(meta.bytes(), meta.filename(), DOCX_MIME);
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
         } catch (Exception e) {
-            logger.error("Book export failed for bookId={}: {}", bookId, e.getMessage(), e);
+            logger.error("Book DOCX export failed for bookId={}: {}", bookId, e.getMessage(), e);
+            return serverError(e);
+        }
+    }
+
+    @GET
+    @Path("/export/books/{bookId}/epub")
+    @Produces(MediaType.WILDCARD)
+    public Response exportBookEpub(@PathParam("bookId") UUID bookId) {
+        try {
+            EpubExportService.ExportMeta meta = epubExportService.exportBook(bookId);
+            return download(meta.bytes(), meta.filename(), EPUB_MIME);
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
+        } catch (Exception e) {
+            logger.error("Book EPUB export failed for bookId={}: {}", bookId, e.getMessage(), e);
             return serverError(e);
         }
     }
@@ -73,7 +86,7 @@ public class ExportResource {
     public Response exportPart(@PathParam("partId") UUID partId) {
         try {
             ExportMeta meta = exportService.exportPart(partId);
-            return download(meta);
+            return download(meta.bytes(), meta.filename(), DOCX_MIME);
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
         } catch (Exception e) {
@@ -92,7 +105,7 @@ public class ExportResource {
     public Response exportChapter(@PathParam("chapterId") UUID chapterId) {
         try {
             ExportMeta meta = exportService.exportChapter(chapterId);
-            return download(meta);
+            return download(meta.bytes(), meta.filename(), DOCX_MIME);
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
         } catch (Exception e) {
@@ -111,7 +124,7 @@ public class ExportResource {
     public Response exportScene(@PathParam("sceneId") UUID sceneId) {
         try {
             ExportMeta meta = exportService.exportScene(sceneId);
-            return download(meta);
+            return download(meta.bytes(), meta.filename(), DOCX_MIME);
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
         } catch (Exception e) {
@@ -123,11 +136,10 @@ public class ExportResource {
     // -------------------------------------------------------------------------
 
     /** Wraps exported bytes in a browser-download response. */
-    private Response download(ExportMeta meta) {
-        return Response.ok(meta.bytes(), DOCX_MIME)
-                .header("Content-Disposition",
-                        "attachment; filename=\"" + meta.filename() + "\"")
-                .header("Content-Length", meta.bytes().length)
+    private Response download(byte[] bytes, String filename, String mimeType) {
+        return Response.ok(bytes, mimeType)
+                .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                .header("Content-Length", bytes.length)
                 .build();
     }
 
