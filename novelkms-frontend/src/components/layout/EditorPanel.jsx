@@ -32,6 +32,8 @@ import { derivePageConfig } from '../../utils/pageConfig';
 import EditorToolbar from '../editor/EditorToolbar';
 import SearchBar from '../search/SearchBar';
 import { useSearch } from '../../search/SearchContext';
+import { useReview } from '../../review/ReviewContext';
+import ReviewRail from '../ai/ReviewRail';
 import { countHtmlOccurrences } from '../../search/searchUtils';
 import BookCoverPreview from '../editor/BookCoverPreview';
 import PartPagePreview from '../editor/PartPagePreview';
@@ -210,6 +212,7 @@ export default function EditorPanel({
 	const { settings, updateSettings } = useProjectSettings(projectId);
 	const queryClient = useQueryClient();
 	const search = useSearch();
+	const review = useReview();
 
 	// ── Mode flags ────────────────────────────────────────────────────────────
 	const templateMode = !!templateType;
@@ -218,6 +221,13 @@ export default function EditorPanel({
 	const partDraftMode = !templateMode && !chapterId && !sceneId && !!partId && !!bookId;
 	const bookDraftMode = !templateMode && !partId && !chapterId && !sceneId && !!bookId;
 	const aggregateDraftMode = partDraftMode || bookDraftMode;
+
+	// Review Mode is a layer on top of normal chapter editing: the rail shows
+	// the selected manuscript chapter's AI review. It appears only for a
+	// manuscript chapter (a chapter inside a book, never a codex entry), which
+	// covers both multi-scene (chapter selected) and single-scene (a scene
+	// within that chapter) editing.
+	const reviewRailVisible = review.open && !!chapterId && !!bookId && !codexId;
 
 	const isGlobalTpl = templateMode && templateScope === 'global';
 	const isBookTpl = templateMode && templateScope === 'book';
@@ -728,7 +738,9 @@ export default function EditorPanel({
 
 			<SearchBar />
 
-			{/* ── Content area ─────────────────────────────────────────────── */}
+			{/* ── Content row: editor surface + optional review rail ───────── */}
+			<Box sx={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
+			<Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
 			{projectShelfMode ? (
 				<ProjectShelf
@@ -932,6 +944,12 @@ export default function EditorPanel({
 					)}
 				</Box>
 			)}
+			</Box>
+
+			{reviewRailVisible && (
+				<ReviewRail key={chapterId} chapterId={chapterId} />
+			)}
+			</Box>
 		</Box>
 	);
 }

@@ -10,7 +10,6 @@ import { useChapter } from '../../hooks/useChapters';
 import { usePart, PART_KEYS } from '../../hooks/useParts';
 import { useBook, BOOK_KEYS, useUploadCoverImage, useDeleteCoverImage } from '../../hooks/useBooks';
 import { useProject } from '../../hooks/useProjects';
-import ChapterReviewPanel from '../ai/ChapterReviewPanel';
 import { useUpdateProject } from '../../hooks/useProjects';
 import {
 	useGlobalTemplate, useBookTemplate,
@@ -635,7 +634,7 @@ function TemplateProperties({ selection, setSelection }) {
 // ── Root panel ────────────────────────────────────────────────────────────────
 
 export default function PropertiesPanel({ selection, setSelection, selectTemplate }) {
-	const { sceneId, chapterId, partId, bookId, projectId, templateType, codexId } = selection ?? {};
+	const { sceneId, chapterId, partId, bookId, projectId, templateType } = selection ?? {};
 
 	// Template mode takes over the panel entirely.
 	if (templateType) {
@@ -659,15 +658,6 @@ export default function PropertiesPanel({ selection, setSelection, selectTemplat
 			{sceneId && <SceneProperties sceneId={sceneId} chapterId={chapterId} />}
 			{sceneId && chapterId && <Divider />}
 			{chapterId && <ChapterProperties chapterId={chapterId} bookId={bookId} />}
-			{/* AI review: only for a manuscript chapter (not codex categories) */}
-			{chapterId && bookId && !codexId && (
-				<>
-					<Divider />
-					<Box sx={{ p: 2 }}>
-						<ChapterReviewPanel key={chapterId} chapterId={chapterId} />
-					</Box>
-				</>
-			)}
 			{/* Part properties: only when part is selected with no chapter active */}
 			{partId && !chapterId && <PartProperties partId={partId} bookId={bookId} />}
 			{/* Book properties: only when book is the deepest selection */}

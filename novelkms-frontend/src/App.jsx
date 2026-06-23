@@ -23,6 +23,8 @@ import SettingsDialog from './components/settings/SettingsDialog'
 import { LogoMark } from './components/branding/Logo'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
+import { ReviewProvider } from './review/ReviewProvider'
+import ReviewToggleButton from './components/ai/ReviewToggleButton'
 import { usePreferences } from './hooks/usePreferences'
 import { hydrateSkipDeleteConfirm } from './utils/deleteConfirmPrefs'
 
@@ -338,6 +340,7 @@ export default function App() {
 
 	return (
 		<SearchProvider selection={selection}>
+			<ReviewProvider>
 			<Box sx={{
 				display: 'flex',
 				flexDirection: 'column',
@@ -439,6 +442,8 @@ export default function App() {
 							<MenuItem onClick={() => openGlobalTemplate('cover')}>Cover Page</MenuItem>
 							<MenuItem onClick={() => openGlobalTemplate('part')}>Part Page</MenuItem>
 						</Menu>
+
+						<ReviewToggleButton selection={selection} sx={topBarButtonSx} />
 
 						<Tooltip title="Settings">
 							<IconButton
@@ -822,6 +827,7 @@ export default function App() {
 					onClose={() => setSettings(s => ({ ...s, open: false }))}
 				/>
 			</Box>
+			</ReviewProvider>
 		</SearchProvider>
 	)
 }
