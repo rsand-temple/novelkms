@@ -1,24 +1,25 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Divider, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material'
-import ArrowUpwardIcon            from '@mui/icons-material/ArrowUpward'
-import ArrowDownwardIcon          from '@mui/icons-material/ArrowDownward'
-import DeleteIcon                 from '@mui/icons-material/Delete'
-import AddIcon                    from '@mui/icons-material/Add'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import DeleteIcon from '@mui/icons-material/Delete'
+import AddIcon from '@mui/icons-material/Add'
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
-import FileDownloadIcon           from '@mui/icons-material/FileDownload'
+import FileDownloadIcon from '@mui/icons-material/FileDownload'
 
-import AddBookDialog          from './dialogs/AddBookDialog'
-import AddChapterDialog       from './dialogs/AddChapterDialog'
-import AddSceneDialog         from './dialogs/AddSceneDialog'
-import AddPartDialog          from './dialogs/AddPartDialog'
-import AddPartChapterDialog   from './dialogs/AddPartChapterDialog'
-import AddCodexEntryDialog    from './dialogs/AddCodexEntryDialog'
-import DeleteConfirmDialog    from './dialogs/DeleteConfirmDialog'
-import ExportDialog          from './dialogs/ExportDialog'
+import AddBookDialog from './dialogs/AddBookDialog'
+import AddChapterDialog from './dialogs/AddChapterDialog'
+import AddSceneDialog from './dialogs/AddSceneDialog'
+import AddPartDialog from './dialogs/AddPartDialog'
+import AddPartChapterDialog from './dialogs/AddPartChapterDialog'
+import AddCodexEntryDialog from './dialogs/AddCodexEntryDialog'
+import DeleteConfirmDialog from './dialogs/DeleteConfirmDialog'
+import { shouldSkipDeleteConfirm } from '../../utils/deleteConfirmPrefs'
+import ExportDialog from './dialogs/ExportDialog'
 
-import { useScenes,       useReorderScenes,       useDeleteScene   } from '../../hooks/useScenes'
-import { useChapters,     useReorderChapters,     useDeleteChapter } from '../../hooks/useChapters'
-import { useDeleteBook }                                              from '../../hooks/useBooks'
+import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
+import { useChapters, useReorderChapters, useDeleteChapter } from '../../hooks/useChapters'
+import { useDeleteBook } from '../../hooks/useBooks'
 import { useDeleteCodex, useProjectCodex, useBookCodex, useCreateProjectCodex, useCreateBookCodex } from '../../hooks/useCodex'
 import {
 	useParts, usePartChapters,
@@ -37,33 +38,48 @@ import { exportApi } from '../../api/export'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getDeleteContext(type, title) {
-	const q = title ? `\u201c${title}\u201d` : ''
+const CODEX_ENTRY_LABELS = {
+	CHARACTER: 'Character',
+	VOICE:     'Voice Sheet',
+	PLOT:      'Plot Element',
+	WORLD:     'World Entry',
+	TIMELINE:  'Timeline Entry',
+	CANON:     'Canon Entry',
+	NOTES:     'Note',
+}
+
+function getDeleteContext(type, title, codexCategory) {
 	switch (type) {
-		case 'scene':   return {
-			level: 'scene',
-			label: 'Delete Scene',
-			message: `Delete scene ${q}? This will permanently delete the scene and all its content. This cannot be undone.`,
+		case 'scene': {
+			const itemType = codexCategory
+				? (CODEX_ENTRY_LABELS[codexCategory] ?? 'Entry')
+				: 'Scene'
+
+			return {
+				level: 'scene',
+				label: `Delete ${itemType}`,
+				itemType,
+			}
 		}
 		case 'chapter': return {
 			level: 'chapter',
 			label: 'Delete Chapter',
-			message: `Delete chapter ${q}? This will permanently delete the chapter and all its scenes. This cannot be undone.`,
+			itemType: 'Chapter',
 		}
-		case 'part':    return {
+		case 'part': return {
 			level: 'part',
 			label: 'Delete Part',
-			message: `Delete part ${q}? The part will be removed but its chapters will be preserved and moved directly under the book. This cannot be undone.`,
+			itemType: 'Part',
 		}
-		case 'book':    return {
+		case 'book': return {
 			level: 'book',
 			label: 'Delete Book',
-			message: `Delete book ${q}? This will permanently delete the book and all its parts, chapters, and scenes. This cannot be undone.`,
+			itemType: 'Book',
 		}
-		case 'codex':   return {
+		case 'codex': return {
 			level: 'codex',
 			label: 'Delete Codex',
-			message: `Delete codex ${q}? This permanently deletes all categories and entries. This cannot be undone.`,
+			itemType: 'Codex',
 		}
 		default: return null
 	}
@@ -89,68 +105,68 @@ function getDeleteContext(type, title) {
 export function NavContextMenuProvider({ children, selection, setSelection, navRef }) {
 
 	// ── Context menu position & target ────────────────────────────────────────
-	const [menuPos,  setMenuPos]  = useState(null)   // { mouseX, mouseY } | null
+	const [menuPos, setMenuPos] = useState(null)   // { mouseX, mouseY } | null
 	const [menuNode, setMenuNode] = useState(null)   // { type, id, title, ...ids } | null
 
 	// ── Rename state ──────────────────────────────────────────────────────────
 	const [renamingId, setRenamingId] = useState(null)
 
 	// ── Add-dialog visibility ─────────────────────────────────────────────────
-	const [deleteDialogOpen,      setDeleteDialogOpen]      = useState(false)
-	const [exportDialogOpen,      setExportDialogOpen]      = useState(false)
-	const [bookDialogOpen,        setBookDialogOpen]        = useState(false)
-	const [chapterDialogOpen,     setChapterDialogOpen]     = useState(false)
-	const [partDialogOpen,        setPartDialogOpen]        = useState(false)
+	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+	const [exportDialogOpen, setExportDialogOpen] = useState(false)
+	const [bookDialogOpen, setBookDialogOpen] = useState(false)
+	const [chapterDialogOpen, setChapterDialogOpen] = useState(false)
+	const [partDialogOpen, setPartDialogOpen] = useState(false)
 	const [partChapterDialogOpen, setPartChapterDialogOpen] = useState(false)
-	const [sceneDialogOpen,       setSceneDialogOpen]       = useState(false)
-	const [entryDialogOpen,       setEntryDialogOpen]       = useState(false)
+	const [sceneDialogOpen, setSceneDialogOpen] = useState(false)
+	const [entryDialogOpen, setEntryDialogOpen] = useState(false)
 
 	// ── Sibling lists for Move Up / Down ──────────────────────────────────────
 	// These queries hit the TanStack Query cache already populated by the nav
 	// tree, so they produce no extra network requests in the happy path.
 	// Each is conditionally enabled based on the right-clicked node type.
-	const { data: sceneSiblings      } = useScenes(
+	const { data: sceneSiblings } = useScenes(
 		menuNode?.type === 'scene' ? menuNode.chapterId : null
 	)
 	const { data: directChapSiblings } = useChapters(
 		menuNode?.type === 'chapter' && !menuNode.partId ? menuNode.bookId : null
 	)
-	const { data: partChapSiblings   } = usePartChapters(
-		menuNode?.type === 'chapter' && menuNode.partId  ? menuNode.partId : null
+	const { data: partChapSiblings } = usePartChapters(
+		menuNode?.type === 'chapter' && menuNode.partId ? menuNode.partId : null
 	)
-	const { data: partSiblings       } = useParts(
+	const { data: partSiblings } = useParts(
 		menuNode?.type === 'part' ? menuNode.bookId : null
 	)
 
 	const siblings =
-		menuNode?.type === 'scene'                              ? sceneSiblings
-		: menuNode?.type === 'chapter' && !menuNode.partId     ? directChapSiblings
-		: menuNode?.type === 'chapter' &&  menuNode.partId     ? partChapSiblings
-		: menuNode?.type === 'part'                            ? partSiblings
-		: null
+		menuNode?.type === 'scene' ? sceneSiblings
+			: menuNode?.type === 'chapter' && !menuNode.partId ? directChapSiblings
+				: menuNode?.type === 'chapter' && menuNode.partId ? partChapSiblings
+					: menuNode?.type === 'part' ? partSiblings
+						: null
 
 	const siblingIndex = siblings?.findIndex(s => String(s.id) === String(menuNode?.id)) ?? -1
-	const isFirst      = siblingIndex <= 0
-	const isLast       = !siblings || siblingIndex < 0 || siblingIndex >= siblings.length - 1
-	const canReorder   = menuNode?.type === 'scene' || menuNode?.type === 'chapter' || menuNode?.type === 'part'
+	const isFirst = siblingIndex <= 0
+	const isLast = !siblings || siblingIndex < 0 || siblingIndex >= siblings.length - 1
+	const canReorder = menuNode?.type === 'scene' || menuNode?.type === 'chapter' || menuNode?.type === 'part'
 
 	// ── Mutations ─────────────────────────────────────────────────────────────
-	const { mutate: reorderScenes       } = useReorderScenes()
-	const { mutate: reorderChapters     } = useReorderChapters()
+	const { mutate: reorderScenes } = useReorderScenes()
+	const { mutate: reorderChapters } = useReorderChapters()
 	const { mutate: reorderPartChapters } = useReorderPartChapters()
-	const { mutate: reorderParts        } = useReorderParts()
-	const { mutate: deleteScene,   isPending: deletingScene   } = useDeleteScene()
+	const { mutate: reorderParts } = useReorderParts()
+	const { mutate: deleteScene, isPending: deletingScene } = useDeleteScene()
 	const { mutate: deleteChapter, isPending: deletingChapter } = useDeleteChapter()
-	const { mutate: deletePart,    isPending: deletingPart    } = useDeletePart()
-	const { mutate: deleteBook,    isPending: deletingBook    } = useDeleteBook()
-	const { mutate: deleteCodex,   isPending: deletingCodex   } = useDeleteCodex()
+	const { mutate: deletePart, isPending: deletingPart } = useDeletePart()
+	const { mutate: deleteBook, isPending: deletingBook } = useDeleteBook()
+	const { mutate: deleteCodex, isPending: deletingCodex } = useDeleteCodex()
 	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook || deletingCodex
 
 	// ── Codex existence (for conditional "Add Codex" in project/book context menus)
 	const { data: ctxProjectCodex } = useProjectCodex(menuNode?.type === 'project' ? menuNode.id : null)
-	const { data: ctxBookCodex }    = useBookCodex(menuNode?.type === 'book' ? menuNode.id : null)
+	const { data: ctxBookCodex } = useBookCodex(menuNode?.type === 'book' ? menuNode.id : null)
 	const { mutate: createProjectCodex } = useCreateProjectCodex()
-	const { mutate: createBookCodex }    = useCreateBookCodex()
+	const { mutate: createBookCodex } = useCreateBookCodex()
 
 	// ── Public API ────────────────────────────────────────────────────────────
 
@@ -181,8 +197,8 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 			// Only fire when focus is inside the nav tree, not in the editor.
 			if (!navRef?.current?.contains(document.activeElement)) return
 			const selectedId =
-				selection.sceneId   ?? selection.chapterId ?? selection.partId ??
-				selection.bookId    ?? selection.projectId  ?? null
+				selection.sceneId ?? selection.chapterId ?? selection.partId ??
+				selection.bookId ?? selection.projectId ?? null
 			if (selectedId) {
 				e.preventDefault()
 				startRename(selectedId)
@@ -197,16 +213,16 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const dispatchReorder = (ids) => {
 		if (!menuNode) return
 		const { type, chapterId, partId, bookId } = menuNode
-		if      (type === 'scene')              reorderScenes({ chapterId, ids })
+		if (type === 'scene') reorderScenes({ chapterId, ids })
 		else if (type === 'chapter' && !partId) reorderChapters({ bookId, ids })
-		else if (type === 'chapter' &&  partId) reorderPartChapters({ partId, ids })
-		else if (type === 'part')               reorderParts({ bookId, ids })
+		else if (type === 'chapter' && partId) reorderPartChapters({ partId, ids })
+		else if (type === 'part') reorderParts({ bookId, ids })
 	}
 
 	const handleMoveUp = () => {
 		if (isFirst || !siblings) return
 		const ids = siblings.map(s => s.id)
-		;[ids[siblingIndex - 1], ids[siblingIndex]] = [ids[siblingIndex], ids[siblingIndex - 1]]
+			;[ids[siblingIndex - 1], ids[siblingIndex]] = [ids[siblingIndex], ids[siblingIndex - 1]]
 		dispatchReorder(ids)
 		closeMenu()
 	}
@@ -214,14 +230,14 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const handleMoveDown = () => {
 		if (isLast || !siblings) return
 		const ids = siblings.map(s => s.id)
-		;[ids[siblingIndex], ids[siblingIndex + 1]] = [ids[siblingIndex + 1], ids[siblingIndex]]
+			;[ids[siblingIndex], ids[siblingIndex + 1]] = [ids[siblingIndex + 1], ids[siblingIndex]]
 		dispatchReorder(ids)
 		closeMenu()
 	}
 
 	// ── Delete ────────────────────────────────────────────────────────────────
 
-	const deleteCtx = menuNode ? getDeleteContext(menuNode.type, menuNode.title) : null
+	const deleteCtx = menuNode ? getDeleteContext(menuNode.type, menuNode.title, menuNode.codexCategory) : null
 
 	const handleConfirmDelete = () => {
 		if (!menuNode || !deleteCtx) return
@@ -230,42 +246,52 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		if (deleteCtx.level === 'scene') {
 			deleteScene(
 				{ id, chapterId },
-				{ onSuccess: () => {
-					setSelection(s => ({ ...s, sceneId: null }))
-					setDeleteDialogOpen(false)
-				}},
+				{
+					onSuccess: () => {
+						setSelection(s => ({ ...s, sceneId: null }))
+						setDeleteDialogOpen(false)
+					}
+				},
 			)
 		} else if (deleteCtx.level === 'chapter') {
 			deleteChapter(
 				{ id, bookId },
-				{ onSuccess: () => {
-					setSelection(s => ({ ...s, chapterId: null, sceneId: null }))
-					setDeleteDialogOpen(false)
-				}},
+				{
+					onSuccess: () => {
+						setSelection(s => ({ ...s, chapterId: null, sceneId: null }))
+						setDeleteDialogOpen(false)
+					}
+				},
 			)
 		} else if (deleteCtx.level === 'part') {
 			deletePart(
 				{ id, bookId },
-				{ onSuccess: () => {
-					setSelection(s => ({ ...s, partId: null, chapterId: null, sceneId: null }))
-					setDeleteDialogOpen(false)
-				}},
+				{
+					onSuccess: () => {
+						setSelection(s => ({ ...s, partId: null, chapterId: null, sceneId: null }))
+						setDeleteDialogOpen(false)
+					}
+				},
 			)
 		} else if (deleteCtx.level === 'book') {
 			deleteBook(
 				{ id, projectId },
-				{ onSuccess: () => {
-					setSelection(s => ({ ...s, bookId: null, partId: null, chapterId: null, sceneId: null }))
-					setDeleteDialogOpen(false)
-				}},
+				{
+					onSuccess: () => {
+						setSelection(s => ({ ...s, bookId: null, partId: null, chapterId: null, sceneId: null }))
+						setDeleteDialogOpen(false)
+					}
+				},
 			)
 		} else if (deleteCtx.level === 'codex') {
 			deleteCodex(
 				{ id },
-				{ onSuccess: () => {
-					setSelection(s => ({ ...s, codexId: null, codexCategory: null, chapterId: null, sceneId: null }))
-					setDeleteDialogOpen(false)
-				}},
+				{
+					onSuccess: () => {
+						setSelection(s => ({ ...s, codexId: null, codexCategory: null, chapterId: null, sceneId: null }))
+						setDeleteDialogOpen(false)
+					}
+				},
 			)
 		}
 	}
@@ -279,19 +305,19 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 
 	// ── Derived menu flags ────────────────────────────────────────────────────
 
-	const isBookNode    = menuNode?.type === 'book'
-	const canDelete     = deleteCtx != null  // project delete not supported
+	const isBookNode = menuNode?.type === 'book'
+	const canDelete = deleteCtx != null  // project delete not supported
 
 	// Export URL — derived from the right-clicked node type and id.
 	// null for project nodes (no export scope for the whole project).
 	const exportUrl = (() => {
 		if (!menuNode) return null
 		switch (menuNode.type) {
-			case 'book':    return exportApi.bookDocxUrl(menuNode.id)
-			case 'part':    return exportApi.partDocxUrl(menuNode.id)
+			case 'book': return exportApi.bookDocxUrl(menuNode.id)
+			case 'part': return exportApi.partDocxUrl(menuNode.id)
 			case 'chapter': return exportApi.chapterDocxUrl(menuNode.id)
-			case 'scene':   return exportApi.sceneDocxUrl(menuNode.id)
-			default:        return null
+			case 'scene': return exportApi.sceneDocxUrl(menuNode.id)
+			default: return null
 		}
 	})()
 
@@ -392,12 +418,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 						<ListItemText>
 							{({
 								CHARACTER: 'Add Character',
-								VOICE:     'Add Voice Sheet',
-								PLOT:      'Add Plot Element',
-								WORLD:     'Add World Entry',
-								TIMELINE:  'Add Timeline Entry',
-								CANON:     'Add Canon Entry',
-								NOTES:     'Add Note',
+								VOICE: 'Add Voice Sheet',
+								PLOT: 'Add Plot Element',
+								WORLD: 'Add World Entry',
+								TIMELINE: 'Add Timeline Entry',
+								CANON: 'Add Canon Entry',
+								NOTES: 'Add Note',
 							})[menuNode.codexCategory] ?? 'Add Entry'}
 						</ListItemText>
 					</MenuItem>
@@ -417,8 +443,11 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				{canDelete && (
 					<MenuItem
 						dense
-						onClick={() => { closeMenu(); setDeleteDialogOpen(true) }}
-					>
+						onClick={() => {
+							closeMenu()
+							if (shouldSkipDeleteConfirm()) handleConfirmDelete()
+							else setDeleteDialogOpen(true)
+						}}>
 						<ListItemIcon><DeleteIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>{deleteCtx.label}</ListItemText>
 					</MenuItem>
@@ -430,8 +459,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				open={deleteDialogOpen}
 				onClose={() => setDeleteDialogOpen(false)}
 				onConfirm={handleConfirmDelete}
-				title={deleteCtx?.label ?? 'Delete'}
-				message={deleteCtx?.message ?? ''}
+				itemType={deleteCtx?.itemType ?? 'item'}
 				isPending={isDeleting}
 			/>
 

@@ -105,9 +105,11 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 		setSelection((prev) => ({
 			...prev,
 			bookId,
-			partId:    chapter.partId ?? null,
+			partId: chapter.partId ?? null,
 			chapterId: chapter.id,
-			sceneId:   null,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
 		}))
 	}
 
@@ -115,9 +117,11 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 		setSelection((prev) => ({
 			...prev,
 			bookId,
-			partId:    chapter.partId ?? null,
+			partId: chapter.partId ?? null,
 			chapterId: chapter.id,
-			sceneId:   null,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
 		}))
 		openContextMenu(e, 'chapter', {
 			id:        chapter.id,

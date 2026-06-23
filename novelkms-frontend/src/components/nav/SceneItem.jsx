@@ -3,9 +3,9 @@ import { InputBase, ListItemButton, ListItemText, ListItemIcon } from '@mui/mate
 import TheatersIcon from '@mui/icons-material/Theaters'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useUpdateScene }    from '../../hooks/useScenes'
-import { containerIds }      from '../../dnd/dndUtils'
-import { useDndState }       from '../../dnd/DndStateContext'
+import { useUpdateScene } from '../../hooks/useScenes'
+import { containerIds } from '../../dnd/dndUtils'
+import { useDndState } from '../../dnd/DndStateContext'
 import { useNavContextMenu } from './NavContextMenuContext'
 import { useSearch } from '../../search/SearchContext'
 
@@ -27,11 +27,12 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 	const isSelected = selection.sceneId === scene.id
 	const search = useSearch()
 	const matchCount = search.counts.scene[scene.id] ?? 0
+	const isCodexEntry = !!selection.codexId && selection.chapterId === chapterId
 
 	// ── Drop indicator ────────────────────────────────────────────────────────
-	const dragState      = useDndState()
-	const isDropTarget   = dragState?.activeType === 'scene' && dragState.overId === String(scene.id)
-	const showTopLine    = isDropTarget &&  dragState.insertBefore
+	const dragState = useDndState()
+	const isDropTarget = dragState?.activeType === 'scene' && dragState.overId === String(scene.id)
+	const showTopLine = isDropTarget && dragState.insertBefore
 	const showBottomLine = isDropTarget && !dragState.insertBefore
 
 	// ── Context menu & rename ─────────────────────────────────────────────────
@@ -47,10 +48,10 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 			// useUpdateScene expects { id, data } — chapterId must be inside data
 			// so onSuccess can invalidate SCENE_KEYS.byChapter(data.chapterId).
 			updateScene({
-				id:   scene.id,
+				id: scene.id,
 				data: {
 					chapterId,
-					title:    newTitle,
+					title: newTitle,
 					synopsis: scene.synopsis ?? '',
 				},
 			})
@@ -60,7 +61,7 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 
 	const handleRenameKeyDown = (e) => {
 		e.stopPropagation()
-		if (e.key === 'Enter')  handleRenameCommit()
+		if (e.key === 'Enter') handleRenameCommit()
 		if (e.key === 'Escape') endRename()
 	}
 
@@ -75,10 +76,10 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 	} = useSortable({
 		id: String(scene.id),
 		data: {
-			type:        'scene',
-			title:       scene.title || 'Untitled Scene',
+			type: 'scene',
+			title: scene.title || 'Untitled Scene',
 			containerId: containerIds.scenes(String(chapterId)),
-			chapterId:   String(chapterId),
+			chapterId: String(chapterId),
 		},
 	})
 
@@ -87,9 +88,11 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 		setSelection((prev) => ({
 			...prev,
 			bookId,
-			partId:    partId ?? null,
+			partId: partId ?? null,
 			chapterId,
-			sceneId:   scene.id,
+			sceneId: isCodexEntry ? null : scene.id,
+			codexId: isCodexEntry ? prev.codexId : null,
+			codexCategory: isCodexEntry ? prev.codexCategory : null,
 		}))
 	}
 
@@ -97,17 +100,20 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 		setSelection((prev) => ({
 			...prev,
 			bookId,
-			partId:    partId ?? null,
-			chapterId,
-			sceneId:   scene.id,
+			partId: partId ?? null,
+			chapterId: chapterId,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
 		}))
 		openContextMenu(e, 'scene', {
-			id:        scene.id,
-			title:     scene.title,
+			id: scene.id,
+			title: scene.title,
 			chapterId,
-			partId:    partId ?? null,
+			partId: partId ?? null,
 			bookId,
 			projectId: selection.projectId,
+			codexCategory: selection.codexId ? selection.codexCategory : null,
 		})
 	}
 
@@ -115,9 +121,9 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 		<ListItemButton
 			ref={setNodeRef}
 			style={{
-				transform:  CSS.Transform.toString(transform),
+				transform: CSS.Transform.toString(transform),
 				transition,
-				opacity:    isDragging ? 0.4 : 1,
+				opacity: isDragging ? 0.4 : 1,
 			}}
 			selected={isSelected}
 			onClick={handleClick}
@@ -125,7 +131,7 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 			sx={{
 				pl: 10 + depth * 3,
 				...(matchCount > 0 && { bgcolor: 'warning.light' }),
-				...(showTopLine    && { boxShadow: theme => `inset 0  2px 0 ${theme.palette.primary.main}` }),
+				...(showTopLine && { boxShadow: theme => `inset 0  2px 0 ${theme.palette.primary.main}` }),
 				...(showBottomLine && { boxShadow: theme => `inset 0 -2px 0 ${theme.palette.primary.main}` }),
 			}}
 			{...attributes}
@@ -149,7 +155,7 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 					sx={{
 						fontSize: '0.875rem',
 						borderBottom: '1px solid',
-						borderColor:  'primary.main',
+						borderColor: 'primary.main',
 						'& .MuiInputBase-input': { p: 0 },
 					}}
 				/>

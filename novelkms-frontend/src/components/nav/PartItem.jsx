@@ -108,11 +108,27 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 		if (!open) setOpen(true)
 		// Always set bookId explicitly — the user may have expanded the book node
 		// via the arrow without clicking the row, leaving prev.bookId unset.
-		setSelection((prev) => ({ ...prev, bookId, partId: part.id, chapterId: null, sceneId: null }))
+		setSelection((prev) => ({
+			...prev,
+			bookId,
+			partId: part.id,
+			chapterId: null,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
+		}))
 	}
 
 	const handleContextMenu = (e) => {
-		setSelection((prev) => ({ ...prev, bookId, partId: part.id, chapterId: null, sceneId: null }))
+		setSelection((prev) => ({
+			...prev,
+			bookId,
+			partId: part.id,
+			chapterId: null,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
+		}))
 		openContextMenu(e, 'part', {
 			id: part.id,
 			title: part.title,

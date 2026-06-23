@@ -243,17 +243,29 @@ export default function App() {
 	}, [navWidth, propsWidth])
 
 	const setSelection = useCallback((update) => {
-		setSel(prev => {
-			const base = typeof update === 'function' ? update(prev) : update
-			return {
-				...base,
-				codexId:       base.codexId ?? null,
-				codexCategory: base.codexCategory ?? null,
-				trashSelected: base.trashSelected ?? false,
-				templateType: null,
-				templateScope: null,
-			}
-		})
+	  setSel(prev => {
+	    // Remove transient panel modes before functional updaters spread prev.
+	    // This prevents clicks on normal nav nodes from accidentally preserving
+	    // trash/template mode.
+	    const cleanPrev = {
+	      ...prev,
+	      trashSelected: false,
+	      templateType: null,
+	      templateScope: null,
+	    }
+
+	    const base = typeof update === 'function' ? update(cleanPrev) : update
+
+	    return {
+	      ...EMPTY_SELECTION,
+	      ...base,
+	      codexId: base.codexId ?? null,
+	      codexCategory: base.codexCategory ?? null,
+	      trashSelected: base.trashSelected === true,
+	      templateType: base.templateType ?? null,
+	      templateScope: base.templateScope ?? null,
+	    }
+	  })
 	}, [])
 
 	const selectTemplate = useCallback(({ type, scope, bookId }) => {

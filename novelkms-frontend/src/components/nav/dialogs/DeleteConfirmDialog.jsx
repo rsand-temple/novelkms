@@ -1,34 +1,47 @@
+import { useState } from 'react'
 import {
-	Dialog, DialogTitle, DialogContent, DialogContentText,
-	DialogActions, Button,
+	Dialog, DialogTitle, DialogContent, DialogActions,
+	Button, FormControlLabel, Checkbox,
 } from '@mui/material'
+import { saveSkipDeleteConfirm } from '../../../utils/deleteConfirmPrefs'
 
-/**
- * DeleteConfirmDialog
- *
- * Generic confirmation dialog for destructive actions.
- *
- * Props:
- *   open       — controls visibility
- *   onClose    — called on Cancel or backdrop click
- *   onConfirm  — called when the user clicks Delete
- *   title      — dialog heading (e.g. "Delete Chapter")
- *   message    — body text describing what will be destroyed
- *   isPending  — disables both buttons while the mutation is in-flight
- */
-export default function DeleteConfirmDialog({ open, onClose, onConfirm, title, message, isPending }) {
+export default function DeleteConfirmDialog({
+	open,
+	onClose,
+	onConfirm,
+	itemType = 'item',
+	isPending,
+}) {
+	const [dontShowAgain, setDontShowAgain] = useState(false)
+
+	const handleConfirm = () => {
+		saveSkipDeleteConfirm(dontShowAgain)
+		onConfirm()
+	}
+
 	return (
 		<Dialog open={open} onClose={!isPending ? onClose : undefined} maxWidth="xs" fullWidth>
-			<DialogTitle>{title}</DialogTitle>
-			<DialogContent>
-				<DialogContentText>{message}</DialogContentText>
+			<DialogTitle>{`Delete ${itemType}?`}</DialogTitle>
+
+			<DialogContent sx={{ pt: 0 }}>
+				<FormControlLabel
+					control={
+						<Checkbox
+							checked={dontShowAgain}
+							onChange={(e) => setDontShowAgain(e.target.checked)}
+							disabled={isPending}
+						/>
+					}
+					label="Don’t show this again"
+				/>
 			</DialogContent>
+
 			<DialogActions>
 				<Button onClick={onClose} disabled={isPending}>
 					Cancel
 				</Button>
 				<Button
-					onClick={onConfirm}
+					onClick={handleConfirm}
 					color="error"
 					variant="contained"
 					disabled={isPending}

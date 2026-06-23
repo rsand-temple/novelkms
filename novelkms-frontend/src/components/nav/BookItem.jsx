@@ -1,17 +1,17 @@
 import { useState, useRef } from 'react'
 import { Box, Collapse, Divider, InputBase, ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
-import ExpandMoreIcon   from '@mui/icons-material/ExpandMore'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
-import MenuBookIcon     from '@mui/icons-material/MenuBook'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { useChapters }      from '../../hooks/useChapters'
-import { useParts }         from '../../hooks/useParts'
-import { useUpdateBook }    from '../../hooks/useBooks'
-import PartItem             from './PartItem'
-import ChapterItem          from './ChapterItem'
-import ChapterListZone      from './ChapterListZone'
-import CodexSection         from './CodexSection'
-import { containerIds }     from '../../dnd/dndUtils'
+import { useChapters } from '../../hooks/useChapters'
+import { useParts } from '../../hooks/useParts'
+import { useUpdateBook } from '../../hooks/useBooks'
+import PartItem from './PartItem'
+import ChapterItem from './ChapterItem'
+import ChapterListZone from './ChapterListZone'
+import CodexSection from './CodexSection'
+import { containerIds } from '../../dnd/dndUtils'
 import { useNavContextMenu } from './NavContextMenuContext'
 import { useSearch } from '../../search/SearchContext'
 
@@ -27,7 +27,7 @@ export default function BookItem({ book, selection, setSelection }) {
 		if (selection.bookId === book.id) setOpen(true)
 	}
 
-	const { data: parts }    = useParts(open ? book.id : null)
+	const { data: parts } = useParts(open ? book.id : null)
 	const { data: chapters } = useChapters(open ? book.id : null)
 
 	const isSelected = selection.bookId === book.id && !selection.partId && !selection.chapterId
@@ -45,21 +45,21 @@ export default function BookItem({ book, selection, setSelection }) {
 		if (newTitle && newTitle !== book.title) {
 			// useUpdateBook expects { id, data }; data.projectId drives list invalidation.
 			updateBook({
-				id:   book.id,
+				id: book.id,
 				data: {
-					projectId:          book.projectId,
-					title:              newTitle,
-					subtitle:           book.subtitle,
-					shortTitle:         book.shortTitle,
-					notes:              book.notes,
-					pageLayoutEnabled:  book.pageLayoutEnabled  ?? false,
-					pageSizePreset:     book.pageSizePreset     ?? 'LETTER',
-					pageWidthIn:        book.pageWidthIn,
-					pageHeightIn:       book.pageHeightIn,
-					pageMarginTopIn:    book.pageMarginTopIn,
+					projectId: book.projectId,
+					title: newTitle,
+					subtitle: book.subtitle,
+					shortTitle: book.shortTitle,
+					notes: book.notes,
+					pageLayoutEnabled: book.pageLayoutEnabled ?? false,
+					pageSizePreset: book.pageSizePreset ?? 'LETTER',
+					pageWidthIn: book.pageWidthIn,
+					pageHeightIn: book.pageHeightIn,
+					pageMarginTopIn: book.pageMarginTopIn,
 					pageMarginBottomIn: book.pageMarginBottomIn,
-					pageMarginInnerIn:  book.pageMarginInnerIn,
-					pageMarginOuterIn:  book.pageMarginOuterIn,
+					pageMarginInnerIn: book.pageMarginInnerIn,
+					pageMarginOuterIn: book.pageMarginOuterIn,
 				},
 			})
 		}
@@ -68,7 +68,7 @@ export default function BookItem({ book, selection, setSelection }) {
 
 	const handleRenameKeyDown = (e) => {
 		e.stopPropagation()
-		if (e.key === 'Enter')  handleRenameCommit()
+		if (e.key === 'Enter') handleRenameCommit()
 		if (e.key === 'Escape') endRename()
 	}
 
@@ -83,25 +83,44 @@ export default function BookItem({ book, selection, setSelection }) {
 		// Always set projectId explicitly — the user may have expanded the
 		// project node via the arrow without clicking the row, leaving
 		// prev.projectId unset (or stale from a previously selected project).
-		setSelection((prev) => ({ ...prev, projectId: book.projectId, bookId: book.id, partId: null, chapterId: null, sceneId: null }))
+		setSelection((prev) => ({
+			...prev,
+			projectId: book.projectId,
+			bookId: book.id,
+			partId: null,
+			chapterId: null,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
+		}))
 	}
 
 	const handleContextMenu = (e) => {
-		setSelection((prev) => ({ ...prev, projectId: book.projectId, bookId: book.id, partId: null, chapterId: null, sceneId: null }))
+		setSelection((prev) => ({
+			...prev,
+			projectId: book.projectId,
+			bookId: book.id,
+			partId: null,
+			chapterId: null,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
+		}))
+		
 		openContextMenu(e, 'book', {
-			id:        book.id,
-			title:     book.title,
+			id: book.id,
+			title: book.title,
 			projectId: book.projectId ?? selection.projectId,
 		})
 	}
 
 	// ── DnD container IDs ─────────────────────────────────────────────────────
-	const partsContainerId    = containerIds.parts(String(book.id))
+	const partsContainerId = containerIds.parts(String(book.id))
 	const chapBookContainerId = containerIds.chaptersBook(String(book.id))
-	const partIds             = (parts    ?? []).map(p => String(p.id))
-	const chapterIds          = (chapters ?? []).map(c => String(c.id))
+	const partIds = (parts ?? []).map(p => String(p.id))
+	const chapterIds = (chapters ?? []).map(c => String(c.id))
 
-	const hasParts    = parts?.length    > 0
+	const hasParts = parts?.length > 0
 	const hasChapters = chapters?.length > 0
 
 	return (

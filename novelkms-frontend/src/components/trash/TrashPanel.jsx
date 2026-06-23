@@ -10,7 +10,6 @@ import {
 	DialogContent,
 	DialogContentText,
 	DialogTitle,
-	Divider,
 	IconButton,
 	Tooltip,
 	Typography,
@@ -60,13 +59,22 @@ export default function TrashPanel() {
 	const [confirmPurge, setConfirmPurge] = useState(null)    // batchId or 'all'
 
 	const handleRestore = (batchId) => {
-		setFeedback(null)
-		restore(batchId, {
-			onSuccess: () => setFeedback({ severity: 'success', message: 'Item restored.' }),
-			onError: (e) => setFeedback({ severity: 'error', message: errMsg(e) }),
-		})
-	}
+	  setFeedback(null)
 
+	  if (!batchId) {
+	    setFeedback({
+	      severity: 'error',
+	      message: 'Cannot restore this item because the trash batch id is missing.',
+	    })
+	    return
+	  }
+
+	  restore(batchId, {
+	    onSuccess: () => setFeedback({ severity: 'success', message: 'Item restored.' }),
+	    onError: (e) => setFeedback({ severity: 'error', message: errMsg(e) }),
+	  })
+	}
+	
 	const handlePurge = () => {
 		if (!confirmPurge) return
 		setFeedback(null)
@@ -151,7 +159,7 @@ export default function TrashPanel() {
 						const meta = TYPE_META[item.rootType] ?? TYPE_META.SCENE
 						const Icon = meta.icon
 						return (
-							<Box key={item.id} sx={{
+							<Box key={item.batchId} sx={{
 								display: 'flex', alignItems: 'flex-start', gap: 1.5,
 								py: 1.25, px: 1,
 								borderBottom: '1px solid', borderColor: 'divider',
@@ -173,12 +181,12 @@ export default function TrashPanel() {
 								</Box>
 								<Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0, mt: 0.25 }}>
 									<Button
-										size="small"
-										variant="outlined"
-										disabled={busy}
-										onClick={() => handleRestore(item.id)}
+									  size="small"
+									  variant="outlined"
+									  disabled={busy || !item.batchId}
+									  onClick={() => handleRestore(item.batchId)}
 									>
-										Restore
+									  Restore
 									</Button>
 									<Tooltip title="Delete forever">
 										<span>
@@ -186,7 +194,7 @@ export default function TrashPanel() {
 												size="small"
 												color="error"
 												disabled={busy}
-												onClick={() => setConfirmPurge(item.id)}
+												onClick={() => setConfirmPurge(item.batchId)}
 											>
 												<DeleteIcon fontSize="small" />
 											</IconButton>
