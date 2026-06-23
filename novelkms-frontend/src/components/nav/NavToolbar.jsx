@@ -90,6 +90,7 @@ function getDeleteContext(selection) {
 		level: 'part',
 		label: 'Delete Part',
 		itemType: 'Part',
+		detail: 'The part will be removed and its chapters will be moved directly under the book. This cannot be undone.',
 	}
 
 	if (selection.bookId) return {
@@ -360,6 +361,7 @@ export default function NavToolbar({ selection, setSelection }) {
 				onClose={() => setDeleteDialogOpen(false)}
 				onConfirm={handleConfirmDelete}
 				itemType={deleteCtx?.itemType ?? 'item'}
+				detail={deleteCtx?.detail ?? null}
 				isPending={isDeleting}
 			/>
 		</Box>

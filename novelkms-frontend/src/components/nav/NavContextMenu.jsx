@@ -70,6 +70,7 @@ function getDeleteContext(type, title, codexCategory) {
 			level: 'part',
 			label: 'Delete Part',
 			itemType: 'Part',
+			detail: 'The part will be removed and its chapters will be moved directly under the book. This cannot be undone.',
 		}
 		case 'book': return {
 			level: 'book',
@@ -460,6 +461,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				onClose={() => setDeleteDialogOpen(false)}
 				onConfirm={handleConfirmDelete}
 				itemType={deleteCtx?.itemType ?? 'item'}
+				detail={deleteCtx?.detail ?? null}
 				isPending={isDeleting}
 			/>
 
