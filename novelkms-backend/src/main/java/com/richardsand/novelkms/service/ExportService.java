@@ -41,12 +41,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.richardsand.novelkms.dao.BookDao;
+import com.richardsand.novelkms.dao.PageLayoutDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.PartDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.model.Book;
+import com.richardsand.novelkms.model.PageLayout;
 import com.richardsand.novelkms.model.Chapter;
 import com.richardsand.novelkms.model.Part;
 import com.richardsand.novelkms.model.Project;
@@ -101,15 +103,18 @@ public class ExportService {
     private final SceneDao    sceneDao;
     private final ProjectDao  projectDao;
     private final TemplateDao templateDao;
+    private final PageLayoutDao pageLayoutDao;
 
     public ExportService(BookDao bookDao, PartDao partDao, ChapterDao chapterDao,
-            SceneDao sceneDao, ProjectDao projectDao, TemplateDao templateDao) {
+            SceneDao sceneDao, ProjectDao projectDao, TemplateDao templateDao,
+            PageLayoutDao pageLayoutDao) {
         this.bookDao = bookDao;
         this.partDao = partDao;
         this.chapterDao = chapterDao;
         this.sceneDao = sceneDao;
         this.projectDao = projectDao;
         this.templateDao = templateDao;
+        this.pageLayoutDao = pageLayoutDao;
     }
 
     // =========================================================================
@@ -129,16 +134,17 @@ public class ExportService {
      * in display order, each chapter on its own page.
      */
     public ExportMeta exportBook(UUID bookId) throws Exception {
-        Book    book     = requireBook(bookId);
-        Project project  = loadProject(book);
-        double  contentW = contentWidthIn(book);
+        Book       book     = requireBook(bookId);
+        Project    project  = loadProject(book);
+        PageLayout layout   = pageLayoutDao.resolveBook(book.getId());
+        double     contentW = contentWidthIn(layout);
 
-        XWPFDocument doc      = createDocument(book);
+        XWPFDocument doc      = createDocument(layout);
         boolean      pbNeeded = false;
 
         // Cover image page (if present)
         if (book.isHasCoverImage()) {
-            appendCoverImage(doc, book);
+            appendCoverImage(doc, book, contentW);
             pbNeeded = true;
         }
 
@@ -187,12 +193,13 @@ public class ExportService {
      * Exports a single part: part heading, then its chapters in order.
      */
     public ExportMeta exportPart(UUID partId) throws Exception {
-        Part    part     = requirePart(partId);
-        Book    book     = requireBook(part.getBookId());
-        Project project  = loadProject(book);
-        double  contentW = contentWidthIn(book);
+        Part       part     = requirePart(partId);
+        Book       book     = requireBook(part.getBookId());
+        Project    project  = loadProject(book);
+        PageLayout layout   = pageLayoutDao.resolveBook(book.getId());
+        double     contentW = contentWidthIn(layout);
 
-        XWPFDocument doc = createDocument(book);
+        XWPFDocument doc = createDocument(layout);
         appendPartHeading(doc, part, false);
 
         for (Chapter ch : chapterDao.findByPartId(partId)) {
@@ -212,12 +219,13 @@ public class ExportService {
      * Exports a single chapter: chapter heading then all scenes.
      */
     public ExportMeta exportChapter(UUID chapterId) throws Exception {
-        Chapter chapter  = requireChapter(chapterId);
-        Book    book     = requireBook(chapter.getBookId());
-        Project project  = loadProject(book);
-        double  contentW = contentWidthIn(book);
+        Chapter    chapter  = requireChapter(chapterId);
+        Book       book     = requireBook(chapter.getBookId());
+        Project    project  = loadProject(book);
+        PageLayout layout   = pageLayoutDao.resolveBook(book.getId());
+        double     contentW = contentWidthIn(layout);
 
-        XWPFDocument doc = createDocument(book);
+        XWPFDocument doc = createDocument(layout);
         appendChapterContent(doc, chapter, false, contentW);
 
         addRunningHeader(doc, book, project);
@@ -233,13 +241,14 @@ public class ExportService {
      * Exports a single scene: raw content only, no heading.
      */
     public ExportMeta exportScene(UUID sceneId) throws Exception {
-        Scene   scene   = requireScene(sceneId);
-        Chapter chapter = requireChapter(scene.getChapterId());
-        Book    book    = requireBook(chapter.getBookId());
-        Project project = loadProject(book);
+        Scene      scene   = requireScene(sceneId);
+        Chapter    chapter = requireChapter(scene.getChapterId());
+        Book       book    = requireBook(chapter.getBookId());
+        Project    project = loadProject(book);
+        PageLayout layout  = pageLayoutDao.resolveBook(book.getId());
 
-        XWPFDocument doc = createDocument(book);
-        convertHtml(doc, scene.getContent(), contentWidthIn(book));
+        XWPFDocument doc = createDocument(layout);
+        convertHtml(doc, scene.getContent(), contentWidthIn(layout));
 
         addRunningHeader(doc, book, project);
 
@@ -361,13 +370,13 @@ public class ExportService {
     // Document and page layout
     // =========================================================================
 
-    private XWPFDocument createDocument(Book book) {
+    private XWPFDocument createDocument(PageLayout layout) {
         XWPFDocument doc = new XWPFDocument();
-        applyPageLayout(doc, book);
+        applyPageLayout(doc, layout);
         return doc;
     }
 
-    private void applyPageLayout(XWPFDocument doc, Book book) {
+    private void applyPageLayout(XWPFDocument doc, PageLayout book) {
         CTDocument1 ctDoc  = doc.getDocument();
         CTBody      body   = ctDoc.getBody();
         CTSectPr    sectPr = body.isSetSectPr() ? body.getSectPr() : body.addNewSectPr();
@@ -391,7 +400,7 @@ public class ExportService {
     }
 
     // Page dimension helpers (fall back to Letter/1" when layout is disabled)
-    private double pageWidthIn(Book b) {
+    private double pageWidthIn(PageLayout b) {
         if (!b.isPageLayoutEnabled())
             return DEFAULT_WIDTH_IN;
         if ("CUSTOM".equals(b.getPageSizePreset()) && b.getPageWidthIn() != null)
@@ -405,7 +414,7 @@ public class ExportService {
         };
     }
 
-    private double pageHeightIn(Book b) {
+    private double pageHeightIn(PageLayout b) {
         if (!b.isPageLayoutEnabled())
             return DEFAULT_HEIGHT_IN;
         if ("CUSTOM".equals(b.getPageSizePreset()) && b.getPageHeightIn() != null)
@@ -419,24 +428,24 @@ public class ExportService {
         };
     }
 
-    private double marginTop(Book b) {
+    private double marginTop(PageLayout b) {
         return (!b.isPageLayoutEnabled() || b.getPageMarginTopIn() == null) ? DEFAULT_TOP_IN : b.getPageMarginTopIn();
     }
 
-    private double marginBottom(Book b) {
+    private double marginBottom(PageLayout b) {
         return (!b.isPageLayoutEnabled() || b.getPageMarginBottomIn() == null) ? DEFAULT_BOTTOM_IN : b.getPageMarginBottomIn();
     }
 
-    private double marginInner(Book b) {
+    private double marginInner(PageLayout b) {
         return (!b.isPageLayoutEnabled() || b.getPageMarginInnerIn() == null) ? DEFAULT_INNER_IN : b.getPageMarginInnerIn();
     }
 
-    private double marginOuter(Book b) {
+    private double marginOuter(PageLayout b) {
         return (!b.isPageLayoutEnabled() || b.getPageMarginOuterIn() == null) ? DEFAULT_OUTER_IN : b.getPageMarginOuterIn();
     }
 
     /** Usable content width for images. */
-    private double contentWidthIn(Book b) {
+    private double contentWidthIn(PageLayout b) {
         return pageWidthIn(b) - marginInner(b) - marginOuter(b);
     }
 
@@ -444,7 +453,7 @@ public class ExportService {
     // Cover image
     // =========================================================================
 
-    private void appendCoverImage(XWPFDocument doc, Book book) {
+    private void appendCoverImage(XWPFDocument doc, Book book, double contentW) {
         BookDao.CoverImage img;
         try {
             img = bookDao.getCoverImage(book.getId()).orElse(null);
@@ -455,7 +464,7 @@ public class ExportService {
         if (img == null)
             return;
 
-        double   maxW = contentWidthIn(book);
+        double   maxW = contentW;
         double[] dims = imageDimensions(img.data(), maxW);
 
         XWPFParagraph para = doc.createParagraph();

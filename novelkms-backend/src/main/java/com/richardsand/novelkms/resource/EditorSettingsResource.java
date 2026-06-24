@@ -33,6 +33,9 @@ import jakarta.ws.rs.core.Response;
  *   <li>{@code /projects/{id}/editor-settings} — the per-project override
  *       (PROJECT -> USER -> SYSTEM). The {@code projects/{id}} segment is
  *       authorized by the tenant filter, exactly as for project styles.</li>
+ *   <li>{@code /books/{id}/editor-settings} — the per-book override
+ *       (BOOK -> PROJECT -> USER -> SYSTEM); the {@code books/{id}} segment is
+ *       likewise tenant-authorized.</li>
  * </ul>
  */
 @Path("/")
@@ -107,6 +110,29 @@ public class EditorSettingsResource {
     @Path("/projects/{id}/editor-settings")
     public Response deleteProject(@PathParam("id") UUID projectId) {
         return run(() -> dao.deleteProject(projectId)
+                ? Response.noContent().build()
+                : Response.status(404).build());
+    }
+
+    // ── Per-book override ─────────────────────────────────────────────────────
+
+    @GET
+    @Path("/books/{id}/editor-settings")
+    public Response getBook(@PathParam("id") UUID bookId) {
+        return run(() -> Response.ok(dao.resolveBook(u(), bookId)).build());
+    }
+
+    @PUT
+    @Path("/books/{id}/editor-settings")
+    public Response putBook(@PathParam("id") UUID bookId, DefinitionRequest r) {
+        need(r);
+        return run(() -> Response.ok(dao.upsertBook(bookId, r.definition)).build());
+    }
+
+    @DELETE
+    @Path("/books/{id}/editor-settings")
+    public Response deleteBook(@PathParam("id") UUID bookId) {
+        return run(() -> dao.deleteBook(bookId)
                 ? Response.noContent().build()
                 : Response.status(404).build());
     }

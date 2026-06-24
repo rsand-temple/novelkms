@@ -101,10 +101,10 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 			...prev,
 			bookId,
 			partId: partId ?? null,
-			chapterId: chapterId,
-			sceneId: null,
-			codexId: null,
-			codexCategory: null,
+			chapterId,
+			sceneId: isCodexEntry ? null : scene.id,
+			codexId: isCodexEntry ? prev.codexId : null,
+			codexCategory: isCodexEntry ? prev.codexCategory : null,
 		}))
 		openContextMenu(e, 'scene', {
 			id: scene.id,

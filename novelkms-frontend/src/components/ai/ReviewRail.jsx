@@ -18,6 +18,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
+import { useQueries } from '@tanstack/react-query'
 import {
 	useChapterReviews,
 	useAiReview,
@@ -26,7 +27,9 @@ import {
 	useSetRecommendationStatus,
 	usePromoteRecommendation,
 	useDeleteReview,
+	AI_REVIEW_KEYS,
 } from '../../hooks/useAiReviews'
+import { aiApi } from '../../api/ai'
 import { useScenes } from '../../hooks/useScenes'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
 import { useReview } from '../../review/ReviewContext'
@@ -35,6 +38,8 @@ import ReviewCard from './ReviewCard'
 
 const RAIL_WIDTH = 332
 const RAIL_COLLAPSED_WIDTH = 44
+
+const ALL_REVIEWS = '__ALL__'
 
 function errMessage(err) {
 	const data = err?.response?.data
@@ -48,20 +53,20 @@ function formatTime(iso) {
 
 /**
  * ReviewRail — the AI review surface for the selected manuscript chapter or
- * scene, rendered on the right edge of the editor area (not the global
- * inspector).
+ * scene, rendered on the right edge of the editor area.
  *
- * A chapter review and a scene review are the same artifact differing only in
- * scope, and a scene review is filed under its parent chapter — so the rail is
- * bound to the chapter (mounted with key={chapterId}) and the current scope is
- * driven by whether a scene is also selected. Switching scenes within a chapter
- * updates the scope/filter WITHOUT remounting, preserving rail state:
+ * Bound to exactly one chapter (mounted with key={chapterId}). The current
+ * scope is driven by whether a scene is also selected:
  *
- *   • scene selected  → Run reviews that scene; history is filtered to that
- *                       scene's reviews.
- *   • chapter selected → Run reviews the whole chapter; history shows every
- *                       review under the chapter (chapter- and scene-scope),
- *                       each tagged with its origin.
+ *   • scene selected  → Run reviews that scene; show only that scene's reviews
+ *                       and their recommendations.
+ *   • chapter selected → Run reviews the whole chapter; show ALL reviews under
+ *                       the chapter (chapter- and scene-scope) and AGGREGATE
+ *                       their recommendations into one working list.
+ *
+ * In chapter scope the "All reviews" aggregate is the default. The dropdown
+ * can optionally filter to a single review. Each recommendation card shows its
+ * origin (which review/scope) so the author knows where a finding came from.
  *
  * Props:
  *   chapterId {string}        the (parent) chapter
@@ -72,11 +77,11 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 	const review = useReview()
 
 	const scope = sceneId ? 'SCENE' : 'CHAPTER'
-	// Identity of the current scope target. An explicit review selection is only
-	// honored while this matches, so changing scene/scope falls back to the
-	// newest review in the new filter without a setState-in-effect.
 	const scopeKey = sceneId ?? 'CHAPTER'
 
+	// When the user explicitly picks a review in the dropdown. At chapter
+	// scope the default is ALL_REVIEWS (aggregate); at scene scope the
+	// default is the newest review (null falls through to reviews[0]).
 	const [explicit, setExplicit] = useState(null) // { id, scopeKey } | null
 	const [credentialId, setCredentialId] = useState(null)
 	const [runError, setRunError] = useState(null)
@@ -94,22 +99,42 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 	const { data: scenes = [] } = useScenes(chapterId)
 	const { data: reviews = [], isLoading: loadingReviews } = useChapterReviews(chapterId)
 
-	// Filter the chapter's review history by the current selection.
+	// ── Scope-filtered reviews ──────────────────────────────────────────────
 	const filteredReviews = useMemo(() => {
 		if (scope === 'SCENE') {
 			return reviews.filter(r => reviewScope(r) === 'SCENE' && r.sceneId === sceneId)
 		}
-		return reviews
+		return reviews // chapter scope: all reviews (chapter + scene)
 	}, [reviews, scope, sceneId])
 
-	const explicitId = explicit && explicit.scopeKey === scopeKey ? explicit.id : null
-	const selectedReviewId = explicitId ?? filteredReviews[0]?.id ?? null
-	const selectedReview = useMemo(
-		() => filteredReviews.find(r => r.id === selectedReviewId) ?? null,
-		[filteredReviews, selectedReviewId],
+	const completedReviews = useMemo(
+		() => filteredReviews.filter(r => r.status === 'COMPLETED'),
+		[filteredReviews],
 	)
 
-	const { data: detail, isLoading: loadingDetail } = useAiReview(selectedReviewId, !!selectedReviewId)
+	// ── Selection: aggregate vs single review ───────────────────────────────
+	const explicitId = explicit && explicit.scopeKey === scopeKey ? explicit.id : null
+	const isAggregateMode = scope === 'CHAPTER' && (explicitId === ALL_REVIEWS || explicitId == null)
+	const selectedReviewId = isAggregateMode ? null : (explicitId ?? filteredReviews[0]?.id ?? null)
+
+	// ── Detail fetch: single review (scene scope or explicitly selected) ────
+	const { data: singleDetail, isLoading: loadingSingleDetail } = useAiReview(
+		selectedReviewId, !!selectedReviewId,
+	)
+
+	// ── Detail fetch: ALL completed reviews (chapter scope aggregate) ───────
+	const aggregateQueries = useQueries({
+		queries: isAggregateMode
+			? completedReviews.map(r => ({
+				queryKey: AI_REVIEW_KEYS.detail(r.id),
+				queryFn: () => aiApi.getReview(r.id),
+				staleTime: 30_000,
+			}))
+			: [],
+	})
+	const aggregateLoading = isAggregateMode && aggregateQueries.some(q => q.isLoading)
+
+	// ── Mutations ───────────────────────────────────────────────────────────
 	const { mutate: runChapter, isPending: runningChapter } = useRunChapterReview()
 	const { mutate: runScene, isPending: runningScene } = useRunSceneReview()
 	const { mutate: setRecStatus } = useSetRecommendationStatus()
@@ -125,23 +150,40 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 	const effectiveCredId = credentialId ?? defaultCredId
 	const hasCredentials = credentials.length > 0
 
-	// The label of whatever Run will review right now.
 	const scopeTargetLabel = scope === 'SCENE'
 		? originLabel({ scope: 'SCENE', sceneId }, scenes)
 		: 'Chapter'
 
-	// Visible (active) recommendations and the count of still-undecided ones.
-	const visibleRecs = useMemo(
-		() => (detail?.recommendations ?? []).filter(
-			rec => !HIDDEN_STATUSES.has((rec.status ?? '').toUpperCase()),
-		),
-		[detail],
-	)
+	// ── Recommendation list ─────────────────────────────────────────────────
+	// In aggregate mode each rec carries _reviewId so handlers can target the
+	// right review artifact. In single-review mode they all share the same id.
+	const visibleRecs = useMemo(() => {
+		if (isAggregateMode) {
+			return aggregateQueries
+				.filter(q => q.data?.status === 'COMPLETED')
+				.flatMap(q => (q.data.recommendations ?? [])
+					.filter(rec => !HIDDEN_STATUSES.has((rec.status ?? '').toUpperCase()))
+					.map(rec => ({ ...rec, _reviewId: q.data.id, _review: q.data })),
+				)
+		}
+		if (!singleDetail) return []
+		return (singleDetail.recommendations ?? [])
+			.filter(rec => !HIDDEN_STATUSES.has((rec.status ?? '').toUpperCase()))
+			.map(rec => ({ ...rec, _reviewId: singleDetail.id, _review: singleDetail }))
+	}, [isAggregateMode, aggregateQueries, singleDetail])
+
 	const openCount = useMemo(
 		() => visibleRecs.filter(rec => (rec.status ?? 'OPEN').toUpperCase() === 'OPEN').length,
 		[visibleRecs],
 	)
 
+	const detailLoaded = isAggregateMode ? !aggregateLoading : !!singleDetail
+	const detailLoading = isAggregateMode ? aggregateLoading : loadingSingleDetail
+
+	// For "no findings" / "all handled" messages — which detail do we inspect?
+	const anyCompleted = completedReviews.length > 0
+
+	// ── Handlers ────────────────────────────────────────────────────────────
 	const handleRun = () => {
 		setRunError(null)
 		const onSuccess = (r) => setExplicit({ id: r.id, scopeKey })
@@ -154,15 +196,17 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 	}
 
 	const handleSetStatus = (rec, value) => {
-		if (!detail) return
-		setRecStatus({ reviewId: detail.id, recId: rec.id, status: value ?? 'OPEN', chapterId })
+		const reviewId = rec._reviewId
+		if (!reviewId) return
+		setRecStatus({ reviewId, recId: rec.id, status: value ?? 'OPEN', chapterId })
 	}
 
 	const handlePromote = (rec, codexCategory, codexTitle) => {
-		if (!detail) return
+		const reviewId = rec._reviewId
+		if (!reviewId) return
 		setPromotingId(rec.id)
 		promote(
-			{ reviewId: detail.id, recId: rec.id, codexCategory, codexTitle, chapterId },
+			{ reviewId, recId: rec.id, codexCategory, codexTitle, chapterId },
 			{ onSettled: () => setPromotingId(null), onError: (e) => setRunError(errMessage(e)) },
 		)
 	}
@@ -172,7 +216,13 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 		editor.commands.highlightAnchor(anchorText)
 	}, [editor])
 
-	// ── Collapsed strip ───────────────────────────────────────────────────────
+	// The currently selected single review (for delete / origin chip).
+	const selectedReview = useMemo(
+		() => filteredReviews.find(r => r.id === selectedReviewId) ?? null,
+		[filteredReviews, selectedReviewId],
+	)
+
+	// ── Collapsed strip ───────────────────────────────────────────────────
 	if (review.collapsed) {
 		return (
 			<Box
@@ -203,7 +253,7 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 		)
 	}
 
-	// ── Expanded rail ─────────────────────────────────────────────────────────
+	// ── Expanded rail ─────────────────────────────────────────────────────
 	return (
 		<Box
 			sx={{
@@ -286,12 +336,22 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 
 						{runError && <Alert severity="error" sx={{ mt: 1 }}>{runError}</Alert>}
 
-						{filteredReviews.length > 1 && (
+						{/* Review selector — chapter scope: aggregate "All" + individual reviews;
+						    scene scope: individual reviews only */}
+						{filteredReviews.length > 0 && (
 							<TextField
 								select label="Review" size="small" fullWidth sx={{ mt: 1.5 }}
-								value={selectedReviewId ?? ''}
-								onChange={(e) => setExplicit({ id: e.target.value, scopeKey })}
+								value={isAggregateMode ? ALL_REVIEWS : (selectedReviewId ?? '')}
+								onChange={(e) => {
+									const val = e.target.value
+									setExplicit({ id: val, scopeKey })
+								}}
 							>
+								{scope === 'CHAPTER' && (
+									<MenuItem value={ALL_REVIEWS}>
+										All reviews ({completedReviews.length})
+									</MenuItem>
+								)}
 								{filteredReviews.map(r => (
 									<MenuItem key={r.id} value={r.id}>
 										{originLabel(r, scenes)} · {formatTime(r.submittedAt)} · {r.status}
@@ -300,7 +360,8 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 							</TextField>
 						)}
 
-						{selectedReviewId && (
+						{/* Delete button — only in single-review mode */}
+						{selectedReviewId && !isAggregateMode && (
 							<Box sx={{ display: 'flex', alignItems: 'center', mt: 0.75 }}>
 								{selectedReview && (
 									<Chip
@@ -333,9 +394,10 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 
 						<Divider sx={{ my: 1.5 }} />
 
+						{/* ── Recommendations ─────────────────────────────────────── */}
 						{loadingReviews && reviews.length === 0 ? (
 							<Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
-						) : !selectedReviewId ? (
+						) : filteredReviews.length === 0 ? (
 							<>
 								<Typography variant="body2" color="text.secondary">
 									{scope === 'SCENE'
@@ -348,30 +410,38 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 									</Typography>
 								)}
 							</>
-						) : loadingDetail || !detail ? (
+						) : detailLoading ? (
 							<Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
-						) : detail.status === 'FAILED' ? (
-							<Alert severity="error">{detail.errorMessage ?? 'The review failed.'}</Alert>
-						) : detail.status !== 'COMPLETED' ? (
+						) : !isAggregateMode && singleDetail?.status === 'FAILED' ? (
+							<Alert severity="error">{singleDetail.errorMessage ?? 'The review failed.'}</Alert>
+						) : !isAggregateMode && singleDetail?.status !== 'COMPLETED' ? (
 							<Typography variant="body2" color="text.secondary">Review in progress…</Typography>
-						) : (detail.recommendations ?? []).length === 0 ? (
-							<Alert severity="success">
-								No notes — the model had no substantive recommendations on this {scope === 'SCENE' ? 'scene' : 'chapter'}.
-							</Alert>
+						) : !anyCompleted ? (
+							<Typography variant="body2" color="text.secondary">No completed reviews yet.</Typography>
 						) : visibleRecs.length === 0 ? (
 							<Alert severity="success">All recommendations have been handled.</Alert>
 						) : (
 							visibleRecs.map(rec => (
-								<ReviewCard
-									key={`${rec.id}:${normalizeCategory(rec.codexCategory)}`}
-									rec={rec}
-									onSetStatus={handleSetStatus}
-									onPromote={handlePromote}
-									promoting={promotingId === rec.id}
-									skipDeleteConfirm={skipDeleteConfirm}
-									setSkipDeleteConfirm={persistSkipDeleteConfirm}
-									onHighlight={handleHighlight}
-								/>
+								<Box key={`${rec.id}:${rec._reviewId}`}>
+									{/* Origin chip in aggregate mode */}
+									{isAggregateMode && rec._review && (
+										<Chip
+											size="small"
+											variant="outlined"
+											label={originLabel(rec._review, scenes)}
+											sx={{ mb: 0.5, maxWidth: '100%', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+										/>
+									)}
+									<ReviewCard
+										rec={rec}
+										onSetStatus={handleSetStatus}
+										onPromote={handlePromote}
+										promoting={promotingId === rec.id}
+										skipDeleteConfirm={skipDeleteConfirm}
+										setSkipDeleteConfirm={persistSkipDeleteConfirm}
+										onHighlight={handleHighlight}
+									/>
+								</Box>
 							))
 						)}
 					</>

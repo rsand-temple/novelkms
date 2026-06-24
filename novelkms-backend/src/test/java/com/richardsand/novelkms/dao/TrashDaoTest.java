@@ -170,7 +170,7 @@ class TrashDaoTest extends NovelKmsTestBase {
     @Test
     void trashReview_recordsRecommendationCountAndTitle() throws SQLException {
         UUID reviewId = aiReviewDao.createPending(
-                TEST_USER_ID, project.getId(), book.getId(), chapter.getId(), null, "OPENAI", "gpt-5.4");
+                TEST_USER_ID, project.getId(), book.getId(), chapter.getId(), null, "OPENAI", "gpt-5.4", "SYSTEM", null);
         // Complete the review with 2 recommendations
         aiReviewDao.completeReview(reviewId, "chapter-review-v1", "{}",
                 List.of(
@@ -273,7 +273,7 @@ class TrashDaoTest extends NovelKmsTestBase {
     @Test
     void restoreReview_clearsDeletedAt() throws SQLException {
         UUID reviewId = aiReviewDao.createPending(
-                TEST_USER_ID, project.getId(), book.getId(), chapter.getId(), null, "OPENAI", "gpt-5.4");
+                TEST_USER_ID, project.getId(), book.getId(), chapter.getId(), null, "OPENAI", "gpt-5.4", "SYSTEM", null);
         trashDao.trashReview(TEST_USER_ID, reviewId);
 
         trashDao.restoreReview(reviewId);
@@ -327,7 +327,7 @@ class TrashDaoTest extends NovelKmsTestBase {
     @Test
     void purgeReview_hardDeletesRowAndRecommendations() throws SQLException {
         UUID reviewId = aiReviewDao.createPending(
-                TEST_USER_ID, project.getId(), book.getId(), chapter.getId(), null, "OPENAI", "gpt-5.4");
+                TEST_USER_ID, project.getId(), book.getId(), chapter.getId(), null, "OPENAI", "gpt-5.4", "SYSTEM", null);
         aiReviewDao.completeReview(reviewId, "v1", "{}",
                 List.of(new AiReviewDao.NewRecommendation("Pacing", "LOW", "p1", "Fix", null, null, null)));
         trashDao.trashReview(TEST_USER_ID, reviewId);

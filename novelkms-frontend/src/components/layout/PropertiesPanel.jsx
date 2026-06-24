@@ -20,6 +20,7 @@ import { chaptersApi } from '../../api/chapters';
 import { partsApi } from '../../api/parts';
 import { booksApi } from '../../api/books';
 import client from '../../api/client';
+import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor';
 
 // ── Page size presets ─────────────────────────────────────────────────────────
 
@@ -448,6 +449,14 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 					Part Page
 				</Button>
 			</Stack>
+
+			{/* ── AI Review Instructions ────────────────────────────────────── */}
+			<Divider />
+			<Typography variant="caption" color="text.secondary"
+				sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+				AI Review Instructions
+			</Typography>
+			<AiFormInstructionsEditor scope="book" id={bookId} />
 		</Stack>
 	);
 }
@@ -547,6 +556,14 @@ function ProjectForm({ project, projectId }) {
 					Save
 				</Button>
 			</Box>
+
+			{/* ── AI Review Instructions ────────────────────────────────────── */}
+			<Divider />
+			<Typography variant="caption" color="text.secondary"
+				sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+				AI Review Instructions
+			</Typography>
+			<AiFormInstructionsEditor scope="project" id={projectId} />
 		</Stack>
 	)
 }

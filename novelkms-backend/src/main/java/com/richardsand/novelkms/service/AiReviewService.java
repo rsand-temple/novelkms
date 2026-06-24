@@ -19,6 +19,7 @@ import com.richardsand.novelkms.ai.ReviewException;
 import com.richardsand.novelkms.ai.ReviewRequest;
 import com.richardsand.novelkms.ai.ReviewResult;
 import com.richardsand.novelkms.dao.AiCredentialDao;
+import com.richardsand.novelkms.dao.AiFormInstructionsDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
@@ -63,12 +64,14 @@ public class AiReviewService {
     private final BookDao                 bookDao;
     private final AiCredentialDao         credentialDao;
     private final AiReviewDao             reviewDao;
+    private final AiFormInstructionsDao   formInstructionsDao;
     private final CodexDao                codexDao;
     private final CodexCategoryDao        codexCategoryDao;
     private final Map<String, AiProvider> providers;
 
     public AiReviewService(ChapterDao chapterDao, SceneDao sceneDao, BookDao bookDao,
             AiCredentialDao credentialDao, AiReviewDao reviewDao,
+            AiFormInstructionsDao formInstructionsDao,
             CodexDao codexDao, CodexCategoryDao codexCategoryDao,
             Map<String, AiProvider> providers) {
         this.chapterDao = chapterDao;
@@ -76,6 +79,7 @@ public class AiReviewService {
         this.bookDao = bookDao;
         this.credentialDao = credentialDao;
         this.reviewDao = reviewDao;
+        this.formInstructionsDao = formInstructionsDao;
         this.codexDao = codexDao;
         this.codexCategoryDao = codexCategoryDao;
         this.providers = providers;
@@ -167,8 +171,14 @@ public class AiReviewService {
         String model     = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
         UUID   projectId = resolveProjectId(target.bookId());
 
+        // Resolve the editorial "form" block (book -> project -> user -> system)
+        // and record it on the review as immutable provenance.
+        AiFormInstructionsDao.Resolved form =
+                formInstructionsDao.resolveForReview(userId, projectId, target.bookId());
+
         UUID reviewId = reviewDao.createPending(userId, projectId, target.bookId(),
-                target.chapterId(), target.sceneId(), provider.providerKey(), model);
+                target.chapterId(), target.sceneId(), provider.providerKey(), model,
+                form.scope(), form.instructions());
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
@@ -178,7 +188,7 @@ public class AiReviewService {
 
         ReviewRequest request = new ReviewRequest(
                 apiKey, model, target.scopeWord(), target.unitLabel(), target.subtitle(),
-                target.text(), DEFAULT_CATEGORIES);
+                target.text(), DEFAULT_CATEGORIES, form.instructions());
 
         try {
             ReviewResult                        result = provider.review(request);

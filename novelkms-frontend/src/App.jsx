@@ -24,7 +24,6 @@ import { LogoMark } from './components/branding/Logo'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
 import { ReviewProvider } from './review/ReviewProvider'
-import ReviewToggleButton from './components/ai/ReviewToggleButton'
 import { usePreferences } from './hooks/usePreferences'
 import { hydrateSkipDeleteConfirm } from './utils/deleteConfirmPrefs'
 
@@ -443,8 +442,6 @@ export default function App() {
 							<MenuItem onClick={() => openGlobalTemplate('part')}>Part Page</MenuItem>
 						</Menu>
 
-						<ReviewToggleButton selection={selection} sx={topBarButtonSx} />
-
 						<Tooltip title="Settings">
 							<IconButton
 								color="inherit"
@@ -717,7 +714,7 @@ export default function App() {
 								py: 1,
 								gap: 1,
 							}}>
-								<Tooltip title="Show inspector" placement="left">
+								<Tooltip title="Show properties" placement="left">
 									<IconButton size="small" onClick={() => setPropsCollapsed(false)}>
 										<ChevronLeftIcon fontSize="small" />
 									</IconButton>
@@ -728,10 +725,10 @@ export default function App() {
 							<>
 								<WorkspacePanelHeader
 									icon={<TuneOutlinedIcon />}
-									title="Inspector"
+									title="Properties"
 									subtitle="Details and document settings"
 									actions={
-										<Tooltip title="Collapse inspector">
+										<Tooltip title="Collapse properties">
 											<IconButton size="small" onClick={() => setPropsCollapsed(true)}>
 												<ChevronRightIcon fontSize="small" />
 											</IconButton>

@@ -1,11 +1,25 @@
-import { useState, useCallback, useEffect } from 'react'
-import { Divider, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import {
+	Button,
+	CircularProgress,
+	Dialog,
+	DialogActions,
+	DialogContent,
+	DialogTitle,
+	Divider,
+	Menu,
+	MenuItem,
+	ListItemIcon,
+	ListItemText,
+	Typography,
+} from '@mui/material'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import DeleteIcon from '@mui/icons-material/Delete'
 import AddIcon from '@mui/icons-material/Add'
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
 
 import AddBookDialog from './dialogs/AddBookDialog'
 import AddChapterDialog from './dialogs/AddChapterDialog'
@@ -26,6 +40,9 @@ import {
 	useReorderParts, useReorderPartChapters,
 	useDeletePart,
 } from '../../hooks/useParts'
+import { useRunChapterReview, useRunSceneReview } from '../../hooks/useAiReviews'
+import { useAiCredentials } from '../../hooks/useAiCredentials'
+import { useReview } from '../../review/ReviewContext'
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -121,6 +138,8 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const [partChapterDialogOpen, setPartChapterDialogOpen] = useState(false)
 	const [sceneDialogOpen, setSceneDialogOpen] = useState(false)
 	const [entryDialogOpen, setEntryDialogOpen] = useState(false)
+	const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
+	const [reviewError, setReviewError] = useState(null)
 
 	// ── Sibling lists for Move Up / Down ──────────────────────────────────────
 	// These queries hit the TanStack Query cache already populated by the nav
@@ -168,6 +187,47 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const { data: ctxBookCodex } = useBookCodex(menuNode?.type === 'book' ? menuNode.id : null)
 	const { mutate: createProjectCodex } = useCreateProjectCodex()
 	const { mutate: createBookCodex } = useCreateBookCodex()
+
+	// ── AI review (context menu "AI Review" item) ──────────────────────────────
+	const reviewCtx = useReview()
+	const { data: aiCredentials = [] } = useAiCredentials()
+	const { mutate: runChapterReview, isPending: runningChapterReview } = useRunChapterReview()
+	const { mutate: runSceneReview, isPending: runningSceneReview } = useRunSceneReview()
+	const runningReview = runningChapterReview || runningSceneReview
+	const defaultCredentialId = useMemo(
+		() => aiCredentials.find(c => c.defaultCredential)?.id ?? aiCredentials[0]?.id ?? null,
+		[aiCredentials],
+	)
+	const canRunReview = aiCredentials.length > 0
+	const isManuscriptNode = !!menuNode?.bookId
+	const reviewNodeType = menuNode?.type  // 'chapter' or 'scene'
+	const reviewLabel =
+		reviewNodeType === 'scene'
+			? `scene "${menuNode?.title?.trim() || 'Untitled'}"`
+			: `chapter "${menuNode?.title?.trim() || 'Untitled'}"`
+
+	const handleRunReview = () => {
+		setReviewError(null)
+		const onSuccess = () => {
+			setReviewDialogOpen(false)
+			reviewCtx.openReview()
+		}
+		const onError = (e) => {
+			const data = e?.response?.data
+			setReviewError(data?.message ?? e?.message ?? 'Review failed.')
+		}
+		if (reviewNodeType === 'scene') {
+			runSceneReview(
+				{ sceneId: menuNode.id, credentialId: defaultCredentialId, model: null },
+				{ onSuccess, onError },
+			)
+		} else {
+			runChapterReview(
+				{ chapterId: menuNode.id, credentialId: defaultCredentialId, model: null },
+				{ onSuccess, onError },
+			)
+		}
+	}
 
 	// ── Public API ────────────────────────────────────────────────────────────
 
@@ -453,6 +513,21 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
+				{/* AI Review — chapter and scene manuscript nodes only */}
+				{isManuscriptNode && (reviewNodeType === 'chapter' || reviewNodeType === 'scene') && (
+					<>
+						<Divider />
+						<MenuItem
+							dense
+							disabled={!canRunReview}
+							onClick={() => { closeMenu(); setReviewError(null); setReviewDialogOpen(true) }}
+						>
+							<ListItemIcon><CheckCircleOutlinedIcon fontSize="small" /></ListItemIcon>
+							<ListItemText>AI Review</ListItemText>
+						</MenuItem>
+					</>
+				)}
+
 				{/* Delete — not available for project */}
 				{canDelete && <Divider />}
 				{canDelete && (
@@ -519,6 +594,44 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				chapterId={menuNode?.type === 'codex-category' ? menuNode.id : null}
 				codexCategory={menuNode?.codexCategory ?? null}
 			/>
+
+			{/* ── AI Review confirmation ─────────────────────────────────────── */}
+			<Dialog
+				open={reviewDialogOpen}
+				onClose={() => { if (!runningReview) setReviewDialogOpen(false) }}
+				maxWidth="xs"
+				fullWidth
+			>
+				<DialogTitle>Run AI Review</DialogTitle>
+				<DialogContent>
+					<Typography variant="body2" sx={{ mb: 1 }}>
+						Run an AI review on {reviewLabel}?
+					</Typography>
+					{!canRunReview && (
+						<Typography variant="body2" color="error">
+							No AI key is configured. Add one in Settings → AI first.
+						</Typography>
+					)}
+					{reviewError && (
+						<Typography variant="body2" color="error" sx={{ mt: 1 }}>
+							{reviewError}
+						</Typography>
+					)}
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setReviewDialogOpen(false)} disabled={runningReview}>
+						Cancel
+					</Button>
+					<Button
+						variant="contained"
+						onClick={handleRunReview}
+						disabled={!canRunReview || runningReview}
+						startIcon={runningReview ? <CircularProgress size={16} color="inherit" /> : null}
+					>
+						{runningReview ? 'Reviewing…' : 'Review'}
+					</Button>
+				</DialogActions>
+			</Dialog>
 		</NavContextMenuContext.Provider>
 	)
 }

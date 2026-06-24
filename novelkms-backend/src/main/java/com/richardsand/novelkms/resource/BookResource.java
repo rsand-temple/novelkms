@@ -70,6 +70,10 @@ public class BookResource {
         public String  shortTitle;
         @JsonProperty
         public String  notes;
+
+        // Page layout moved to the scoped page_layout bundle (see PageLayoutResource).
+        // These fields are accepted but ignored so the current frontend's book-save
+        // payload still deserializes; they are removed once the Page Layout tab lands.
         @JsonProperty
         public Boolean pageLayoutEnabled;
         @JsonProperty
@@ -145,14 +149,7 @@ public class BookResource {
                     .entity("title is required").build();
         }
         try {
-            return bookDao.update(
-                    id,
-                    req.title, req.subtitle, req.shortTitle, req.notes,
-                    req.pageLayoutEnabled != null && req.pageLayoutEnabled,
-                    req.pageSizePreset,
-                    req.pageWidthIn, req.pageHeightIn,
-                    req.pageMarginTopIn, req.pageMarginBottomIn,
-                    req.pageMarginInnerIn, req.pageMarginOuterIn)
+            return bookDao.update(id, req.title, req.subtitle, req.shortTitle, req.notes)
                     .map(b -> Response.ok(b).build())
                     .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {

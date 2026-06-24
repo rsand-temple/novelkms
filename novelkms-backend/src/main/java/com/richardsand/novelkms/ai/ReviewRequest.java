@@ -15,8 +15,13 @@ import java.util.List;
  * @param scopeWord  the prose unit word, lower-case: {@code "chapter"} or {@code "scene"}
  * @param unitLabel  display label, e.g. {@code "Chapter 3"} or a scene title
  * @param subtitle   optional subtitle (chapter subtitle; null/blank for scenes)
- * @param text       plain-text body (HTML stripped, scenes joined for a chapter)
- * @param categories review categories to consider
+ * @param text             plain-text body (HTML stripped, scenes joined for a chapter)
+ * @param categories       review categories to consider
+ * @param formInstructions resolved editorial "form" block (persona/constraints);
+ *                         the constant "functional" JSON contract is added by the
+ *                         provider. Never null/blank — {@code AiReviewService}
+ *                         resolves it (book -&gt; project -&gt; user -&gt; system)
+ *                         before building the request.
  */
 public record ReviewRequest(
         String apiKey,
@@ -25,5 +30,6 @@ public record ReviewRequest(
         String unitLabel,
         String subtitle,
         String text,
-        List<String> categories) {
+        List<String> categories,
+        String formInstructions) {
 }

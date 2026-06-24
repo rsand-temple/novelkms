@@ -19,12 +19,6 @@ public class BookDao {
 
     private final BasicDataSource ds;
 
-    // Schema defaults for NOT NULL margin columns (inches)
-    private static final double DEFAULT_MARGIN_TOP    = 1.0;
-    private static final double DEFAULT_MARGIN_BOTTOM = 1.0;
-    private static final double DEFAULT_MARGIN_INNER  = 1.25;
-    private static final double DEFAULT_MARGIN_OUTER  = 1.0;
-
     /**
      * Holds the raw bytes and MIME type of a cover image.
      * Only materialized by getCoverImage(); never included in normal book rows.
@@ -46,9 +40,6 @@ public class BookDao {
 
     private static final String SELECT_COLUMNS = """
             SELECT id, project_id, title, subtitle, short_title, display_order, notes,
-                   page_layout_enabled, page_size_preset, page_width_in, page_height_in,
-                   page_margin_top_in, page_margin_bottom_in,
-                   page_margin_inner_in, page_margin_outer_in,
                    imported_from, imported_at,
                    created_at, updated_at,
                    CASE WHEN cover_image IS NOT NULL THEN TRUE ELSE FALSE END AS has_cover_image
@@ -69,14 +60,6 @@ public class BookDao {
                 .shortTitle(rs.getString("short_title"))
                 .displayOrder(rs.getInt("display_order"))
                 .notes(rs.getString("notes"))
-                .pageLayoutEnabled(rs.getBoolean("page_layout_enabled"))
-                .pageSizePreset(rs.getString("page_size_preset"))
-                .pageWidthIn(getNullableDouble(rs, "page_width_in"))
-                .pageHeightIn(getNullableDouble(rs, "page_height_in"))
-                .pageMarginTopIn(getNullableDouble(rs, "page_margin_top_in"))
-                .pageMarginBottomIn(getNullableDouble(rs, "page_margin_bottom_in"))
-                .pageMarginInnerIn(getNullableDouble(rs, "page_margin_inner_in"))
-                .pageMarginOuterIn(getNullableDouble(rs, "page_margin_outer_in"))
                 .hasCoverImage(rs.getBoolean("has_cover_image"))
                 .importedFrom(rs.getString("imported_from"))
                 .importedAt(importedAtTs != null ? importedAtTs.toInstant() : null)
@@ -213,28 +196,18 @@ public class BookDao {
         return Book.builder()
                 .id(id).projectId(projectId).title(title).subtitle(subtitle).shortTitle(shortTitle)
                 .displayOrder(displayOrder).notes(notes)
-                .pageLayoutEnabled(false).pageSizePreset("LETTER")
-                .pageMarginTopIn(DEFAULT_MARGIN_TOP).pageMarginBottomIn(DEFAULT_MARGIN_BOTTOM)
-                .pageMarginInnerIn(DEFAULT_MARGIN_INNER).pageMarginOuterIn(DEFAULT_MARGIN_OUTER)
                 .hasCoverImage(false)
                 .importedFrom(null).importedAt(null)
                 .createdAt(now).updatedAt(now)
                 .build();
     }
 
-    public Optional<Book> update(UUID id, String title, String subtitle, String shortTitle, String notes,
-            boolean pageLayoutEnabled, String pageSizePreset,
-            Double pageWidthIn, Double pageHeightIn,
-            Double pageMarginTopIn, Double pageMarginBottomIn,
-            Double pageMarginInnerIn, Double pageMarginOuterIn) throws SQLException {
+    public Optional<Book> update(UUID id, String title, String subtitle, String shortTitle, String notes)
+            throws SQLException {
         Instant now = Instant.now();
         String  sql = """
                 UPDATE book
                 SET title = ?, subtitle = ?, short_title = ?, notes = ?,
-                    page_layout_enabled = ?, page_size_preset = ?,
-                    page_width_in = ?, page_height_in = ?,
-                    page_margin_top_in = ?, page_margin_bottom_in = ?,
-                    page_margin_inner_in = ?, page_margin_outer_in = ?,
                     updated_at = ?
                 WHERE id = ?
                 """;
@@ -244,16 +217,8 @@ public class BookDao {
             ps.setString(2, subtitle);
             ps.setString(3, shortTitle);
             ps.setString(4, notes);
-            ps.setBoolean(5, pageLayoutEnabled);
-            ps.setString(6, pageSizePreset != null ? pageSizePreset : "LETTER");
-            ps.setObject(7, pageWidthIn);
-            ps.setObject(8, pageHeightIn);
-            ps.setDouble(9, pageMarginTopIn != null ? pageMarginTopIn : DEFAULT_MARGIN_TOP);
-            ps.setDouble(10, pageMarginBottomIn != null ? pageMarginBottomIn : DEFAULT_MARGIN_BOTTOM);
-            ps.setDouble(11, pageMarginInnerIn != null ? pageMarginInnerIn : DEFAULT_MARGIN_INNER);
-            ps.setDouble(12, pageMarginOuterIn != null ? pageMarginOuterIn : DEFAULT_MARGIN_OUTER);
-            ps.setTimestamp(13, Timestamp.from(now));
-            ps.setObject(14, id);
+            ps.setTimestamp(5, Timestamp.from(now));
+            ps.setObject(6, id);
             int rows = ps.executeUpdate();
             if (rows == 0) {
                 return Optional.empty();
@@ -371,16 +336,5 @@ public class BookDao {
             }
         }
         return count;
-    }
-
-    private static Double getNullableDouble(ResultSet rs, String column) throws SQLException {
-        Object value = rs.getObject(column);
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Number n) {
-            return n.doubleValue();
-        }
-        return Double.valueOf(value.toString());
     }
 }

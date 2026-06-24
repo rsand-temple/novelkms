@@ -17,13 +17,13 @@ import com.richardsand.novelkms.model.EditorSettingsDefaults;
 import com.richardsand.novelkms.model.EditorSettingsDefinition;
 
 /**
- * Cascading document ("editor") settings: {@code PROJECT -> USER -> SYSTEM}.
+ * Cascading document ("editor") settings: {@code BOOK -> PROJECT -> USER -> SYSTEM}.
  *
  * <p>Single-bundle analogue of {@link UserStyleDao} (which is keyed by a roster
- * of style keys). There is exactly one SYSTEM row, one USER row per user, and
- * one PROJECT row per project. SYSTEM is lazily seeded from
- * {@link EditorSettingsDefaults}; USER and PROJECT rows are copy-on-write
- * overrides that can be deleted to fall back to the next level.
+ * of style keys). There is exactly one SYSTEM row, one USER row per user, one
+ * PROJECT row per project, and one BOOK row per book. SYSTEM is lazily seeded
+ * from {@link EditorSettingsDefaults}; USER, PROJECT, and BOOK rows are
+ * copy-on-write overrides that can be deleted to fall back to the next level.
  */
 public class EditorSettingsDao {
 
@@ -49,6 +49,7 @@ public class EditorSettingsDao {
                     .id(r.getObject("id", UUID.class))
                     .scope(r.getString("scope"))
                     .projectId(r.getObject("project_id", UUID.class))
+                    .bookId(r.getObject("book_id", UUID.class))
                     .definition(M.readValue(r.getString("definition"), EditorSettingsDefinition.class))
                     .createdAt(r.getTimestamp("created_at").toInstant())
                     .updatedAt(r.getTimestamp("updated_at").toInstant())
@@ -67,20 +68,21 @@ public class EditorSettingsDao {
         }
     }
 
-    private EditorSettings insert(String scope, UUID user, UUID project, EditorSettingsDefinition d) throws SQLException {
+    private EditorSettings insert(String scope, UUID user, UUID project, UUID book, EditorSettingsDefinition d) throws SQLException {
         UUID id = UUID.randomUUID();
         Instant now = Instant.now();
         try (Connection c = ds.getConnection();
                 PreparedStatement p = c.prepareStatement(
-                        "INSERT INTO editor_settings(id,scope,user_id,project_id,definition,created_at,updated_at)"
-                                + " VALUES (?,?,?,?,?,?,?)")) {
+                        "INSERT INTO editor_settings(id,scope,user_id,project_id,book_id,definition,created_at,updated_at)"
+                                + " VALUES (?,?,?,?,?,?,?,?)")) {
             p.setObject(1, id);
             p.setString(2, scope);
             p.setObject(3, user);
             p.setObject(4, project);
-            p.setString(5, json(d));
-            p.setTimestamp(6, Timestamp.from(now));
+            p.setObject(5, book);
+            p.setString(6, json(d));
             p.setTimestamp(7, Timestamp.from(now));
+            p.setTimestamp(8, Timestamp.from(now));
             p.executeUpdate();
         }
         return one("SELECT * FROM editor_settings WHERE id=?", id).orElseThrow();
@@ -110,7 +112,7 @@ public class EditorSettingsDao {
     public EditorSettings system() throws SQLException {
         Optional<EditorSettings> x = one(
                 "SELECT * FROM editor_settings WHERE scope='SYSTEM' AND user_id IS NULL AND project_id IS NULL");
-        return x.isPresent() ? x.get() : insert("SYSTEM", null, null, EditorSettingsDefaults.defaults());
+        return x.isPresent() ? x.get() : insert("SYSTEM", null, null, null, EditorSettingsDefaults.defaults());
     }
 
     // ── USER override ─────────────────────────────────────────────────────────
@@ -126,7 +128,7 @@ public class EditorSettingsDao {
 
     public EditorSettings upsertUser(UUID userId, EditorSettingsDefinition d) throws SQLException {
         Optional<EditorSettings> x = user(userId);
-        return x.isPresent() ? update(x.get().getId(), d) : insert("USER", userId, null, d);
+        return x.isPresent() ? update(x.get().getId(), d) : insert("USER", userId, null, null, d);
     }
 
     public boolean deleteUser(UUID userId) throws SQLException {
@@ -147,10 +149,47 @@ public class EditorSettingsDao {
 
     public EditorSettings upsertProject(UUID projectId, EditorSettingsDefinition d) throws SQLException {
         Optional<EditorSettings> x = project(projectId);
-        return x.isPresent() ? update(x.get().getId(), d) : insert("PROJECT", null, projectId, d);
+        return x.isPresent() ? update(x.get().getId(), d) : insert("PROJECT", null, projectId, null, d);
     }
 
     public boolean deleteProject(UUID projectId) throws SQLException {
         return del("DELETE FROM editor_settings WHERE scope='PROJECT' AND project_id=?", projectId);
+    }
+
+    // ── BOOK override ─────────────────────────────────────────────────────────
+
+    public Optional<EditorSettings> book(UUID bookId) throws SQLException {
+        return one("SELECT * FROM editor_settings WHERE scope='BOOK' AND book_id=?", bookId);
+    }
+
+    /** The book's owning project, for the resolution fall-through. */
+    private UUID bookProjectId(UUID bookId) throws SQLException {
+        try (Connection c = ds.getConnection();
+                PreparedStatement p = c.prepareStatement("SELECT project_id FROM book WHERE id=?")) {
+            p.setObject(1, bookId);
+            try (ResultSet r = p.executeQuery()) {
+                return r.next() ? r.getObject("project_id", UUID.class) : null;
+            }
+        }
+    }
+
+    /**
+     * Resolved book-level settings: BOOK override, else the project resolution
+     * ({@code PROJECT -> USER -> SYSTEM}) for the book's owning project.
+     */
+    public EditorSettings resolveBook(UUID userId, UUID bookId) throws SQLException {
+        Optional<EditorSettings> x = book(bookId);
+        if (x.isPresent()) return x.get();
+        UUID projectId = bookProjectId(bookId);
+        return projectId != null ? resolveProject(userId, projectId) : resolveUser(userId);
+    }
+
+    public EditorSettings upsertBook(UUID bookId, EditorSettingsDefinition d) throws SQLException {
+        Optional<EditorSettings> x = book(bookId);
+        return x.isPresent() ? update(x.get().getId(), d) : insert("BOOK", null, null, bookId, d);
+    }
+
+    public boolean deleteBook(UUID bookId) throws SQLException {
+        return del("DELETE FROM editor_settings WHERE scope='BOOK' AND book_id=?", bookId);
     }
 }

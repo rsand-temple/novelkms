@@ -33,8 +33,15 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  *       models that reject those parameters.</li>
  *   <li>The prompt is scope-aware: the same template reviews a "chapter" or a
  *       "scene" depending on {@link ReviewRequest#scopeWord()}. The output
- *       contract is identical across scopes; {@code chapter-review-v3} marks the
+ *       contract is identical across scopes; {@code chapter-review-v3} marked the
  *       move to a scope-general prompt.</li>
+ *   <li>The system prompt is assembled from two parts: a <b>form</b> block —
+ *       the editorial persona/constraints, author-editable and supplied via
+ *       {@link ReviewRequest#formInstructions()} — followed by a constant
+ *       <b>functional</b> block here that defines the JSON output contract
+ *       NovelKMS consumes. The form block never breaks parsing because the
+ *       functional block fully specifies the required shape. {@code chapter-review-v4}
+ *       marks externalizing the form block.</li>
  * </ul>
  */
 public class OpenAiProvider implements AiProvider {
@@ -42,7 +49,7 @@ public class OpenAiProvider implements AiProvider {
 
     public static final  String PROVIDER_KEY   = "OPENAI";
     public static final  String DEFAULT_MODEL  = "gpt-5.4";
-    public static final  String PROMPT_VERSION = "chapter-review-v3";
+    public static final  String PROMPT_VERSION = "chapter-review-v4";
 
     private static final String ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
@@ -103,7 +110,7 @@ public class OpenAiProvider implements AiProvider {
 
         ObjectNode system = messages.addObject();
         system.put("role", "system");
-        system.put("content", systemPrompt(scopeWord(request), request.categories()));
+        system.put("content", systemPrompt(scopeWord(request), request.categories(), request.formInstructions()));
 
         ObjectNode user = messages.addObject();
         user.put("role", "user");
@@ -120,45 +127,62 @@ public class OpenAiProvider implements AiProvider {
         }
     }
 
-    private String systemPrompt(String unit, List<String> categories) {
+    /**
+     * Assembles the system prompt as {@code form + "\n\n" + functional}.
+     *
+     * <p>{@code form} is the author-supplied editorial persona/constraints (or
+     * the system default, resolved upstream). {@code functional} is the constant
+     * JSON output contract NovelKMS consumes — it owns all scope-awareness
+     * ({@code %1$s} = unit word) and the category roster ({@code %2$s}), so the
+     * form block can be edited freely without ever breaking parsing.
+     */
+    private String systemPrompt(String unit, List<String> categories, String formInstructions) {
+        String form = (formInstructions == null || formInstructions.isBlank())
+                ? FORM_FALLBACK
+                : formInstructions.strip();
+        return form + "\n\n" + functionalBlock(unit, categories);
+    }
+
+    /**
+     * Minimal safety net only. The real default ("form") text lives in
+     * {@code AiFormInstructionsDefaults} and is always resolved upstream by
+     * {@code AiReviewService}; this guards against a future caller that forgets
+     * to set it, keeping the {@code ai} package free of a {@code model} import.
+     */
+    private static final String FORM_FALLBACK =
+            "You are an experienced editor reviewing a section of a novel. You do not "
+            + "rewrite the manuscript; you produce specific, actionable editorial notes.";
+
+    private String functionalBlock(String unit, List<String> categories) {
         String categoryList = (categories == null || categories.isEmpty())
                 ? "Continuity, Characterization, Pacing, Dialogue, Clarity, Grammar, General Notes"
                 : String.join(", ", categories);
         // %1$s = the scope unit word ("chapter"/"scene"); %2$s = the category list.
         return """
-                You are an experienced developmental and line editor reviewing a single %1$s \
-                of a novel. You do not rewrite the manuscript. You produce specific, atomic, \
-                independently actionable editorial recommendations.
-
-                Each recommendation must:
-                - address exactly one issue;
-                - be concrete (cite the specific moment, line, or transition it refers to) \
-                  rather than vague ("this %1$s needs work" is not acceptable);
-                - fall under one of these categories: %2$s;
-                - carry a severity of LOW, MEDIUM, or HIGH.
-
-                For each recommendation also suggest how it could be filed in the project's \
-                knowledge base (the "codex"), so the author can save it in one click:
-                - codexCategory: exactly one of CHARACTER, VOICE, PLOT, WORLD, TIMELINE, CANON, NOTES. \
-                  Use CANON for established facts, rules, or continuity points the author should lock in \
-                  (e.g. a detail that must stay consistent later); CHARACTER for character facts/arcs; \
-                  VOICE for how a character speaks; WORLD for setting/institutions/objects; \
-                  TIMELINE for dates and ordering; PLOT for plot threads; NOTES for anything else.
-                - codexTitle: a short (3-8 word) title for that codex entry.
-
-                For each recommendation, include an anchorText field: a short verbatim quote \
-                (5-30 words) copied exactly from the %1$s text that identifies the passage \
-                your recommendation refers to. This quote will be used to scroll the author's \
-                editor to the relevant passage, so it must appear word-for-word in the %1$s.
-
-                Respond with a single JSON object and nothing else, in exactly this shape:
+                Return your review as a single JSON object and nothing else — no prose, no \
+                Markdown, no code fences — in exactly this shape:
                 {"recommendations":[{"category":"...","severity":"LOW|MEDIUM|HIGH",\
                 "location":"where in the %1$s this applies","recommendation":"the note",\
                 "codexCategory":"CANON","codexTitle":"short entry title",\
                 "anchorText":"verbatim quote from the %1$s"}]}
 
-                If the %1$s is strong and you have no substantive notes, return \
-                {"recommendations":[]}.""".formatted(unit, categoryList);
+                Field requirements for every recommendation:
+                - category: exactly one of: %2$s.
+                - severity: exactly one of LOW, MEDIUM, or HIGH.
+                - location: a brief description of where in the %1$s the note applies.
+                - recommendation: the editorial note itself.
+                - codexCategory: exactly one of CHARACTER, VOICE, PLOT, WORLD, TIMELINE, CANON, NOTES — \
+                  a suggestion for how the author could file this note in the project's knowledge base \
+                  (the "codex") in one click. Use CANON for established facts, rules, or continuity \
+                  points to lock in; CHARACTER for character facts/arcs; VOICE for how a character \
+                  speaks; WORLD for setting, institutions, or objects; TIMELINE for dates and ordering; \
+                  PLOT for plot threads; NOTES for anything else.
+                - codexTitle: a short (3-8 word) title for that codex entry.
+                - anchorText: a short verbatim quote (5-30 words) copied exactly, word-for-word, from \
+                  the %1$s text, identifying the passage the recommendation refers to. It is used to \
+                  scroll the author's editor to that passage, so it must appear word-for-word in the %1$s.
+
+                If you have no substantive notes, return {"recommendations":[]}.""".formatted(unit, categoryList);
     }
 
     private String userPrompt(ReviewRequest request) {

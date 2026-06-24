@@ -22,7 +22,9 @@ import DataObjectIcon from '@mui/icons-material/DataObject'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
 import DocSettingsPopover from './DocSettingsPopover'
+import { useReview } from '../../review/ReviewContext'
 import { STYLE_ORDER, STYLE_LABELS, HEADING_KEYS } from '../../utils/styles'
 
 // ── font options ───────────────────────────────────────────────────────────────
@@ -151,6 +153,9 @@ function VDivider() {
  *                       count; used for book/part preview modes where there is no editor
  *   headingWordCount  — number — extra words from chapter/part headings not in the
  *                       TipTap document; added to the live count in chapter mode
+ *   canReview         — boolean — true when the selection is a reviewable manuscript
+ *                       chapter or scene (enables the AI Review toggle)
+ *   isScene           — boolean — true when the selection is a scene (adjusts tooltip)
  */
 export default function EditorToolbar({
 	editor, settings = {}, onSettingsChange, onSceneBreak, isSaving,
@@ -159,11 +164,15 @@ export default function EditorToolbar({
 	styleSheet = [],
 	wordCountOverride = null,
 	headingWordCount = 0,
+	canReview = false,
+	isScene = false,
 }) {
 	const [settingsAnchor, setSettingsAnchor] = useState(null)
 	const [fieldAnchor, setFieldAnchor] = useState(null)
 
 	const imageInputRef = useRef(null)
+
+	const review = useReview()
 
 	const state = useEditorState({
 		editor,
@@ -480,6 +489,18 @@ export default function EditorToolbar({
 							onClick={onTogglePreview}
 						>
 							{previewActive ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+						</TBtn>
+					)}
+
+					{canReview && (
+						<TBtn
+							title={review.open
+								? 'Hide AI review'
+								: (isScene ? 'Review this scene with AI' : 'Review this chapter with AI')}
+							active={review.open}
+							onClick={() => review.open ? review.closeReview() : review.openReview()}
+						>
+							<CheckCircleOutlinedIcon fontSize="small" />
 						</TBtn>
 					)}
 

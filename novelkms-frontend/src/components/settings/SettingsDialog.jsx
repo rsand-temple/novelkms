@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import {
-	Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Tab, Tabs,
+	Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Tab, Tabs, Typography,
 } from '@mui/material'
 import SettingsIcon from '@mui/icons-material/Settings'
 import DocumentSettingsTab from './DocumentSettingsTab'
 import OtherSettingsTab from './OtherSettingsTab'
 import AiCredentialsPanel from '../ai/AiCredentialsPanel'
+import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor'
 
 // Fixed height for the tab body. MUI centers Dialog paper based on its
 // content height, so without a fixed height here the dialog grew/shrank and
@@ -36,7 +37,16 @@ function SettingsContent({ initialTab, projectId }) {
 
 			<Box sx={{ height: TAB_CONTENT_HEIGHT, overflowY: 'auto', pr: 0.5 }}>
 				{tab === 'document' && <DocumentSettingsTab projectId={projectId} />}
-				{tab === 'ai' && <AiCredentialsPanel />}
+				{tab === 'ai' && (
+					<>
+						<AiCredentialsPanel />
+						<Divider sx={{ my: 3 }} />
+						<Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+							Review Instructions
+						</Typography>
+						<AiFormInstructionsEditor scope="global" />
+					</>
+				)}
 				{tab === 'other' && <OtherSettingsTab />}
 			</Box>
 		</>

@@ -736,6 +736,8 @@ export default function EditorPanel({
 				onTogglePreview={handleTogglePreview}
 				wordCountOverride={toolbarWordCountOverride}
 				headingWordCount={multiSceneMode ? chapterHeadingWords : 0}
+				canReview={!!chapterId && !!bookId && !codexId}
+				isScene={!!sceneId}
 			/>
 
 			<SearchBar />

@@ -77,6 +77,21 @@ public class AiReview {
     @JsonProperty
     private String promptVersion;
 
+    /**
+     * Provenance: which scope supplied the editorial "form" block that governed
+     * this review — {@code BOOK}, {@code PROJECT}, {@code USER}, or {@code SYSTEM}.
+     */
+    @JsonProperty
+    private String formScope;
+
+    /**
+     * Provenance: the exact form block used, captured at run time so this
+     * immutable artifact stays faithful even if the user later edits their
+     * global/override. The constant functional contract is not stored.
+     */
+    @JsonProperty
+    private String formInstructions;
+
     /** Populated only when status is FAILED. */
     @JsonProperty
     private String errorMessage;
