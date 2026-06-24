@@ -25,7 +25,7 @@ import {
 	defaultTitle,
 	normalizeCategory,
 	recommendationToText,
-	severityColor,
+	priorityChipStyles,
 } from './recommendationUtils'
 
 /**
@@ -120,7 +120,13 @@ export default function ReviewCard({
 			<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5, flexWrap: 'wrap' }}>
 				<Typography variant="caption" color="text.secondary">#{rec.seq}</Typography>
 				{rec.category && <Chip label={rec.category} size="small" variant="outlined" />}
-				{rec.severity && <Chip label={rec.severity} size="small" color={severityColor(rec.severity)} />}
+				{rec.severity &&
+					<Chip
+						label={rec.severity}
+						size="small"
+						sx={priorityChipStyles(rec.severity)}
+					/>
+				}
 				{status === 'FUTURE' && <Chip label="Future" size="small" color="secondary" variant="outlined" />}
 				<Box sx={{ flexGrow: 1 }} />
 				<Tooltip title="More actions">

@@ -25,12 +25,35 @@ export const CATEGORY_OPTIONS = [
 // Statuses that should never appear in the active working list.
 export const HIDDEN_STATUSES = new Set(['DELETED', 'PROMOTED'])
 
-export function severityColor(severity) {
-	switch ((severity ?? '').toUpperCase()) {
-		case 'HIGH': return 'error'
-		case 'MEDIUM': return 'warning'
-		case 'LOW': return 'info'
-		default: return 'default'
+export const priorityChipStyles = (priority) => {
+	switch ((priority || '').toUpperCase()) {
+		case 'HIGH':
+			return {
+				color: '#7A2E24',
+				backgroundColor: '#F3E3DE',
+				borderColor: '#C99A90',
+			}
+
+		case 'MEDIUM':
+			return {
+				color: '#7A5B16',
+				backgroundColor: '#F6EED7',
+				borderColor: '#D6BE7A',
+			}
+
+		case 'LOW':
+			return {
+				color: '#304C63',
+				backgroundColor: '#E8EDF1',
+				borderColor: '#A9B8C5',
+			}
+
+		default:
+			return {
+				color: '#3E4652',
+				backgroundColor: '#EEE9DF',
+				borderColor: '#D7CDBD',
+			}
 	}
 }
 
