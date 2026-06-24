@@ -14,4 +14,9 @@ export const editorSettingsApi = {
 	getProject:    (projectId)             => client.get(`/projects/${projectId}/editor-settings`).then(r => r.data),
 	upsertProject: (projectId, definition) => client.put(`/projects/${projectId}/editor-settings`, { definition }).then(r => r.data),
 	deleteProject: (projectId)             => client.delete(`/projects/${projectId}/editor-settings`).then(r => r.data),
+
+	// Per-book override + resolved book settings (BOOK -> PROJECT -> USER -> SYSTEM)
+	getBook:    (bookId)             => client.get(`/books/${bookId}/editor-settings`).then(r => r.data),
+	upsertBook: (bookId, definition) => client.put(`/books/${bookId}/editor-settings`, { definition }).then(r => r.data),
+	deleteBook: (bookId)             => client.delete(`/books/${bookId}/editor-settings`).then(r => r.data),
 }

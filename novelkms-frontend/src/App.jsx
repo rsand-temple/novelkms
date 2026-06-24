@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
 	Box, AppBar, Toolbar, Typography, Button, Menu, MenuItem,
-	IconButton, Tooltip,
+	IconButton, Tooltip, Divider,
 } from '@mui/material'
 import DescriptionIcon from '@mui/icons-material/Description'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
@@ -20,6 +20,7 @@ import PropertiesPanel from './components/layout/PropertiesPanel'
 import ImportDialog from './components/nav/dialogs/ImportDialog'
 import ExportDialog from './components/nav/dialogs/ExportDialog'
 import SettingsDialog from './components/settings/SettingsDialog'
+import EditorSettingsDialog from './components/settings/EditorSettingsDialog'
 import { LogoMark } from './components/branding/Logo'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
@@ -175,6 +176,8 @@ export default function App() {
 	const [exportDialog, setExportDialog] = useState({ open: false, url: null, suggestedName: '' })
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
 	const [settings, setSettings] = useState({ open: false, tab: 'document' })
+	const [settingsMenuAnchor, setSettingsMenuAnchor] = useState(null)
+	const [ctxSettings, setCtxSettings] = useState({ open: false, scope: null })
 
 	const [navWidth, setNavWidth] = useState(() =>
 		clamp(readStoredNumber('novelkms.navWidth', DEFAULT_NAV_WIDTH), MIN_NAV_WIDTH, MAX_NAV_WIDTH)
@@ -337,6 +340,18 @@ export default function App() {
 		setSettings({ open: true, tab: 'document' })
 	}
 
+	const openContextSettings = () => {
+		setSettingsMenuAnchor(null)
+		const scope = selection.bookId ? 'book' : (selection.projectId ? 'project' : null)
+		if (!scope) return
+		setCtxSettings({ open: true, scope })
+	}
+
+	const editGlobalFromContext = () => {
+		setCtxSettings(s => ({ ...s, open: false }))
+		openSettings()
+	}
+
 	return (
 		<SearchProvider selection={selection}>
 			<ReviewProvider>
@@ -447,12 +462,26 @@ export default function App() {
 								color="inherit"
 								size="small"
 								aria-label="Open settings"
-								onClick={openSettings}
+								onClick={(e) => setSettingsMenuAnchor(e.currentTarget)}
 								sx={{ ml: 0.5, color: 'rgba(255,255,255,0.86)', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.09)' } }}
 							>
 								<SettingsIcon fontSize="small" />
 							</IconButton>
 						</Tooltip>
+
+						<Menu
+							anchorEl={settingsMenuAnchor}
+							open={!!settingsMenuAnchor}
+							onClose={() => setSettingsMenuAnchor(null)}
+						>
+							<MenuItem onClick={openContextSettings} disabled={!selection.projectId && !selection.bookId}>
+								{selection.bookId ? 'Book Settings' : selection.projectId ? 'Project Settings' : 'Settings'}
+							</MenuItem>
+							<Divider />
+							<MenuItem onClick={() => { setSettingsMenuAnchor(null); openSettings() }}>
+								Global Defaults…
+							</MenuItem>
+						</Menu>
 					</Toolbar>
 				</AppBar>
 
@@ -714,7 +743,7 @@ export default function App() {
 								py: 1,
 								gap: 1,
 							}}>
-								<Tooltip title="Show properties" placement="left">
+								<Tooltip title="Show inspector" placement="left">
 									<IconButton size="small" onClick={() => setPropsCollapsed(false)}>
 										<ChevronLeftIcon fontSize="small" />
 									</IconButton>
@@ -725,10 +754,10 @@ export default function App() {
 							<>
 								<WorkspacePanelHeader
 									icon={<TuneOutlinedIcon />}
-									title="Properties"
+									title="Inspector"
 									subtitle="Details and document settings"
 									actions={
-										<Tooltip title="Collapse properties">
+										<Tooltip title="Collapse inspector">
 											<IconButton size="small" onClick={() => setPropsCollapsed(true)}>
 												<ChevronRightIcon fontSize="small" />
 											</IconButton>
@@ -822,6 +851,18 @@ export default function App() {
 					initialTab={settings.tab}
 					projectId={selection.projectId}
 					onClose={() => setSettings(s => ({ ...s, open: false }))}
+				/>
+
+				<EditorSettingsDialog
+					open={ctxSettings.open}
+					scope={ctxSettings.scope}
+					projectId={selection.projectId}
+					bookId={selection.bookId}
+					scopeLabel={ctxSettings.scope === 'book'
+						? 'Settings for the selected book'
+						: 'Settings for the selected project'}
+					onEditGlobal={editGlobalFromContext}
+					onClose={() => setCtxSettings(s => ({ ...s, open: false }))}
 				/>
 			</Box>
 			</ReviewProvider>
