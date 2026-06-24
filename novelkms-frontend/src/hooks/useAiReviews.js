@@ -8,6 +8,8 @@ export const AI_REVIEW_KEYS = {
 }
 
 // List of reviews for a chapter (newest first), without recommendations.
+// Includes both chapter-scope and scene-scope reviews (a scene review carries
+// its parent chapter), distinguishable by review.scope / review.sceneId.
 export function useChapterReviews(chapterId, enabled = true) {
 	return useQuery({
 		queryKey: AI_REVIEW_KEYS.byChapter(chapterId),
@@ -39,6 +41,20 @@ export function useRunChapterReview() {
 	})
 }
 
+// Scene-scope review. The returned review carries its parent chapterId, so the
+// chapter's review history (which lists both scopes) is what we invalidate.
+export function useRunSceneReview() {
+	const qc = useQueryClient()
+	return useMutation({
+		mutationFn: ({ sceneId, credentialId, model }) =>
+			aiApi.runSceneReview(sceneId, { credentialId: credentialId ?? null, model: model ?? null }),
+		onSuccess: (review) => {
+			if (review?.chapterId) qc.invalidateQueries({ queryKey: AI_REVIEW_KEYS.byChapter(review.chapterId) })
+			if (review?.id) qc.setQueryData(AI_REVIEW_KEYS.detail(review.id), review)
+		},
+	})
+}
+
 export function useSetRecommendationStatus() {
 	const qc = useQueryClient()
 	return useMutation({
@@ -60,7 +76,7 @@ export function usePromoteRecommendation() {
 				codexCategory: codexCategory ?? null,
 				codexTitle: codexTitle ?? null,
 			}),
-	
+
 		onSuccess: (review, { chapterId }) => {
 			// Returns the updated review with the recommendation now marked promoted.
 			if (review?.id) qc.setQueryData(AI_REVIEW_KEYS.detail(review.id), review)
@@ -76,7 +92,7 @@ export function useDeleteReview() {
 	const qc = useQueryClient()
 	return useMutation({
 		mutationFn: (reviewId) => aiApi.deleteReview(reviewId),
-		onSuccess: (_, reviewId) => {
+		onSuccess: () => {
 			// The review vanishes from the chapter history list.
 			qc.invalidateQueries({ queryKey: ['ai', 'reviews'] })
 			// A new trash_batch row was created.

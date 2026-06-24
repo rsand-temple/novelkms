@@ -5,9 +5,11 @@ import { useReview } from '../../review/ReviewContext'
 /**
  * ReviewToggleButton — AppBar entry point for editor Review Mode.
  *
- * Enabled only for a manuscript chapter (a chapter inside a book, not a codex
- * category). Toggles the review rail open/closed; opening always expands it.
- * Must be rendered inside <ReviewProvider> so useReview() resolves.
+ * Enabled for a manuscript chapter OR a manuscript scene (anything inside a
+ * book that is not a codex category/entry). Toggles the review rail open/closed;
+ * opening always expands it. The rail itself decides scope from the selection,
+ * so this button only gates on whether the selection is reviewable. Must be
+ * rendered inside <ReviewProvider> so useReview() resolves.
  *
  * Props:
  *   selection  current app selection
@@ -16,13 +18,19 @@ import { useReview } from '../../review/ReviewContext'
 export default function ReviewToggleButton({ selection, sx }) {
 	const review = useReview()
 
-	const isChapter = !!(selection?.chapterId && selection?.bookId && !selection?.codexId)
-	const tip = isChapter
-		? (review.open ? 'Hide AI review' : 'Review this chapter with AI')
-		: 'Select a chapter to review'
+	// A manuscript scene selection carries both chapterId and sceneId (codex
+	// entries set sceneId null), so this is true for chapters and scenes alike.
+	const isReviewable = !!(selection?.chapterId && selection?.bookId && !selection?.codexId)
+	const isScene = isReviewable && !!selection?.sceneId
+
+	const tip = isReviewable
+		? (review.open
+			? 'Hide AI review'
+			: (isScene ? 'Review this scene with AI' : 'Review this chapter with AI'))
+		: 'Select a chapter or scene to review'
 
 	const handleClick = () => {
-		if (!isChapter) return
+		if (!isReviewable) return
 		if (review.open) review.closeReview()
 		else review.openReview()
 	}
@@ -34,11 +42,11 @@ export default function ReviewToggleButton({ selection, sx }) {
 					color="inherit"
 					size="small"
 					startIcon={<CheckCircleOutlinedIcon fontSize="small" />}
-					disabled={!isChapter}
+					disabled={!isReviewable}
 					onClick={handleClick}
 					sx={{
 						...sx,
-						...(review.open && isChapter ? { bgcolor: 'rgba(255,255,255,0.14)', color: '#fff' } : null),
+						...(review.open && isReviewable ? { bgcolor: 'rgba(255,255,255,0.14)', color: '#fff' } : null),
 					}}
 				>
 					AI Review

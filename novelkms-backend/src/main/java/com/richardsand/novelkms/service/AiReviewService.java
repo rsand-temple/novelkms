@@ -15,8 +15,8 @@ import org.slf4j.LoggerFactory;
 
 import com.richardsand.novelkms.ai.AiProvider;
 import com.richardsand.novelkms.ai.AiProviderException;
-import com.richardsand.novelkms.ai.ChapterReviewRequest;
 import com.richardsand.novelkms.ai.ReviewException;
+import com.richardsand.novelkms.ai.ReviewRequest;
 import com.richardsand.novelkms.ai.ReviewResult;
 import com.richardsand.novelkms.dao.AiCredentialDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
@@ -35,12 +35,18 @@ import com.richardsand.novelkms.model.CodexCategory;
 import com.richardsand.novelkms.model.Scene;
 
 /**
- * Orchestrates a synchronous chapter review: assembles the chapter text from its
- * scenes, resolves the user's AI credential and model, calls the provider, and
- * persists the result as an immutable review artifact. Configuration problems
- * (no credential, non-manuscript chapter, empty chapter, unsupported provider)
- * are signalled via {@link ReviewException}; a provider call failure is recorded
- * as a FAILED review and returned normally so it appears in history.
+ * Orchestrates a synchronous review: assembles the text to review (a whole
+ * chapter's scenes, or a single scene), resolves the user's AI credential and
+ * model, calls the provider, and persists the result as an immutable review
+ * artifact. A chapter review and a scene review are the same artifact differing
+ * only in scope — a scene review records its parent chapter in {@code chapterId}
+ * (so it groups under the chapter's AI workflow) and the scene in
+ * {@code sceneId}.
+ *
+ * <p>Configuration problems (no credential, non-manuscript target, empty target,
+ * unsupported provider) are signalled via {@link ReviewException}; a provider
+ * call failure is recorded as a FAILED review and returned normally so it
+ * appears in history.
  */
 public class AiReviewService {
     private static final Logger logger = LoggerFactory.getLogger(AiReviewService.class);
@@ -75,6 +81,10 @@ public class AiReviewService {
         this.providers = providers;
     }
 
+    /** Immutable description of what is being reviewed, resolved before execution. */
+    private record ReviewTarget(UUID chapterId, UUID sceneId, UUID bookId,
+                                String scopeWord, String unitLabel, String subtitle, String text) {}
+
     /**
      * Runs a chapter review and returns the resulting artifact (COMPLETED or
      * FAILED). Chapter ownership has already been enforced by the tenant filter
@@ -100,6 +110,53 @@ public class AiReviewService {
                     "This chapter has no text to review yet.");
         }
 
+        ReviewTarget target = new ReviewTarget(chapterId, null, bookId,
+                "chapter", chapterLabel(chapter), chapter.getSubtitle(), chapterText);
+        return execute(userId, target, credentialId, modelOverride);
+    }
+
+    /**
+     * Runs a review of a single scene and returns the resulting artifact. Scene
+     * ownership has already been enforced by the tenant filter for the
+     * {@code scenes/{id}} path segment. The review is filed under the scene's
+     * parent chapter so it appears in that chapter's AI workflow.
+     */
+    public AiReview runSceneReview(UUID userId, UUID sceneId, UUID credentialId,
+            String modelOverride) throws SQLException {
+        Scene scene = sceneDao.findById(sceneId)
+                .orElseThrow(() -> new ReviewException(404, "not_found", "Scene not found."));
+
+        UUID chapterId = scene.getChapterId();
+        Chapter chapter = chapterId == null ? null : chapterDao.findById(chapterId).orElse(null);
+        if (chapter == null) {
+            throw new ReviewException(404, "not_found", "The scene's chapter was not found.");
+        }
+
+        UUID bookId = chapter.getBookId();
+        if (bookId == null) {
+            // A codex entry is stored as a scene under a codex (book_id null) chapter.
+            throw new ReviewException(400, "not_manuscript",
+                    "AI review is only available for manuscript scenes.");
+        }
+
+        String sceneText = htmlToPlainText(scene.getContent());
+        if (sceneText.isBlank()) {
+            throw new ReviewException(400, "empty_scene",
+                    "This scene has no text to review yet.");
+        }
+
+        ReviewTarget target = new ReviewTarget(chapterId, sceneId, bookId,
+                "scene", sceneLabel(scene), null, sceneText);
+        return execute(userId, target, credentialId, modelOverride);
+    }
+
+    /**
+     * Shared review pipeline: resolve credential/provider/model, create the
+     * PENDING artifact, call the provider, and persist the outcome. Identical for
+     * chapter and scene scope — only the {@link ReviewTarget} differs.
+     */
+    private AiReview execute(UUID userId, ReviewTarget target, UUID credentialId,
+            String modelOverride) throws SQLException {
         AiCredential credential = resolveCredential(userId, credentialId);
         AiProvider   provider   = providers.get(credential.getProvider());
         if (provider == null) {
@@ -108,10 +165,10 @@ public class AiReviewService {
         }
 
         String model     = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
-        UUID   projectId = resolveProjectId(bookId);
+        UUID   projectId = resolveProjectId(target.bookId());
 
-        UUID reviewId = reviewDao.createPending(userId, projectId, bookId, chapterId,
-                provider.providerKey(), model);
+        UUID reviewId = reviewDao.createPending(userId, projectId, target.bookId(),
+                target.chapterId(), target.sceneId(), provider.providerKey(), model);
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
@@ -119,12 +176,12 @@ public class AiReviewService {
             return reviewDao.findByIdForUser(reviewId, userId).orElseThrow();
         }
 
-        ChapterReviewRequest request = new ChapterReviewRequest(
-                apiKey, model, chapterLabel(chapter), chapter.getSubtitle(),
-                chapterText, DEFAULT_CATEGORIES);
+        ReviewRequest request = new ReviewRequest(
+                apiKey, model, target.scopeWord(), target.unitLabel(), target.subtitle(),
+                target.text(), DEFAULT_CATEGORIES);
 
         try {
-            ReviewResult                        result = provider.reviewChapter(request);
+            ReviewResult                        result = provider.review(request);
             List<AiReviewDao.NewRecommendation> recs   = new ArrayList<>();
             for (ReviewResult.Recommendation r : result.recommendations()) {
                 recs.add(new AiReviewDao.NewRecommendation(
@@ -286,6 +343,13 @@ public class AiReviewService {
         if (title != null && !title.isBlank())
             return title.trim();
         return "Chapter " + chapter.getChapterNumber();
+    }
+
+    private String sceneLabel(Scene scene) {
+        String title = scene.getTitle();
+        if (title != null && !title.isBlank())
+            return title.trim();
+        return "Untitled scene";
     }
 
     private static String firstNonBlank(String... values) {

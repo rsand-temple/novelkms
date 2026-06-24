@@ -31,6 +31,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  *   <li>Sends only {@code model}, {@code messages}, and {@code response_format} —
  *       no {@code temperature} or token caps — so requests don't 400 on reasoning
  *       models that reject those parameters.</li>
+ *   <li>The prompt is scope-aware: the same template reviews a "chapter" or a
+ *       "scene" depending on {@link ReviewRequest#scopeWord()}. The output
+ *       contract is identical across scopes; {@code chapter-review-v3} marks the
+ *       move to a scope-general prompt.</li>
  * </ul>
  */
 public class OpenAiProvider implements AiProvider {
@@ -38,7 +42,7 @@ public class OpenAiProvider implements AiProvider {
 
     public static final  String PROVIDER_KEY   = "OPENAI";
     public static final  String DEFAULT_MODEL  = "gpt-5.4";
-    public static final  String PROMPT_VERSION = "chapter-review-v2";
+    public static final  String PROMPT_VERSION = "chapter-review-v3";
 
     private static final String ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
@@ -58,7 +62,7 @@ public class OpenAiProvider implements AiProvider {
     }
 
     @Override
-    public ReviewResult reviewChapter(ChapterReviewRequest request) throws AiProviderException {
+    public ReviewResult review(ReviewRequest request) throws AiProviderException {
         String model = (request.model() == null || request.model().isBlank())
                 ? DEFAULT_MODEL : request.model().trim();
 
@@ -91,7 +95,7 @@ public class OpenAiProvider implements AiProvider {
         return new ReviewResult(recs, content, PROMPT_VERSION);
     }
 
-    private String buildRequestBody(String model, ChapterReviewRequest request) {
+    private String buildRequestBody(String model, ReviewRequest request) {
         ObjectNode root = mapper.createObjectNode();
         root.put("model", model);
 
@@ -99,7 +103,7 @@ public class OpenAiProvider implements AiProvider {
 
         ObjectNode system = messages.addObject();
         system.put("role", "system");
-        system.put("content", systemPrompt(request.categories()));
+        system.put("content", systemPrompt(scopeWord(request), request.categories()));
 
         ObjectNode user = messages.addObject();
         user.put("role", "user");
@@ -116,20 +120,21 @@ public class OpenAiProvider implements AiProvider {
         }
     }
 
-    private String systemPrompt(List<String> categories) {
+    private String systemPrompt(String unit, List<String> categories) {
         String categoryList = (categories == null || categories.isEmpty())
                 ? "Continuity, Characterization, Pacing, Dialogue, Clarity, Grammar, General Notes"
                 : String.join(", ", categories);
+        // %1$s = the scope unit word ("chapter"/"scene"); %2$s = the category list.
         return """
-                You are an experienced developmental and line editor reviewing a single chapter \
+                You are an experienced developmental and line editor reviewing a single %1$s \
                 of a novel. You do not rewrite the manuscript. You produce specific, atomic, \
                 independently actionable editorial recommendations.
 
                 Each recommendation must:
                 - address exactly one issue;
                 - be concrete (cite the specific moment, line, or transition it refers to) \
-                  rather than vague ("this chapter needs work" is not acceptable);
-                - fall under one of these categories: %s;
+                  rather than vague ("this %1$s needs work" is not acceptable);
+                - fall under one of these categories: %2$s;
                 - carry a severity of LOW, MEDIUM, or HIGH.
 
                 For each recommendation also suggest how it could be filed in the project's \
@@ -142,29 +147,31 @@ public class OpenAiProvider implements AiProvider {
                 - codexTitle: a short (3-8 word) title for that codex entry.
 
                 For each recommendation, include an anchorText field: a short verbatim quote \
-                (5-30 words) copied exactly from the chapter text that identifies the passage \
+                (5-30 words) copied exactly from the %1$s text that identifies the passage \
                 your recommendation refers to. This quote will be used to scroll the author's \
-                editor to the relevant passage, so it must appear word-for-word in the chapter.
+                editor to the relevant passage, so it must appear word-for-word in the %1$s.
 
                 Respond with a single JSON object and nothing else, in exactly this shape:
                 {"recommendations":[{"category":"...","severity":"LOW|MEDIUM|HIGH",\
-                "location":"where in the chapter this applies","recommendation":"the note",\
+                "location":"where in the %1$s this applies","recommendation":"the note",\
                 "codexCategory":"CANON","codexTitle":"short entry title",\
-                "anchorText":"verbatim quote from the chapter"}]}
+                "anchorText":"verbatim quote from the %1$s"}]}
 
-                If the chapter is strong and you have no substantive notes, return \
-                {"recommendations":[]}.""".formatted(categoryList);
+                If the %1$s is strong and you have no substantive notes, return \
+                {"recommendations":[]}.""".formatted(unit, categoryList);
     }
 
-    private String userPrompt(ChapterReviewRequest request) {
+    private String userPrompt(ReviewRequest request) {
+        String unit = scopeWord(request);
+        String heading = capitalize(unit);
         StringBuilder sb = new StringBuilder();
-        sb.append("Chapter: ").append(nullToBlank(request.chapterLabel()));
-        if (request.chapterSubtitle() != null && !request.chapterSubtitle().isBlank()) {
-            sb.append(" — ").append(request.chapterSubtitle().trim());
+        sb.append(heading).append(": ").append(nullToBlank(request.unitLabel()));
+        if (request.subtitle() != null && !request.subtitle().isBlank()) {
+            sb.append(" — ").append(request.subtitle().trim());
         }
         sb.append("\n\n");
-        sb.append("Chapter text:\n\n");
-        sb.append(nullToBlank(request.chapterText()));
+        sb.append(heading).append(" text:\n\n");
+        sb.append(nullToBlank(request.text()));
         return sb.toString();
     }
 
@@ -229,6 +236,16 @@ public class OpenAiProvider implements AiProvider {
             // fall through to a generic message
         }
         return "OpenAI request failed (HTTP " + status + ")";
+    }
+
+    private static String scopeWord(ReviewRequest request) {
+        String word = request.scopeWord();
+        return (word == null || word.isBlank()) ? "chapter" : word.trim().toLowerCase();
+    }
+
+    private static String capitalize(String value) {
+        if (value == null || value.isEmpty()) return "";
+        return Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
     private static String stripCodeFences(String content) {

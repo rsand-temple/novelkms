@@ -92,3 +92,33 @@ export function recommendationToText(rec) {
 	if (rec.location) lines.push(`— ${rec.location.trim()}`)
 	return lines.join('\n')
 }
+
+// ── Review scope / origin ────────────────────────────────────────────────────
+// A chapter review and a scene review are the same artifact differing only in
+// scope. The backend derives and returns review.scope ('CHAPTER' | 'SCENE' |
+// 'BOOK'); these helpers tolerate older payloads that predate the field.
+
+export function reviewScope(review) {
+	if (!review) return 'CHAPTER'
+	if (review.scope) return review.scope
+	if (review.sceneId) return 'SCENE'
+	if (!review.chapterId) return 'BOOK'
+	return 'CHAPTER'
+}
+
+// Human-readable origin of a review, e.g. "Chapter", "Scene 2", or
+// "Scene 2: The Reckoning". `scenes` is the parent chapter's scene list (from
+// useScenes) used to resolve a scene's number and title.
+export function originLabel(review, scenes) {
+	const scope = reviewScope(review)
+	if (scope === 'BOOK') return 'Book'
+	if (scope !== 'SCENE') return 'Chapter'
+
+	const list = scenes ?? []
+	const idx = list.findIndex(s => s.id === review?.sceneId)
+	if (idx < 0) return 'Scene'
+
+	const n = idx + 1
+	const title = (list[idx]?.title ?? '').trim()
+	return title ? `Scene ${n}: ${title}` : `Scene ${n}`
+}

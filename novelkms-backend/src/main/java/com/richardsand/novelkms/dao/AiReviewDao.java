@@ -21,11 +21,15 @@ import com.richardsand.novelkms.model.AiReviewRecommendation;
  * immutable once completed; a re-run creates a new row. The raw provider
  * response is stored in {@code response_json} for audit but is never selected
  * into the {@link AiReview} model.
+ *
+ * <p>A review's {@code scope} (CHAPTER / SCENE / BOOK) is not a column; it is
+ * derived from {@code chapter_id} / {@code scene_id} by
+ * {@link AiReview#deriveScope(UUID, UUID)} in {@link #mapReview(ResultSet)}.
  */
 public class AiReviewDao {
 
     private static final String REVIEW_COLUMNS =
-            "id, user_id, project_id, book_id, chapter_id, provider, model, status, "
+            "id, user_id, project_id, book_id, chapter_id, scene_id, provider, model, status, "
             + "submitted_at, completed_at, prompt_version, error_message";
 
     /** DAO-local carrier so this layer does not depend on the {@code ai} package. */
@@ -39,12 +43,16 @@ public class AiReviewDao {
     }
 
     private AiReview mapReview(ResultSet rs) throws SQLException {
+        UUID chapterId = rs.getObject("chapter_id", UUID.class);
+        UUID sceneId   = rs.getObject("scene_id", UUID.class);
         return AiReview.builder()
                 .id(rs.getObject("id", UUID.class))
                 .userId(rs.getObject("user_id", UUID.class))
                 .projectId(rs.getObject("project_id", UUID.class))
                 .bookId(rs.getObject("book_id", UUID.class))
-                .chapterId(rs.getObject("chapter_id", UUID.class))
+                .chapterId(chapterId)
+                .sceneId(sceneId)
+                .scope(AiReview.deriveScope(chapterId, sceneId))
                 .provider(rs.getString("provider"))
                 .model(rs.getString("model"))
                 .status(rs.getString("status"))
@@ -74,24 +82,29 @@ public class AiReviewDao {
                 .build();
     }
 
-    /** Inserts a PENDING review row and returns its id. */
-    public UUID createPending(UUID userId, UUID projectId, UUID bookId, UUID chapterId,
+    /**
+     * Inserts a PENDING review row and returns its id. {@code sceneId} is null
+     * for a chapter review and set for a scene review; {@code chapterId} is the
+     * (parent) chapter in both cases.
+     */
+    public UUID createPending(UUID userId, UUID projectId, UUID bookId, UUID chapterId, UUID sceneId,
                               String provider, String model) throws SQLException {
         UUID id = UUID.randomUUID();
         Instant now = Instant.now();
         String sql = "INSERT INTO ai_review "
-                + "(id, user_id, project_id, book_id, chapter_id, provider, model, status, submitted_at, created_at) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)";
+                + "(id, user_id, project_id, book_id, chapter_id, scene_id, provider, model, status, submitted_at, created_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)";
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
             ps.setObject(2, userId);
             ps.setObject(3, projectId);
             ps.setObject(4, bookId);
             ps.setObject(5, chapterId);
-            ps.setString(6, provider);
-            ps.setString(7, model);
-            ps.setTimestamp(8, Timestamp.from(now));
+            ps.setObject(6, sceneId);
+            ps.setString(7, provider);
+            ps.setString(8, model);
             ps.setTimestamp(9, Timestamp.from(now));
+            ps.setTimestamp(10, Timestamp.from(now));
             ps.executeUpdate();
         }
         return id;
@@ -174,7 +187,12 @@ public class AiReviewDao {
         }
     }
 
-    /** Lists reviews for a chapter (newest first), without recommendations. */
+    /**
+     * Lists reviews for a chapter (newest first), without recommendations. Both
+     * chapter-scope and scene-scope reviews are returned, because a scene review
+     * carries its parent chapter in {@code chapter_id}; the caller distinguishes
+     * them by {@code scope}/{@code sceneId}.
+     */
     public List<AiReview> findByChapter(UUID chapterId) throws SQLException {
         String sql = "SELECT " + REVIEW_COLUMNS + " FROM ai_review WHERE chapter_id = ? AND deleted_at IS NULL ORDER BY submitted_at DESC";
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {

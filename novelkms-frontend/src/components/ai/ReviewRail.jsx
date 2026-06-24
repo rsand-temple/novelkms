@@ -4,6 +4,7 @@ import {
 	Badge,
 	Box,
 	Button,
+	Chip,
 	CircularProgress,
 	Divider,
 	IconButton,
@@ -21,13 +22,15 @@ import {
 	useChapterReviews,
 	useAiReview,
 	useRunChapterReview,
+	useRunSceneReview,
 	useSetRecommendationStatus,
 	usePromoteRecommendation,
 	useDeleteReview,
 } from '../../hooks/useAiReviews'
+import { useScenes } from '../../hooks/useScenes'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
 import { useReview } from '../../review/ReviewContext'
-import { HIDDEN_STATUSES, normalizeCategory } from './recommendationUtils'
+import { HIDDEN_STATUSES, normalizeCategory, originLabel, reviewScope } from './recommendationUtils'
 import ReviewCard from './ReviewCard'
 
 const RAIL_WIDTH = 332
@@ -44,22 +47,37 @@ function formatTime(iso) {
 }
 
 /**
- * ReviewRail — the AI review surface for the selected manuscript chapter,
- * rendered on the right edge of the editor area (not the global inspector).
+ * ReviewRail — the AI review surface for the selected manuscript chapter or
+ * scene, rendered on the right edge of the editor area (not the global
+ * inspector).
  *
- * Bound to exactly one chapter; EditorPanel remounts it with key={chapterId}
- * so all per-chapter state resets on chapter change. Collapses to a thin strip
- * with an open-findings badge; the manuscript stays the primary surface either
- * way.
+ * A chapter review and a scene review are the same artifact differing only in
+ * scope, and a scene review is filed under its parent chapter — so the rail is
+ * bound to the chapter (mounted with key={chapterId}) and the current scope is
+ * driven by whether a scene is also selected. Switching scenes within a chapter
+ * updates the scope/filter WITHOUT remounting, preserving rail state:
+ *
+ *   • scene selected  → Run reviews that scene; history is filtered to that
+ *                       scene's reviews.
+ *   • chapter selected → Run reviews the whole chapter; history shows every
+ *                       review under the chapter (chapter- and scene-scope),
+ *                       each tagged with its origin.
  *
  * Props:
- *   chapterId {string}
+ *   chapterId {string}        the (parent) chapter
+ *   sceneId   {string|null}   the selected scene, when one is selected
  *   editor    TipTap editor instance (for scroll-to-passage highlights)
  */
-export default function ReviewRail({ chapterId, editor }) {
+export default function ReviewRail({ chapterId, sceneId, editor }) {
 	const review = useReview()
 
-	const [explicitReviewId, setExplicitReviewId] = useState(null)
+	const scope = sceneId ? 'SCENE' : 'CHAPTER'
+	// Identity of the current scope target. An explicit review selection is only
+	// honored while this matches, so changing scene/scope falls back to the
+	// newest review in the new filter without a setState-in-effect.
+	const scopeKey = sceneId ?? 'CHAPTER'
+
+	const [explicit, setExplicit] = useState(null) // { id, scopeKey } | null
 	const [credentialId, setCredentialId] = useState(null)
 	const [runError, setRunError] = useState(null)
 	const [promotingId, setPromotingId] = useState(null)
@@ -73,13 +91,32 @@ export default function ReviewRail({ chapterId, editor }) {
 	}
 
 	const { data: credentials = [] } = useAiCredentials()
+	const { data: scenes = [] } = useScenes(chapterId)
 	const { data: reviews = [], isLoading: loadingReviews } = useChapterReviews(chapterId)
-	const selectedReviewId = explicitReviewId ?? reviews[0]?.id ?? null
+
+	// Filter the chapter's review history by the current selection.
+	const filteredReviews = useMemo(() => {
+		if (scope === 'SCENE') {
+			return reviews.filter(r => reviewScope(r) === 'SCENE' && r.sceneId === sceneId)
+		}
+		return reviews
+	}, [reviews, scope, sceneId])
+
+	const explicitId = explicit && explicit.scopeKey === scopeKey ? explicit.id : null
+	const selectedReviewId = explicitId ?? filteredReviews[0]?.id ?? null
+	const selectedReview = useMemo(
+		() => filteredReviews.find(r => r.id === selectedReviewId) ?? null,
+		[filteredReviews, selectedReviewId],
+	)
+
 	const { data: detail, isLoading: loadingDetail } = useAiReview(selectedReviewId, !!selectedReviewId)
-	const { mutate: runReview, isPending: running } = useRunChapterReview()
+	const { mutate: runChapter, isPending: runningChapter } = useRunChapterReview()
+	const { mutate: runScene, isPending: runningScene } = useRunSceneReview()
 	const { mutate: setRecStatus } = useSetRecommendationStatus()
 	const { mutate: promote } = usePromoteRecommendation()
 	const { mutate: deleteReview, isPending: deleting } = useDeleteReview()
+
+	const running = scope === 'SCENE' ? runningScene : runningChapter
 
 	const defaultCredId = useMemo(
 		() => credentials.find(c => c.defaultCredential)?.id ?? credentials[0]?.id ?? null,
@@ -87,6 +124,11 @@ export default function ReviewRail({ chapterId, editor }) {
 	)
 	const effectiveCredId = credentialId ?? defaultCredId
 	const hasCredentials = credentials.length > 0
+
+	// The label of whatever Run will review right now.
+	const scopeTargetLabel = scope === 'SCENE'
+		? originLabel({ scope: 'SCENE', sceneId }, scenes)
+		: 'Chapter'
 
 	// Visible (active) recommendations and the count of still-undecided ones.
 	const visibleRecs = useMemo(
@@ -102,13 +144,13 @@ export default function ReviewRail({ chapterId, editor }) {
 
 	const handleRun = () => {
 		setRunError(null)
-		runReview(
-			{ chapterId, credentialId: effectiveCredId, model: null },
-			{
-				onSuccess: (r) => setExplicitReviewId(r.id),
-				onError: (e) => setRunError(errMessage(e)),
-			},
-		)
+		const onSuccess = (r) => setExplicit({ id: r.id, scopeKey })
+		const onError = (e) => setRunError(errMessage(e))
+		if (scope === 'SCENE') {
+			runScene({ sceneId, credentialId: effectiveCredId, model: null }, { onSuccess, onError })
+		} else {
+			runChapter({ chapterId, credentialId: effectiveCredId, model: null }, { onSuccess, onError })
+		}
 	}
 
 	const handleSetStatus = (rec, value) => {
@@ -208,7 +250,7 @@ export default function ReviewRail({ chapterId, editor }) {
 			<Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 1.5, py: 1.5 }}>
 				{!hasCredentials ? (
 					<Alert severity="info">
-						Add an AI key from Settings → AI to run chapter reviews.
+						Add an AI key from Settings → AI to run reviews.
 					</Alert>
 				) : (
 					<>
@@ -231,27 +273,44 @@ export default function ReviewRail({ chapterId, editor }) {
 							onClick={handleRun} disabled={running}
 							startIcon={running ? <CircularProgress size={16} color="inherit" /> : null}
 						>
-							{running ? 'Reviewing…' : 'Run Review'}
+							{running ? 'Reviewing…' : (scope === 'SCENE' ? 'Review scene' : 'Review chapter')}
 						</Button>
+
+						<Typography
+							variant="caption"
+							color="text.secondary"
+							sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}
+						>
+							Reviewing: {scopeTargetLabel}
+						</Typography>
 
 						{runError && <Alert severity="error" sx={{ mt: 1 }}>{runError}</Alert>}
 
-						{reviews.length > 1 && (
+						{filteredReviews.length > 1 && (
 							<TextField
 								select label="Review" size="small" fullWidth sx={{ mt: 1.5 }}
 								value={selectedReviewId ?? ''}
-								onChange={(e) => setExplicitReviewId(e.target.value)}
+								onChange={(e) => setExplicit({ id: e.target.value, scopeKey })}
 							>
-								{reviews.map(r => (
+								{filteredReviews.map(r => (
 									<MenuItem key={r.id} value={r.id}>
-										{formatTime(r.submittedAt)} · {r.status}
+										{originLabel(r, scenes)} · {formatTime(r.submittedAt)} · {r.status}
 									</MenuItem>
 								))}
 							</TextField>
 						)}
 
 						{selectedReviewId && (
-							<Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.75 }}>
+							<Box sx={{ display: 'flex', alignItems: 'center', mt: 0.75 }}>
+								{selectedReview && (
+									<Chip
+										size="small"
+										variant="outlined"
+										label={originLabel(selectedReview, scenes)}
+										sx={{ maxWidth: '100%', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+									/>
+								)}
+								<Box sx={{ flexGrow: 1 }} />
 								<Tooltip title="Move this review to trash">
 									<span>
 										<IconButton
@@ -260,7 +319,7 @@ export default function ReviewRail({ chapterId, editor }) {
 											onClick={() => {
 												setRunError(null)
 												deleteReview(selectedReviewId, {
-													onSuccess: () => setExplicitReviewId(null),
+													onSuccess: () => setExplicit(null),
 													onError: (e) => setRunError(errMessage(e)),
 												})
 											}}
@@ -277,9 +336,18 @@ export default function ReviewRail({ chapterId, editor }) {
 						{loadingReviews && reviews.length === 0 ? (
 							<Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
 						) : !selectedReviewId ? (
-							<Typography variant="body2" color="text.secondary">
-								No reviews yet. Run one to see recommendations.
-							</Typography>
+							<>
+								<Typography variant="body2" color="text.secondary">
+									{scope === 'SCENE'
+										? 'No reviews for this scene yet. Run one to review it.'
+										: 'No reviews yet. Run one to see recommendations.'}
+								</Typography>
+								{scope === 'SCENE' && reviews.length > 0 && (
+									<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+										This chapter has other reviews — select the chapter in the nav to see them.
+									</Typography>
+								)}
+							</>
 						) : loadingDetail || !detail ? (
 							<Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
 						) : detail.status === 'FAILED' ? (
@@ -288,7 +356,7 @@ export default function ReviewRail({ chapterId, editor }) {
 							<Typography variant="body2" color="text.secondary">Review in progress…</Typography>
 						) : (detail.recommendations ?? []).length === 0 ? (
 							<Alert severity="success">
-								No notes — the model had no substantive recommendations on this chapter.
+								No notes — the model had no substantive recommendations on this {scope === 'SCENE' ? 'scene' : 'chapter'}.
 							</Alert>
 						) : visibleRecs.length === 0 ? (
 							<Alert severity="success">All recommendations have been handled.</Alert>

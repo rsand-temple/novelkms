@@ -28,14 +28,15 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 /**
- * AI chapter review endpoints.
+ * AI review endpoints (chapter- and scene-scope).
  *
  * <p>
- * Authorization: {@code POST /ai/reviews/chapters/{chapterId}} and
+ * Authorization: {@code POST /ai/reviews/chapters/{chapterId}},
+ * {@code POST /ai/reviews/scenes/{sceneId}}, and
  * {@code GET /chapters/{chapterId}/reviews} are covered by the tenant filter
- * (the {@code chapters/{id}} segment triggers an ownership check). The
- * {@code reviews/{id}} paths are NOT covered by the filter, so review ownership
- * is enforced here via {@link AiReviewDao#findByIdForUser}.
+ * (the {@code chapters/{id}} / {@code scenes/{id}} segment triggers an ownership
+ * check). The {@code reviews/{id}} paths are NOT covered by the filter, so
+ * review ownership is enforced here via {@link AiReviewDao#findByIdForUser}.
  */
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
@@ -91,6 +92,24 @@ public class AiReviewResource {
         String model        = body == null ? null : body.model;
         try {
             AiReview review = service.runChapterReview(userId, chapterId, credentialId, model);
+            return Response.ok(review).build();
+        } catch (ReviewException e) {
+            return Response.status(e.status())
+                    .entity(Map.of("error", e.code(), "message", e.getMessage()))
+                    .build();
+        } catch (SQLException e) {
+            return Response.serverError().entity(Map.of("error", "server_error")).build();
+        }
+    }
+
+    @POST
+    @Path("/ai/reviews/scenes/{sceneId}")
+    public Response runSceneReview(@PathParam("sceneId") UUID sceneId, RunRequest body) {
+        UUID   userId       = CurrentUser.id(request);
+        UUID   credentialId = body == null ? null : body.credentialId;
+        String model        = body == null ? null : body.model;
+        try {
+            AiReview review = service.runSceneReview(userId, sceneId, credentialId, model);
             return Response.ok(review).build();
         } catch (ReviewException e) {
             return Response.status(e.status())

@@ -956,7 +956,7 @@ export default function EditorPanel({
 			</Box>
 
 			{reviewRailVisible && (
-				<ReviewRail key={chapterId} chapterId={chapterId} editor={editor} />
+				<ReviewRail key={chapterId} chapterId={chapterId} sceneId={sceneId} editor={editor} />
 			)}
 			</Box>
 		</Box>

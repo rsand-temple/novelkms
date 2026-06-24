@@ -17,6 +17,14 @@ import lombok.NoArgsConstructor;
  * rewritten. The raw provider response is persisted in the database for audit
  * but is intentionally not exposed on this model.
  *
+ * <p>A chapter review and a scene review are the same kind of artifact; they
+ * differ only in {@code scope}. {@code scope} is derived (never stored):
+ * {@code chapterId == null} &rarr; {@code BOOK} (reserved for a future
+ * book-scope review), else {@code sceneId != null} &rarr; {@code SCENE}, else
+ * {@code CHAPTER}. A scene review records its parent chapter in
+ * {@code chapterId} so it groups under that chapter's AI workflow, and the
+ * reviewed scene in {@code sceneId}.
+ *
  * <p>{@code status} progresses PENDING -&gt; COMPLETED | FAILED. v1 runs the
  * review synchronously, but {@code submittedAt}/{@code completedAt} are retained
  * so a future async/polling execution model needs no schema change.
@@ -41,6 +49,14 @@ public class AiReview {
 
     @JsonProperty
     private UUID chapterId;
+
+    /** Set only for a scene-scope review; null for chapter (and future book) scope. */
+    @JsonProperty
+    private UUID sceneId;
+
+    /** Derived origin of the review: {@code CHAPTER}, {@code SCENE}, or {@code BOOK}. */
+    @JsonProperty
+    private String scope;
 
     @JsonProperty
     private String provider;
@@ -71,5 +87,14 @@ public class AiReview {
 
     public void setRecommendations(List<AiReviewRecommendation> recommendations) {
         this.recommendations = recommendations;
+    }
+
+    /**
+     * Derives the review scope from its target columns. Centralized here so the
+     * DAO mapper and any future caller agree on the rule.
+     */
+    public static String deriveScope(UUID chapterId, UUID sceneId) {
+        if (chapterId == null) return "BOOK";
+        return sceneId != null ? "SCENE" : "CHAPTER";
     }
 }
