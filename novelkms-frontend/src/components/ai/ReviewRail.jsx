@@ -6,9 +6,10 @@ import {
 	Button,
 	Chip,
 	CircularProgress,
-	Divider,
 	IconButton,
 	MenuItem,
+	Tab,
+	Tabs,
 	TextField,
 	Tooltip,
 	Typography,
@@ -33,7 +34,14 @@ import { aiApi } from '../../api/ai'
 import { useScenes } from '../../hooks/useScenes'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
 import { useReview } from '../../review/ReviewContext'
-import { HIDDEN_STATUSES, normalizeCategory, originLabel, reviewScope } from './recommendationUtils'
+import {
+	HIDDEN_STATUSES,
+	STATUS,
+	isResolvedStatus,
+	normalizeStatus,
+	originLabel,
+	reviewScope,
+} from './recommendationUtils'
 import ReviewCard from './ReviewCard'
 
 const RAIL_WIDTH = 332
@@ -64,9 +72,11 @@ function formatTime(iso) {
  *                       the chapter (chapter- and scene-scope) and AGGREGATE
  *                       their recommendations into one working list.
  *
- * In chapter scope the "All reviews" aggregate is the default. The dropdown
- * can optionally filter to a single review. Each recommendation card shows its
- * origin (which review/scope) so the author knows where a finding came from.
+ * Findings are triaged bug-tracker style across three tabs:
+ *
+ *   • Active   — OPEN + DEFERRED (what still needs attention)
+ *   • Resolved — DONE + DISMISSED + PROMOTED (handled, kept for reference)
+ *   • History  — the review runs themselves; focus one or move it to Trash.
  *
  * Props:
  *   chapterId {string}        the (parent) chapter
@@ -79,21 +89,14 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 	const scope = sceneId ? 'SCENE' : 'CHAPTER'
 	const scopeKey = sceneId ?? 'CHAPTER'
 
-	// When the user explicitly picks a review in the dropdown. At chapter
-	// scope the default is ALL_REVIEWS (aggregate); at scene scope the
-	// default is the newest review (null falls through to reviews[0]).
+	// When the user explicitly picks a review in History. At chapter scope the
+	// default is ALL_REVIEWS (aggregate); at scene scope the default is the
+	// newest review (null falls through to reviews[0]).
 	const [explicit, setExplicit] = useState(null) // { id, scopeKey } | null
 	const [credentialId, setCredentialId] = useState(null)
 	const [runError, setRunError] = useState(null)
 	const [promotingId, setPromotingId] = useState(null)
-	const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(
-		() => window.localStorage.getItem('ai.skipDeleteConfirm') === 'true',
-	)
-
-	const persistSkipDeleteConfirm = (value) => {
-		setSkipDeleteConfirm(value)
-		window.localStorage.setItem('ai.skipDeleteConfirm', value ? 'true' : 'false')
-	}
+	const [tab, setTab] = useState('ACTIVE') // ACTIVE | RESOLVED | HISTORY
 
 	const { data: credentials = [] } = useAiCredentials()
 	const { data: scenes = [] } = useScenes(chapterId)
@@ -154,39 +157,48 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 		? originLabel({ scope: 'SCENE', sceneId }, scenes)
 		: 'Chapter'
 
-	// ── Recommendation list ─────────────────────────────────────────────────
+	// ── Recommendation set for the current scope/focus ──────────────────────
 	// In aggregate mode each rec carries _reviewId so handlers can target the
 	// right review artifact. In single-review mode they all share the same id.
-	const visibleRecs = useMemo(() => {
+	const allScopeRecs = useMemo(() => {
 		if (isAggregateMode) {
 			return aggregateQueries
 				.filter(q => q.data?.status === 'COMPLETED')
 				.flatMap(q => (q.data.recommendations ?? [])
-					.filter(rec => !HIDDEN_STATUSES.has((rec.status ?? '').toUpperCase()))
+					.filter(rec => !HIDDEN_STATUSES.has(normalizeStatus(rec.status)))
 					.map(rec => ({ ...rec, _reviewId: q.data.id, _review: q.data })),
 				)
 		}
 		if (!singleDetail) return []
 		return (singleDetail.recommendations ?? [])
-			.filter(rec => !HIDDEN_STATUSES.has((rec.status ?? '').toUpperCase()))
+			.filter(rec => !HIDDEN_STATUSES.has(normalizeStatus(rec.status)))
 			.map(rec => ({ ...rec, _reviewId: singleDetail.id, _review: singleDetail }))
 	}, [isAggregateMode, aggregateQueries, singleDetail])
 
-	const openCount = useMemo(
-		() => visibleRecs.filter(rec => (rec.status ?? 'OPEN').toUpperCase() === 'OPEN').length,
-		[visibleRecs],
+	// Active = OPEN + DEFERRED, with OPEN listed first (DEFERRED is parked).
+	const activeRecs = useMemo(() => {
+		const open = allScopeRecs.filter(r => normalizeStatus(r.status) === STATUS.OPEN)
+		const deferred = allScopeRecs.filter(r => normalizeStatus(r.status) === STATUS.DEFERRED)
+		return [...open, ...deferred]
+	}, [allScopeRecs])
+
+	const resolvedRecs = useMemo(
+		() => allScopeRecs.filter(r => isResolvedStatus(r.status)),
+		[allScopeRecs],
 	)
 
-	const detailLoaded = isAggregateMode ? !aggregateLoading : !!singleDetail
-	const detailLoading = isAggregateMode ? aggregateLoading : loadingSingleDetail
+	const openCount = useMemo(
+		() => allScopeRecs.filter(r => normalizeStatus(r.status) === STATUS.OPEN).length,
+		[allScopeRecs],
+	)
 
-	// For "no findings" / "all handled" messages — which detail do we inspect?
+	const detailLoading = isAggregateMode ? aggregateLoading : loadingSingleDetail
 	const anyCompleted = completedReviews.length > 0
 
 	// ── Handlers ────────────────────────────────────────────────────────────
 	const handleRun = () => {
 		setRunError(null)
-		const onSuccess = (r) => setExplicit({ id: r.id, scopeKey })
+		const onSuccess = (r) => { setExplicit({ id: r.id, scopeKey }); setTab('ACTIVE') }
 		const onError = (e) => setRunError(errMessage(e))
 		if (scope === 'SCENE') {
 			runScene({ sceneId, credentialId: effectiveCredId, model: null }, { onSuccess, onError })
@@ -198,7 +210,7 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 	const handleSetStatus = (rec, value) => {
 		const reviewId = rec._reviewId
 		if (!reviewId) return
-		setRecStatus({ reviewId, recId: rec.id, status: value ?? 'OPEN', chapterId })
+		setRecStatus({ reviewId, recId: rec.id, status: value ?? STATUS.OPEN, chapterId })
 	}
 
 	const handlePromote = (rec, codexCategory, codexTitle) => {
@@ -216,11 +228,142 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 		editor.commands.highlightAnchor(anchorText)
 	}, [editor])
 
-	// The currently selected single review (for delete / origin chip).
-	const selectedReview = useMemo(
-		() => filteredReviews.find(r => r.id === selectedReviewId) ?? null,
-		[filteredReviews, selectedReviewId],
-	)
+	const focusRun = (id) => {
+		setExplicit({ id, scopeKey })
+		setTab('ACTIVE')
+	}
+
+	const handleDeleteRun = (reviewId) => {
+		setRunError(null)
+		deleteReview(reviewId, {
+			onSuccess: () => setExplicit(null),
+			onError: (e) => setRunError(errMessage(e)),
+		})
+	}
+
+	// Whether a History row is the one currently focused.
+	const isFocused = (id) =>
+		id === ALL_REVIEWS ? isAggregateMode : (!isAggregateMode && id === selectedReviewId)
+
+	// ── Findings renderer (shared by Active / Resolved tabs) ────────────────
+	const renderFindings = (list, emptyMessage) => {
+		if (loadingReviews && reviews.length === 0) {
+			return <Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
+		}
+		if (filteredReviews.length === 0) {
+			return (
+				<>
+					<Typography variant="body2" color="text.secondary">
+						{scope === 'SCENE'
+							? 'No reviews for this scene yet. Run one to review it.'
+							: 'No reviews yet. Run one to see recommendations.'}
+					</Typography>
+					{scope === 'SCENE' && reviews.length > 0 && (
+						<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+							This chapter has other reviews — select the chapter in the nav to see them.
+						</Typography>
+					)}
+				</>
+			)
+		}
+		if (detailLoading) {
+			return <Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
+		}
+		if (!isAggregateMode && singleDetail?.status === 'FAILED') {
+			return <Alert severity="error">{singleDetail.errorMessage ?? 'The review failed.'}</Alert>
+		}
+		if (!isAggregateMode && singleDetail && singleDetail.status !== 'COMPLETED') {
+			return <Typography variant="body2" color="text.secondary">Review in progress…</Typography>
+		}
+		if (!anyCompleted) {
+			return <Typography variant="body2" color="text.secondary">No completed reviews yet.</Typography>
+		}
+		if (list.length === 0) {
+			return <Alert severity="success">{emptyMessage}</Alert>
+		}
+		return list.map(rec => (
+			<Box key={`${rec.id}:${rec._reviewId}`}>
+				{isAggregateMode && rec._review && (
+					<Chip
+						size="small"
+						variant="outlined"
+						label={originLabel(rec._review, scenes)}
+						sx={{ mb: 0.5, maxWidth: '100%', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+					/>
+				)}
+				<ReviewCard
+					rec={rec}
+					onSetStatus={handleSetStatus}
+					onPromote={handlePromote}
+					promoting={promotingId === rec.id}
+					onHighlight={handleHighlight}
+				/>
+			</Box>
+		))
+	}
+
+	// ── History renderer ────────────────────────────────────────────────────
+	const renderHistory = () => {
+		if (loadingReviews && reviews.length === 0) {
+			return <Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
+		}
+		if (filteredReviews.length === 0) {
+			return <Typography variant="body2" color="text.secondary">No reviews yet.</Typography>
+		}
+		return (
+			<Box>
+				{scope === 'CHAPTER' && (
+					<Box
+						onClick={() => focusRun(ALL_REVIEWS)}
+						sx={{
+							p: 1, mb: 0.5, borderRadius: 1, cursor: 'pointer',
+							bgcolor: isFocused(ALL_REVIEWS) ? 'action.selected' : 'transparent',
+							'&:hover': { bgcolor: 'action.hover' },
+						}}
+					>
+						<Typography variant="body2">All reviews ({completedReviews.length})</Typography>
+						<Typography variant="caption" color="text.secondary">
+							Aggregate every finding in this chapter
+						</Typography>
+					</Box>
+				)}
+
+				{filteredReviews.map(r => (
+					<Box
+						key={r.id}
+						onClick={() => focusRun(r.id)}
+						sx={{
+							display: 'flex', alignItems: 'center', gap: 0.5,
+							p: 1, mb: 0.5, borderRadius: 1, cursor: 'pointer',
+							bgcolor: isFocused(r.id) ? 'action.selected' : 'transparent',
+							'&:hover': { bgcolor: 'action.hover' },
+						}}
+					>
+						<Box sx={{ minWidth: 0, flexGrow: 1 }}>
+							<Typography variant="body2" noWrap>
+								{originLabel(r, scenes)} · {r.model || '—'}
+							</Typography>
+							<Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+								{formatTime(r.submittedAt)} · {r.status}
+							</Typography>
+						</Box>
+						<Tooltip title="Move this review to Trash">
+							<span>
+								<IconButton
+									size="small"
+									disabled={deleting}
+									aria-label="Move review to trash"
+									onClick={(e) => { e.stopPropagation(); handleDeleteRun(r.id) }}
+								>
+									<DeleteIcon fontSize="small" />
+								</IconButton>
+							</span>
+						</Tooltip>
+					</Box>
+				))}
+			</Box>
+		)
+	}
 
 	// ── Collapsed strip ───────────────────────────────────────────────────
 	if (review.collapsed) {
@@ -336,114 +479,26 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 
 						{runError && <Alert severity="error" sx={{ mt: 1 }}>{runError}</Alert>}
 
-						{/* Review selector — chapter scope: aggregate "All" + individual reviews;
-						    scene scope: individual reviews only */}
-						{filteredReviews.length > 0 && (
-							<TextField
-								select label="Review" size="small" fullWidth sx={{ mt: 1.5 }}
-								value={isAggregateMode ? ALL_REVIEWS : (selectedReviewId ?? '')}
-								onChange={(e) => {
-									const val = e.target.value
-									setExplicit({ id: val, scopeKey })
-								}}
-							>
-								{scope === 'CHAPTER' && (
-									<MenuItem value={ALL_REVIEWS}>
-										All reviews ({completedReviews.length})
-									</MenuItem>
-								)}
-								{filteredReviews.map(r => (
-									<MenuItem key={r.id} value={r.id}>
-										{originLabel(r, scenes)} · {formatTime(r.submittedAt)} · {r.status}
-									</MenuItem>
-								))}
-							</TextField>
-						)}
+						<Tabs
+							value={tab}
+							onChange={(_e, val) => setTab(val)}
+							variant="fullWidth"
+							sx={{
+								mt: 1,
+								minHeight: 36,
+								'& .MuiTab-root': { minHeight: 36, py: 0.5, textTransform: 'none', fontSize: '0.78rem' },
+							}}
+						>
+							<Tab value="ACTIVE" label={`Active (${activeRecs.length})`} />
+							<Tab value="RESOLVED" label={`Resolved (${resolvedRecs.length})`} />
+							<Tab value="HISTORY" label="History" />
+						</Tabs>
 
-						{/* Delete button — only in single-review mode */}
-						{selectedReviewId && !isAggregateMode && (
-							<Box sx={{ display: 'flex', alignItems: 'center', mt: 0.75 }}>
-								{selectedReview && (
-									<Chip
-										size="small"
-										variant="outlined"
-										label={originLabel(selectedReview, scenes)}
-										sx={{ maxWidth: '100%', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
-									/>
-								)}
-								<Box sx={{ flexGrow: 1 }} />
-								<Tooltip title="Move this review to trash">
-									<span>
-										<IconButton
-											size="small"
-											disabled={deleting}
-											onClick={() => {
-												setRunError(null)
-												deleteReview(selectedReviewId, {
-													onSuccess: () => setExplicit(null),
-													onError: (e) => setRunError(errMessage(e)),
-												})
-											}}
-										>
-											<DeleteIcon fontSize="small" />
-										</IconButton>
-									</span>
-								</Tooltip>
-							</Box>
-						)}
-
-						<Divider sx={{ my: 1.5 }} />
-
-						{/* ── Recommendations ─────────────────────────────────────── */}
-						{loadingReviews && reviews.length === 0 ? (
-							<Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
-						) : filteredReviews.length === 0 ? (
-							<>
-								<Typography variant="body2" color="text.secondary">
-									{scope === 'SCENE'
-										? 'No reviews for this scene yet. Run one to review it.'
-										: 'No reviews yet. Run one to see recommendations.'}
-								</Typography>
-								{scope === 'SCENE' && reviews.length > 0 && (
-									<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-										This chapter has other reviews — select the chapter in the nav to see them.
-									</Typography>
-								)}
-							</>
-						) : detailLoading ? (
-							<Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
-						) : !isAggregateMode && singleDetail?.status === 'FAILED' ? (
-							<Alert severity="error">{singleDetail.errorMessage ?? 'The review failed.'}</Alert>
-						) : !isAggregateMode && singleDetail?.status !== 'COMPLETED' ? (
-							<Typography variant="body2" color="text.secondary">Review in progress…</Typography>
-						) : !anyCompleted ? (
-							<Typography variant="body2" color="text.secondary">No completed reviews yet.</Typography>
-						) : visibleRecs.length === 0 ? (
-							<Alert severity="success">All recommendations have been handled.</Alert>
-						) : (
-							visibleRecs.map(rec => (
-								<Box key={`${rec.id}:${rec._reviewId}`}>
-									{/* Origin chip in aggregate mode */}
-									{isAggregateMode && rec._review && (
-										<Chip
-											size="small"
-											variant="outlined"
-											label={originLabel(rec._review, scenes)}
-											sx={{ mb: 0.5, maxWidth: '100%', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
-										/>
-									)}
-									<ReviewCard
-										rec={rec}
-										onSetStatus={handleSetStatus}
-										onPromote={handlePromote}
-										promoting={promotingId === rec.id}
-										skipDeleteConfirm={skipDeleteConfirm}
-										setSkipDeleteConfirm={persistSkipDeleteConfirm}
-										onHighlight={handleHighlight}
-									/>
-								</Box>
-							))
-						)}
+						<Box sx={{ mt: 1.5 }}>
+							{tab === 'ACTIVE' && renderFindings(activeRecs, 'Nothing active — the queue is clear.')}
+							{tab === 'RESOLVED' && renderFindings(resolvedRecs, 'No resolved findings yet.')}
+							{tab === 'HISTORY' && renderHistory()}
+						</Box>
 					</>
 				)}
 			</Box>

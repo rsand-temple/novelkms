@@ -225,7 +225,7 @@ export default function AiReviewDialog({ open, onClose, chapterId, chapterLabel,
 									<Alert severity="success">No notes — the model had no substantive recommendations on this chapter.</Alert>
 								) : (
 									detail.recommendations.map(rec => {
-										const value = rec.status === 'ACCEPTED' ? 'ACCEPTED' : rec.status === 'REJECTED' ? 'REJECTED' : null
+										const value = rec.status === 'DONE' ? 'DONE' : rec.status === 'DISMISSED' ? 'DISMISSED' : null
 										return (
 											<Box key={rec.id} sx={{ mb: 1.5, pb: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
 												<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
@@ -245,8 +245,8 @@ export default function AiReviewDialog({ open, onClose, chapterId, chapterLabel,
 													exclusive size="small" value={value}
 													onChange={(_e, val) => handleSetStatus(rec, val)}
 												>
-													<ToggleButton value="ACCEPTED" color="success">Accept</ToggleButton>
-													<ToggleButton value="REJECTED" color="error">Reject</ToggleButton>
+													<ToggleButton value="DONE" color="success">Done</ToggleButton>
+													<ToggleButton value="DISMISSED" color="error">Dismiss</ToggleButton>
 												</ToggleButtonGroup>
 											</Box>
 										)

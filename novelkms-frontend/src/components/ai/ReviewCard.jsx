@@ -7,15 +7,11 @@ import {
 	DialogActions,
 	DialogContent,
 	DialogTitle,
-	Checkbox,
-	FormControlLabel,
 	IconButton,
 	Menu,
 	MenuItem,
 	Paper,
 	TextField,
-	ToggleButton,
-	ToggleButtonGroup,
 	Tooltip,
 	Typography,
 } from '@mui/material'
@@ -24,26 +20,34 @@ import {
 	codexLabel,
 	defaultTitle,
 	normalizeCategory,
+	normalizeStatus,
 	recommendationToText,
 	priorityChipStyles,
+	statusMeta,
+	STATUS,
 } from './recommendationUtils'
 
 /**
  * ReviewCard — one AI recommendation in the editor review rail.
  *
- * Face actions: Accept / Reject / Defer (FUTURE) / Copy note.
- * Overflow (⋯) menu: Add to Codex…, Delete.
+ * Lifecycle is bug-tracker style; the face actions depend on the finding's
+ * current status:
  *
- * Promote and Delete each open a confirm/edit dialog. Delete honors the
- * "don't ask again" preference passed down from the list.
+ *   OPEN      → [Mark Done] [Dismiss] [Defer]
+ *   DEFERRED  → [Mark Done] [Dismiss] [Reopen]
+ *   DONE      → [Reopen]
+ *   DISMISSED → [Reopen]
+ *   PROMOTED  → (inert — promoted to Codex, no lifecycle actions)
+ *
+ * Overflow (⋯) menu: Add to Codex…, Copy note. There is no per-finding hard
+ * delete — Dismiss covers "make it go away," and whole-review deletion goes
+ * through the History tab (Trash).
  *
  * Props:
  *   rec                  recommendation record
- *   onSetStatus(rec, s)  set lifecycle status (ACCEPTED|REJECTED|FUTURE|DELETED|OPEN)
+ *   onSetStatus(rec, s)  set lifecycle status (OPEN|DONE|DISMISSED|DEFERRED)
  *   onPromote(rec, cat, title)  promote to codex
  *   promoting            boolean — this card's promote is in flight
- *   skipDeleteConfirm    boolean — suppress the delete confirm dialog
- *   setSkipDeleteConfirm fn(bool) — persist the suppression preference
  *   onHighlight(anchorText) — scroll the editor to the quoted passage
  */
 export default function ReviewCard({
@@ -51,8 +55,6 @@ export default function ReviewCard({
 	onSetStatus,
 	onPromote,
 	promoting,
-	skipDeleteConfirm,
-	setSkipDeleteConfirm,
 	onHighlight,
 }) {
 	const initialCategory = useMemo(() => normalizeCategory(rec.codexCategory), [rec.codexCategory])
@@ -60,18 +62,21 @@ export default function ReviewCard({
 	const [menuAnchor, setMenuAnchor] = useState(null)
 	const menuOpen = Boolean(menuAnchor)
 	const [addOpen, setAddOpen] = useState(false)
-	const [deleteOpen, setDeleteOpen] = useState(false)
 	const [draftTitle, setDraftTitle] = useState(() => defaultTitle(rec))
 	const [draftCategory, setDraftCategory] = useState(initialCategory)
-	const [squelchDelete, setSquelchDelete] = useState(skipDeleteConfirm)
 	const [copied, setCopied] = useState(false)
 
-	const status = (rec.status ?? 'OPEN').toUpperCase()
-	const statusValue =
-		status === 'ACCEPTED' || status === 'REJECTED' || status === 'FUTURE' ? status : null
+	const status = normalizeStatus(rec.status)
+	const meta = statusMeta(status)
 
-	const deleteDisabled = status === 'ACCEPTED' || status === 'FUTURE'
-	const addDisabled = status === 'REJECTED'
+	// State-aware lifecycle actions.
+	const showDone = status === STATUS.OPEN || status === STATUS.DEFERRED
+	const showDismiss = status === STATUS.OPEN || status === STATUS.DEFERRED
+	const showDefer = status === STATUS.OPEN
+	const showReopen = status !== STATUS.OPEN && status !== STATUS.PROMOTED
+
+	// Promotion is meaningless once dismissed or already promoted.
+	const addDisabled = status === STATUS.DISMISSED || status === STATUS.PROMOTED
 
 	const closeMenu = () => setMenuAnchor(null)
 
@@ -88,24 +93,8 @@ export default function ReviewCard({
 		onPromote(rec, draftCategory, title)
 	}
 
-	const requestDelete = () => {
-		closeMenu()
-		if (deleteDisabled) return
-		if (skipDeleteConfirm) {
-			onSetStatus(rec, 'DELETED')
-			return
-		}
-		setSquelchDelete(skipDeleteConfirm)
-		setDeleteOpen(true)
-	}
-
-	const confirmDelete = () => {
-		if (squelchDelete) setSkipDeleteConfirm(true)
-		setDeleteOpen(false)
-		onSetStatus(rec, 'DELETED')
-	}
-
 	const copyNote = async () => {
+		closeMenu()
 		try {
 			await navigator.clipboard.writeText(recommendationToText(rec))
 			setCopied(true)
@@ -127,8 +116,11 @@ export default function ReviewCard({
 						sx={priorityChipStyles(rec.severity)}
 					/>
 				}
-				{status === 'FUTURE' && <Chip label="Future" size="small" color="secondary" variant="outlined" />}
+				{status !== STATUS.OPEN && (
+					<Chip label={meta.label} size="small" color={meta.color} variant="outlined" />
+				)}
 				<Box sx={{ flexGrow: 1 }} />
+				{copied && <Typography variant="caption" color="text.secondary">Copied</Typography>}
 				<Tooltip title="More actions">
 					<IconButton
 						size="small"
@@ -166,34 +158,36 @@ export default function ReviewCard({
 				</Typography>
 			)}
 
-			<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-				<ToggleButtonGroup
-					exclusive
-					size="small"
-					value={statusValue}
-					onChange={(_e, val) => { if (val) onSetStatus(rec, val) }}
-				>
-					<ToggleButton value="ACCEPTED" color="success">Accept</ToggleButton>
-					<ToggleButton value="REJECTED" color="error">Reject</ToggleButton>
-					<ToggleButton value="FUTURE" color="secondary">Defer</ToggleButton>
-				</ToggleButtonGroup>
-
-				<Button size="small" onClick={copyNote}>
-					{copied ? 'Copied' : 'Copy note'}
-				</Button>
-			</Box>
+			{(showDone || showDismiss || showDefer || showReopen) && (
+				<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+					{showDone && (
+						<Button size="small" color="success" onClick={() => onSetStatus(rec, STATUS.DONE)}>
+							Mark Done
+						</Button>
+					)}
+					{showDismiss && (
+						<Button size="small" color="inherit" onClick={() => onSetStatus(rec, STATUS.DISMISSED)}>
+							Dismiss
+						</Button>
+					)}
+					{showDefer && (
+						<Button size="small" color="secondary" onClick={() => onSetStatus(rec, STATUS.DEFERRED)}>
+							Defer
+						</Button>
+					)}
+					{showReopen && (
+						<Button size="small" onClick={() => onSetStatus(rec, STATUS.OPEN)}>
+							Reopen
+						</Button>
+					)}
+				</Box>
+			)}
 
 			<Menu anchorEl={menuAnchor} open={menuOpen} onClose={closeMenu}>
 				<MenuItem disabled={addDisabled || promoting} onClick={openAddDialog}>
 					{promoting ? 'Adding…' : 'Add to Codex…'}
 				</MenuItem>
-				<MenuItem
-					disabled={deleteDisabled}
-					onClick={requestDelete}
-					sx={{ color: 'error.main' }}
-				>
-					Delete
-				</MenuItem>
+				<MenuItem onClick={copyNote}>Copy note</MenuItem>
 			</Menu>
 
 			<Dialog open={addOpen} onClose={() => setAddOpen(false)} fullWidth maxWidth="sm">
@@ -236,28 +230,6 @@ export default function ReviewCard({
 					<Button variant="contained" onClick={confirmAdd} disabled={promoting}>
 						Add to {codexLabel(draftCategory)}
 					</Button>
-				</DialogActions>
-			</Dialog>
-
-			<Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
-				<DialogTitle>Delete this AI finding?</DialogTitle>
-				<DialogContent>
-					<Typography variant="body2" sx={{ mb: 1.5 }}>
-						This will remove the finding from the working review list. The review history remains preserved.
-					</Typography>
-					<FormControlLabel
-						control={
-							<Checkbox
-								checked={squelchDelete}
-								onChange={(e) => setSquelchDelete(e.target.checked)}
-							/>
-						}
-						label="Don’t ask again for future deletes"
-					/>
-				</DialogContent>
-				<DialogActions>
-					<Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
-					<Button color="error" variant="contained" onClick={confirmDelete}>Delete</Button>
 				</DialogActions>
 			</Dialog>
 		</Paper>

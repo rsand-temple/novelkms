@@ -45,9 +45,9 @@ public class AiReviewResource {
 
     private static final Set<String> VALID_STATUSES = Set.of(
             "OPEN",
-            "ACCEPTED",
-            "REJECTED",
-            "FUTURE",
+            "DONE",
+            "DISMISSED",
+            "DEFERRED",
             "DELETED",
             "PROMOTED");
 
@@ -181,7 +181,7 @@ public class AiReviewResource {
         String status = body.status.trim().toUpperCase();
         if (!VALID_STATUSES.contains(status)) {
             return error(400, "invalid_status",
-                    "status must be OPEN, ACCEPTED, REJECTED, FUTURE, DELETED, or PROMOTED.");
+                    "status must be OPEN, DONE, DISMISSED, DEFERRED, DELETED, or PROMOTED.");
         }
         return run(() -> {
             UUID userId = CurrentUser.id(request);

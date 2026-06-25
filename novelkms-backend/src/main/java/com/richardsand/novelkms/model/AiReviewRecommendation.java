@@ -13,9 +13,9 @@ import lombok.NoArgsConstructor;
 /**
  * A single editorial recommendation produced by an AI review. Recommendations
  * are atomic and independently actionable; each carries a lifecycle status
- * (OPEN -> ACCEPTED | REJECTED | FUTURE | DELETED | PROMOTED) so the author
- * can track which suggestions were applied without the manuscript ever being
- * modified automatically.
+ * (OPEN -> DONE | DISMISSED | DEFERRED | PROMOTED, plus DELETED for legacy /
+ * admin cleanup) so the author can track which suggestions were handled
+ * without the manuscript ever being modified automatically.
  */
 @Getter
 @Builder
@@ -48,7 +48,7 @@ public class AiReviewRecommendation {
     @JsonProperty
     private String recommendation;
 
-    /** OPEN | ACCEPTED | REJECTED | FUTURE | DELETED | PROMOTED. */
+    /** OPEN | DONE | DISMISSED | DEFERRED | PROMOTED | DELETED. */
     @JsonProperty
     private String status;
 

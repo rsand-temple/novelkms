@@ -22,8 +22,59 @@ export const CATEGORY_OPTIONS = [
 	{ key: 'NOTES', label: 'Notes' },
 ]
 
-// Statuses that should never appear in the active working list.
-export const HIDDEN_STATUSES = new Set(['DELETED', 'PROMOTED'])
+// ── Recommendation lifecycle ────────────────────────────────────────────────
+// Bug-tracker style: the author's goal is to clear the Active queue.
+//
+//   OPEN       new / undecided
+//   DEFERRED   valid, but not now (stays Active — unfinished by definition)
+//   DONE       acted on, or the manuscript now addresses it
+//   DISMISSED  disagree / false positive / stylistic / not applicable
+//   PROMOTED   converted into a Codex entry (inert; auditable)
+//   DELETED    legacy / admin cleanup only; never set from the finding UI
+//
+// Tabs:  Active = OPEN + DEFERRED      Resolved = DONE + DISMISSED + PROMOTED
+
+export const STATUS = {
+	OPEN: 'OPEN',
+	DEFERRED: 'DEFERRED',
+	DONE: 'DONE',
+	DISMISSED: 'DISMISSED',
+	PROMOTED: 'PROMOTED',
+	DELETED: 'DELETED',
+}
+
+export const ACTIVE_STATUSES = new Set([STATUS.OPEN, STATUS.DEFERRED])
+export const RESOLVED_STATUSES = new Set([STATUS.DONE, STATUS.DISMISSED, STATUS.PROMOTED])
+
+// Statuses that should never appear in either working tab (History/admin only).
+export const HIDDEN_STATUSES = new Set([STATUS.DELETED])
+
+export function normalizeStatus(value) {
+	const s = (value ?? '').toUpperCase().trim()
+	return STATUS[s] ? s : STATUS.OPEN
+}
+
+export function isActiveStatus(value) {
+	return ACTIVE_STATUSES.has(normalizeStatus(value))
+}
+
+export function isResolvedStatus(value) {
+	return RESOLVED_STATUSES.has(normalizeStatus(value))
+}
+
+// Short label + chip color for a finding's current status.
+export const STATUS_META = {
+	OPEN: { label: 'Open', color: 'default' },
+	DEFERRED: { label: 'Deferred', color: 'secondary' },
+	DONE: { label: 'Done', color: 'success' },
+	DISMISSED: { label: 'Dismissed', color: 'default' },
+	PROMOTED: { label: 'Promoted', color: 'info' },
+	DELETED: { label: 'Deleted', color: 'default' },
+}
+
+export function statusMeta(value) {
+	return STATUS_META[normalizeStatus(value)] ?? STATUS_META.OPEN
+}
 
 export const priorityChipStyles = (priority) => {
 	switch ((priority || '').toUpperCase()) {
