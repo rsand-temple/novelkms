@@ -2,8 +2,7 @@ import { useState, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
 	Box, Typography, TextField, Divider, CircularProgress,
-	Stack, Chip, Button, Select, MenuItem, FormControl,
-	InputLabel, FormControlLabel, Switch, Checkbox,
+	Stack, Chip, Button, Checkbox, FormControlLabel,
 } from '@mui/material';
 import { useScene, SCENE_KEYS } from '../../hooks/useScenes';
 import { useChapter } from '../../hooks/useChapters';
@@ -20,18 +19,6 @@ import { chaptersApi } from '../../api/chapters';
 import { partsApi } from '../../api/parts';
 import { booksApi } from '../../api/books';
 import client from '../../api/client';
-import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor';
-
-// ── Page size presets ─────────────────────────────────────────────────────────
-
-const PAGE_SIZE_PRESETS = [
-	{ label: 'US Letter (8.5″ × 11″)', value: 'LETTER', width: 8.5, height: 11.0 },
-	{ label: 'A4 (8.27″ × 11.69″)', value: 'A4', width: 8.27, height: 11.69 },
-	{ label: 'Trade Paperback (6″ × 9″)', value: 'TRADE_PB', width: 6.0, height: 9.0 },
-	{ label: 'Mass Market (4.25″ × 6.87″)', value: 'MASS_MARKET', width: 4.25, height: 6.87 },
-	{ label: 'Hardback (6″ × 9″)', value: 'HARDBACK', width: 6.0, height: 9.0 },
-	{ label: 'Custom', value: 'CUSTOM', width: null, height: null },
-]
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
@@ -195,7 +182,7 @@ function PartProperties({ partId, bookId }) {
 
 // ── Book ──────────────────────────────────────────────────────────────────────
 
-function BookForm({ book, bookId, projectId, selectTemplate }) {
+function BookForm({ book, bookId, projectId }) {
 	const qc = useQueryClient();
 
 	// Metadata
@@ -203,16 +190,6 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 	const [subtitle, setSubtitle] = useState(book.subtitle ?? '');
 	const [shortTitle, setShortTitle] = useState(book.shortTitle ?? '');
 	const [notes, setNotes] = useState(book.notes ?? '');
-
-	// Page layout
-	const [pageLayoutEnabled, setPageLayoutEnabled] = useState(book.pageLayoutEnabled ?? false);
-	const [pageSizePreset, setPageSizePreset] = useState(book.pageSizePreset ?? 'LETTER');
-	const [pageWidthIn, setPageWidthIn] = useState(book.pageWidthIn != null ? String(book.pageWidthIn) : '');
-	const [pageHeightIn, setPageHeightIn] = useState(book.pageHeightIn != null ? String(book.pageHeightIn) : '');
-	const [pageMarginTopIn, setPageMarginTopIn] = useState(book.pageMarginTopIn != null ? String(book.pageMarginTopIn) : '1');
-	const [pageMarginBottomIn, setPageMarginBottomIn] = useState(book.pageMarginBottomIn != null ? String(book.pageMarginBottomIn) : '1');
-	const [pageMarginInnerIn, setPageMarginInnerIn] = useState(book.pageMarginInnerIn != null ? String(book.pageMarginInnerIn) : '1.25');
-	const [pageMarginOuterIn, setPageMarginOuterIn] = useState(book.pageMarginOuterIn != null ? String(book.pageMarginOuterIn) : '1');
 
 	const { mutate: save, isPending } = useMutation({
 		mutationFn: (patch) => booksApi.update(bookId, patch),
@@ -247,29 +224,8 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 
 	const imageIsBusy = uploadCoverImage.isPending || deleteCoverImage.isPending;
 
-	// ── Page size preset change ───────────────────────────────────────────────
-
-	function handlePresetChange(val) {
-		setPageSizePreset(val);
-		const preset = PAGE_SIZE_PRESETS.find(p => p.value === val);
-		if (preset?.width != null) {
-			setPageWidthIn(String(preset.width));
-			setPageHeightIn(String(preset.height));
-		}
-	}
-
 	function handleSave() {
-		save({
-			title, subtitle, shortTitle, notes,
-			pageLayoutEnabled,
-			pageSizePreset,
-			pageWidthIn: pageWidthIn ? parseFloat(pageWidthIn) : null,
-			pageHeightIn: pageHeightIn ? parseFloat(pageHeightIn) : null,
-			pageMarginTopIn: pageMarginTopIn ? parseFloat(pageMarginTopIn) : null,
-			pageMarginBottomIn: pageMarginBottomIn ? parseFloat(pageMarginBottomIn) : null,
-			pageMarginInnerIn: pageMarginInnerIn ? parseFloat(pageMarginInnerIn) : null,
-			pageMarginOuterIn: pageMarginOuterIn ? parseFloat(pageMarginOuterIn) : null,
-		});
+		save({ title, subtitle, shortTitle, notes });
 	}
 
 	return (
@@ -347,125 +303,20 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 				)}
 			</Stack>
 
-			{/* ── Page Layout ───────────────────────────────────────────────── */}
-			<Divider />
-			<Typography variant="caption" color="text.secondary"
-				sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-				Page Layout
-			</Typography>
-
-			<FormControlLabel
-				control={
-					<Switch
-						size="small"
-						checked={pageLayoutEnabled}
-						onChange={(e) => setPageLayoutEnabled(e.target.checked)}
-					/>
-				}
-				label={
-					<Typography variant="body2">
-						{pageLayoutEnabled ? 'Enabled for preview and export' : 'Disabled'}
-					</Typography>
-				}
-			/>
-
-			<FormControl size="small" fullWidth>
-				<InputLabel>Page Size</InputLabel>
-				<Select
-					value={pageSizePreset}
-					label="Page Size"
-					onChange={(e) => handlePresetChange(e.target.value)}
-				>
-					{PAGE_SIZE_PRESETS.map(p => (
-						<MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
-					))}
-				</Select>
-			</FormControl>
-
-			{pageSizePreset === 'CUSTOM' && (
-				<Stack direction="row" spacing={1}>
-					<TextField
-						label="Width (in)" size="small" type="number" fullWidth
-						value={pageWidthIn} onChange={(e) => setPageWidthIn(e.target.value)}
-						inputProps={{ step: 0.125, min: 3, max: 12 }}
-					/>
-					<TextField
-						label="Height (in)" size="small" type="number" fullWidth
-						value={pageHeightIn} onChange={(e) => setPageHeightIn(e.target.value)}
-						inputProps={{ step: 0.125, min: 4, max: 18 }}
-					/>
-				</Stack>
-			)}
-
-			<Typography variant="caption" color="text.secondary">Margins (inches)</Typography>
-			<Stack direction="row" spacing={1}>
-				<TextField
-					label="Top" size="small" type="number" fullWidth
-					value={pageMarginTopIn} onChange={(e) => setPageMarginTopIn(e.target.value)}
-					inputProps={{ step: 0.125, min: 0.25, max: 3 }}
-				/>
-				<TextField
-					label="Bottom" size="small" type="number" fullWidth
-					value={pageMarginBottomIn} onChange={(e) => setPageMarginBottomIn(e.target.value)}
-					inputProps={{ step: 0.125, min: 0.25, max: 3 }}
-				/>
-			</Stack>
-			<Stack direction="row" spacing={1}>
-				<TextField
-					label="Inner" size="small" type="number" fullWidth
-					value={pageMarginInnerIn} onChange={(e) => setPageMarginInnerIn(e.target.value)}
-					inputProps={{ step: 0.125, min: 0.25, max: 3 }}
-					helperText="Binding side"
-				/>
-				<TextField
-					label="Outer" size="small" type="number" fullWidth
-					value={pageMarginOuterIn} onChange={(e) => setPageMarginOuterIn(e.target.value)}
-					inputProps={{ step: 0.125, min: 0.25, max: 3 }}
-				/>
-			</Stack>
-
 			<Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
 				<Button size="small" variant="contained" onClick={handleSave} disabled={isPending}>
 					Save
 				</Button>
 			</Box>
-
-			{/* ── Page Templates ────────────────────────────────────────────── */}
-			<Divider />
-			<Typography variant="caption" color="text.secondary"
-				sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-				Page Templates
-			</Typography>
-			<Typography variant="caption" color="text.secondary">
-				Cover and part pages for this book. Editing creates a per-book override of the global template.
-			</Typography>
-			<Stack direction="row" spacing={1}>
-				<Button size="small" variant="outlined"
-					onClick={() => selectTemplate?.({ type: 'cover', scope: 'book', bookId })}>
-					Cover Page
-				</Button>
-				<Button size="small" variant="outlined"
-					onClick={() => selectTemplate?.({ type: 'part', scope: 'book', bookId })}>
-					Part Page
-				</Button>
-			</Stack>
-
-			{/* ── AI Review Instructions ────────────────────────────────────── */}
-			<Divider />
-			<Typography variant="caption" color="text.secondary"
-				sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-				AI Review Instructions
-			</Typography>
-			<AiFormInstructionsEditor scope="book" id={bookId} />
 		</Stack>
 	);
 }
 
-function BookProperties({ bookId, projectId, selectTemplate }) {
+function BookProperties({ bookId, projectId }) {
 	const { data: book, isLoading } = useBook(bookId);
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!book) return null;
-	return <BookForm key={`${book.id}:${book.title ?? ''}`} book={book} bookId={bookId} projectId={projectId} selectTemplate={selectTemplate} />;
+	return <BookForm key={`${book.id}:${book.title ?? ''}`} book={book} bookId={bookId} projectId={projectId} />;
 }
 
 // ── Project ───────────────────────────────────────────────────────────────────
@@ -556,14 +407,6 @@ function ProjectForm({ project, projectId }) {
 					Save
 				</Button>
 			</Box>
-
-			{/* ── AI Review Instructions ────────────────────────────────────── */}
-			<Divider />
-			<Typography variant="caption" color="text.secondary"
-				sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-				AI Review Instructions
-			</Typography>
-			<AiFormInstructionsEditor scope="project" id={projectId} />
 		</Stack>
 	)
 }
@@ -650,7 +493,7 @@ function TemplateProperties({ selection, setSelection }) {
 
 // ── Root panel ────────────────────────────────────────────────────────────────
 
-export default function PropertiesPanel({ selection, setSelection, selectTemplate }) {
+export default function PropertiesPanel({ selection, setSelection }) {
 	const { sceneId, chapterId, partId, bookId, projectId, templateType } = selection ?? {};
 
 	// Template mode takes over the panel entirely.
@@ -679,7 +522,7 @@ export default function PropertiesPanel({ selection, setSelection, selectTemplat
 			{partId && !chapterId && <PartProperties partId={partId} bookId={bookId} />}
 			{/* Book properties: only when book is the deepest selection */}
 			{bookId && !partId && !chapterId && !sceneId && (
-				<BookProperties bookId={bookId} projectId={projectId} selectTemplate={selectTemplate} />
+				<BookProperties bookId={bookId} projectId={projectId} />
 			)}
 			{/* Project properties: only when project is the deepest selection */}
 			{projectId && !bookId && !partId && !chapterId && !sceneId && (
