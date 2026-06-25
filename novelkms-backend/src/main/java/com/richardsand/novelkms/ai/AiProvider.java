@@ -20,4 +20,11 @@ public interface AiProvider {
 
     /** Executes a review synchronously. */
     ReviewResult review(ReviewRequest request) throws AiProviderException;
+
+    /**
+     * Generates one chapter's memory document synchronously by filling the
+     * supplied template from the chapter text. Unlike {@link #review}, this
+     * produces a free-text document (no recommendations, no JSON contract).
+     */
+    MemoryResult generateMemory(MemoryRequest request) throws AiProviderException;
 }

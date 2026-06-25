@@ -7,6 +7,7 @@ import DocumentSettingsTab from './DocumentSettingsTab'
 import OtherSettingsTab from './OtherSettingsTab'
 import AiCredentialsPanel from '../ai/AiCredentialsPanel'
 import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor'
+import MemoryTemplateEditor from '../ai/MemoryTemplateEditor'
 
 // Fixed height for the tab body. MUI centers Dialog paper based on its
 // content height, so without a fixed height here the dialog grew/shrank and
@@ -45,6 +46,11 @@ function SettingsContent({ initialTab, projectId }) {
 							Review Instructions
 						</Typography>
 						<AiFormInstructionsEditor scope="global" />
+						<Divider sx={{ my: 3 }} />
+						<Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+							Memory Document Template
+						</Typography>
+						<MemoryTemplateEditor scope="global" />
 					</>
 				)}
 				{tab === 'other' && <OtherSettingsTab />}

@@ -49,7 +49,12 @@ public class OpenAiProvider implements AiProvider {
 
     public static final  String PROVIDER_KEY   = "OPENAI";
     public static final  String DEFAULT_MODEL  = "gpt-5.4";
-    public static final  String PROMPT_VERSION = "chapter-review-v4";
+    // chapter-review-v5: the review prompt can now carry a "story so far" block
+    // (preceding chapters' memory documents) and, later, a reference block. The
+    // JSON output contract is unchanged from v4.
+    public static final  String PROMPT_VERSION = "chapter-review-v5";
+    /** Memory-document generation prompt version (free-text output; no JSON contract). */
+    public static final  String MEMORY_PROMPT_VERSION = "memory-v1";
 
     private static final String ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
@@ -74,12 +79,32 @@ public class OpenAiProvider implements AiProvider {
                 ? DEFAULT_MODEL : request.model().trim();
 
         String body = buildRequestBody(model, request);
+        String content = postForContent(request.apiKey(), body);
+        List<ReviewResult.Recommendation> recs = parseRecommendations(content);
+        return new ReviewResult(recs, content, PROMPT_VERSION);
+    }
 
+    @Override
+    public MemoryResult generateMemory(MemoryRequest request) throws AiProviderException {
+        String model = (request.model() == null || request.model().isBlank())
+                ? DEFAULT_MODEL : request.model().trim();
+
+        String body = buildMemoryRequestBody(model, request);
+        String content = postForContent(request.apiKey(), body);
+        return new MemoryResult(content.strip(), MEMORY_PROMPT_VERSION);
+    }
+
+    /**
+     * Sends a Chat Completions request and returns the assistant message content,
+     * translating transport and non-200 responses into {@link AiProviderException}.
+     * Shared by {@link #review} and {@link #generateMemory}.
+     */
+    private String postForContent(String apiKey, String body) throws AiProviderException {
         HttpRequest httpRequest = HttpRequest.newBuilder()
                 .uri(URI.create(ENDPOINT))
                 .timeout(Duration.ofSeconds(180))
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + request.apiKey())
+                .header("Authorization", "Bearer " + apiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
                 .build();
 
@@ -96,10 +121,7 @@ public class OpenAiProvider implements AiProvider {
         if (response.statusCode() != 200) {
             throw new AiProviderException(extractErrorMessage(response.statusCode(), response.body()));
         }
-
-        String content = extractContent(response.body());
-        List<ReviewResult.Recommendation> recs = parseRecommendations(content);
-        return new ReviewResult(recs, content, PROMPT_VERSION);
+        return extractContent(response.body());
     }
 
     private String buildRequestBody(String model, ReviewRequest request) {
@@ -185,10 +207,62 @@ public class OpenAiProvider implements AiProvider {
                 If you have no substantive notes, return {"recommendations":[]}.""".formatted(unit, categoryList);
     }
 
+    /** Wrapper instruction prepended to the memory template for generation. */
+    private static final String MEMORY_WRAPPER = """
+            You are summarizing one chapter of a novel to build a running memory \
+            document used as continuity context for later editorial review. Read the \
+            chapter text and fill in the template below for this chapter. Output only \
+            the filled-in template, following its headings and structure exactly. Base \
+            every statement strictly on what is present in the chapter text — do not \
+            invent, infer beyond the text, or speculate. Be concise and factual. Where \
+            the template shows a chapter placeholder, use the chapter's label.""";
+
+    private String buildMemoryRequestBody(String model, MemoryRequest request) {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("model", model);
+
+        ArrayNode messages = root.putArray("messages");
+
+        ObjectNode system = messages.addObject();
+        system.put("role", "system");
+        system.put("content", MEMORY_WRAPPER + "\n\nTemplate:\n\n" + nullToBlank(request.template()));
+
+        ObjectNode user = messages.addObject();
+        user.put("role", "user");
+        user.put("content",
+                "Chapter: " + nullToBlank(request.chapterLabel()) + "\n\nChapter text:\n\n"
+                        + nullToBlank(request.chapterText()));
+
+        // Free-text output: no response_format and no token caps (reasoning-model safe).
+        try {
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            // ObjectNode serialization does not realistically fail.
+            throw new IllegalStateException("Failed to build OpenAI memory request body", e);
+        }
+    }
+
     private String userPrompt(ReviewRequest request) {
         String unit = scopeWord(request);
         String heading = capitalize(unit);
         StringBuilder sb = new StringBuilder();
+
+        // Optional context blocks, clearly fenced off as background — not material
+        // to be reviewed. Reference material first, then the running "story so far".
+        if (request.referenceContext() != null && !request.referenceContext().isBlank()) {
+            sb.append("Reference material — established canon and voice the manuscript must respect. ")
+              .append("Use it to judge the ").append(unit).append(", but do not review it:\n\n")
+              .append(request.referenceContext().strip()).append("\n\n")
+              .append("----------------------------------------\n\n");
+        }
+        if (request.priorContext() != null && !request.priorContext().isBlank()) {
+            sb.append("Story so far — memory documents of the preceding chapters, for continuity ")
+              .append("context only. Do not review these summaries:\n\n")
+              .append(request.priorContext().strip()).append("\n\n")
+              .append("----------------------------------------\n\n");
+            sb.append("Review the following ").append(unit).append(".\n\n");
+        }
+
         sb.append(heading).append(": ").append(nullToBlank(request.unitLabel()));
         if (request.subtitle() != null && !request.subtitle().isBlank()) {
             sb.append(" — ").append(request.subtitle().trim());

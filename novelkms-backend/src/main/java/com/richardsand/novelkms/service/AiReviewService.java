@@ -1,6 +1,7 @@
 package com.richardsand.novelkms.service;
 
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,8 @@ import org.slf4j.LoggerFactory;
 
 import com.richardsand.novelkms.ai.AiProvider;
 import com.richardsand.novelkms.ai.AiProviderException;
+import com.richardsand.novelkms.ai.MemoryRequest;
+import com.richardsand.novelkms.ai.MemoryResult;
 import com.richardsand.novelkms.ai.ReviewException;
 import com.richardsand.novelkms.ai.ReviewRequest;
 import com.richardsand.novelkms.ai.ReviewResult;
@@ -23,14 +26,18 @@ import com.richardsand.novelkms.dao.AiFormInstructionsDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
+import com.richardsand.novelkms.dao.ChapterMemoryDao;
 import com.richardsand.novelkms.dao.CodexCategoryDao;
 import com.richardsand.novelkms.dao.CodexDao;
+import com.richardsand.novelkms.dao.MemoryTemplateDao;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.model.AiCredential;
 import com.richardsand.novelkms.model.AiReview;
 import com.richardsand.novelkms.model.AiReviewRecommendation;
 import com.richardsand.novelkms.model.Book;
 import com.richardsand.novelkms.model.Chapter;
+import com.richardsand.novelkms.model.ChapterMemory;
+import com.richardsand.novelkms.model.ChapterMemoryStatus;
 import com.richardsand.novelkms.model.Codex;
 import com.richardsand.novelkms.model.CodexCategory;
 import com.richardsand.novelkms.model.Scene;
@@ -65,6 +72,8 @@ public class AiReviewService {
     private final AiCredentialDao         credentialDao;
     private final AiReviewDao             reviewDao;
     private final AiFormInstructionsDao   formInstructionsDao;
+    private final ChapterMemoryDao        chapterMemoryDao;
+    private final MemoryTemplateDao       memoryTemplateDao;
     private final CodexDao                codexDao;
     private final CodexCategoryDao        codexCategoryDao;
     private final Map<String, AiProvider> providers;
@@ -72,6 +81,7 @@ public class AiReviewService {
     public AiReviewService(ChapterDao chapterDao, SceneDao sceneDao, BookDao bookDao,
             AiCredentialDao credentialDao, AiReviewDao reviewDao,
             AiFormInstructionsDao formInstructionsDao,
+            ChapterMemoryDao chapterMemoryDao, MemoryTemplateDao memoryTemplateDao,
             CodexDao codexDao, CodexCategoryDao codexCategoryDao,
             Map<String, AiProvider> providers) {
         this.chapterDao = chapterDao;
@@ -80,6 +90,8 @@ public class AiReviewService {
         this.credentialDao = credentialDao;
         this.reviewDao = reviewDao;
         this.formInstructionsDao = formInstructionsDao;
+        this.chapterMemoryDao = chapterMemoryDao;
+        this.memoryTemplateDao = memoryTemplateDao;
         this.codexDao = codexDao;
         this.codexCategoryDao = codexCategoryDao;
         this.providers = providers;
@@ -87,7 +99,8 @@ public class AiReviewService {
 
     /** Immutable description of what is being reviewed, resolved before execution. */
     private record ReviewTarget(UUID chapterId, UUID sceneId, UUID bookId,
-                                String scopeWord, String unitLabel, String subtitle, String text) {}
+                                String scopeWord, String unitLabel, String subtitle, String text,
+                                String priorContext, String referenceContext) {}
 
     /**
      * Runs a chapter review and returns the resulting artifact (COMPLETED or
@@ -114,8 +127,10 @@ public class AiReviewService {
                     "This chapter has no text to review yet.");
         }
 
+        String priorContext = assemblePriorContext(bookId, chapterId);
         ReviewTarget target = new ReviewTarget(chapterId, null, bookId,
-                "chapter", chapterLabel(chapter), chapter.getSubtitle(), chapterText);
+                "chapter", chapterLabel(chapter), chapter.getSubtitle(), chapterText,
+                priorContext, null);
         return execute(userId, target, credentialId, modelOverride);
     }
 
@@ -150,7 +165,7 @@ public class AiReviewService {
         }
 
         ReviewTarget target = new ReviewTarget(chapterId, sceneId, bookId,
-                "scene", sceneLabel(scene), null, sceneText);
+                "scene", sceneLabel(scene), null, sceneText, null, null);
         return execute(userId, target, credentialId, modelOverride);
     }
 
@@ -188,7 +203,8 @@ public class AiReviewService {
 
         ReviewRequest request = new ReviewRequest(
                 apiKey, model, target.scopeWord(), target.unitLabel(), target.subtitle(),
-                target.text(), DEFAULT_CATEGORIES, form.instructions());
+                target.text(), DEFAULT_CATEGORIES, form.instructions(),
+                target.priorContext(), target.referenceContext());
 
         try {
             ReviewResult                        result = provider.review(request);
@@ -205,6 +221,151 @@ public class AiReviewService {
         }
 
         return reviewDao.findByIdForUser(reviewId, userId).orElseThrow();
+    }
+
+    // ── Memory documents ──────────────────────────────────────────────────────
+
+    /**
+     * Generates (or regenerates) the memory document for a chapter by filling the
+     * resolved memory template from the chapter's prose, then stores it (one
+     * document per chapter, overwriting). Chapter ownership is enforced upstream
+     * by the tenant filter (chapters/{id}).
+     */
+    public ChapterMemory generateChapterMemory(UUID userId, UUID chapterId, UUID credentialId,
+            String modelOverride) throws SQLException {
+        Chapter chapter = chapterDao.findById(chapterId)
+                .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
+
+        UUID bookId = chapter.getBookId();
+        if (bookId == null) {
+            throw new ReviewException(400, "not_manuscript",
+                    "Memory documents are only available for manuscript chapters.");
+        }
+
+        String chapterText = assembleChapterText(chapterId);
+        if (chapterText.isBlank()) {
+            throw new ReviewException(400, "empty_chapter",
+                    "This chapter has no text to summarize yet.");
+        }
+
+        AiCredential credential = resolveCredential(userId, credentialId);
+        AiProvider   provider   = providers.get(credential.getProvider());
+        if (provider == null) {
+            throw new ReviewException(400, "unsupported_provider",
+                    "Provider " + credential.getProvider() + " is not supported yet.");
+        }
+        String model     = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+        UUID   projectId = resolveProjectId(bookId);
+
+        String template = memoryTemplateDao.resolveForGeneration(userId, projectId, bookId).content();
+
+        String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new ReviewException(409, "no_ai_credential", "Stored API key could not be read.");
+        }
+
+        MemoryRequest req = new MemoryRequest(apiKey, model, chapterLabel(chapter), chapterText, template);
+        try {
+            MemoryResult result = provider.generateMemory(req);
+            chapterMemoryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model);
+        } catch (AiProviderException e) {
+            logger.warn("Memory generation for chapter {} failed: {}", chapterId, e.getMessage());
+            throw new ReviewException(502, "memory_provider_error", e.getMessage());
+        }
+        return chapterMemoryDao.findByChapter(chapterId).orElseThrow();
+    }
+
+    /** Returns the chapter's current memory document, if any. */
+    public Optional<ChapterMemory> getChapterMemory(UUID chapterId) throws SQLException {
+        return chapterMemoryDao.findByChapter(chapterId);
+    }
+
+    /** Saves an author edit to an existing memory document (marks it EDITED). */
+    public ChapterMemory editChapterMemory(UUID chapterId, String content) throws SQLException {
+        if (!chapterMemoryDao.updateEdited(chapterId, content)) {
+            throw new ReviewException(404, "not_found",
+                    "This chapter has no memory document to edit. Generate one first.");
+        }
+        return chapterMemoryDao.findByChapter(chapterId).orElseThrow();
+    }
+
+    /** Clears a chapter's memory document. Returns false if there was none. */
+    public boolean deleteChapterMemory(UUID chapterId) throws SQLException {
+        return chapterMemoryDao.delete(chapterId);
+    }
+
+    /**
+     * Reports the memory-document status of every manuscript chapter in the book,
+     * in linear book order, for the pre-review warning. Book ownership is enforced
+     * upstream by the tenant filter (books/{id}).
+     */
+    public List<ChapterMemoryStatus> bookMemoryStatus(UUID bookId) throws SQLException {
+        List<ChapterMemoryDao.Row> rows = chapterMemoryDao.bookChapterMemory(bookId);
+        List<ChapterMemoryStatus> result = new ArrayList<>();
+        Instant maxEarlierGenerated = null;
+        for (ChapterMemoryDao.Row row : rows) {
+            String state = stateFor(row, maxEarlierGenerated);
+            result.add(new ChapterMemoryStatus(
+                    row.chapterId(), row.chapterNumber(), row.title(),
+                    row.hasDoc(), row.generatedAt(), row.contentEditedAt(),
+                    row.source(), state));
+            if (row.generatedAt() != null
+                    && (maxEarlierGenerated == null || row.generatedAt().isAfter(maxEarlierGenerated))) {
+                maxEarlierGenerated = row.generatedAt();
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Classifies one chapter's memory state given the latest generation time among
+     * the chapters before it in book order. Precedence: MISSING, then STALE_CONTENT
+     * (document older than the chapter's latest scene edit), then OUT_OF_SEQUENCE
+     * (document older than an earlier chapter's — a likely skipped-in-this-pass
+     * gap), else OK.
+     */
+    private String stateFor(ChapterMemoryDao.Row row, Instant maxEarlierGenerated) {
+        if (row.generatedAt() == null) {
+            return ChapterMemoryStatus.MISSING;
+        }
+        if (row.contentEditedAt() != null && row.generatedAt().isBefore(row.contentEditedAt())) {
+            return ChapterMemoryStatus.STALE_CONTENT;
+        }
+        if (maxEarlierGenerated != null && row.generatedAt().isBefore(maxEarlierGenerated)) {
+            return ChapterMemoryStatus.OUT_OF_SEQUENCE;
+        }
+        return ChapterMemoryStatus.OK;
+    }
+
+    /**
+     * Concatenates the memory documents of the chapters preceding the target
+     * chapter (in linear book order) into a single "story so far" block, or null
+     * if there are none. Chapters without a document are skipped.
+     */
+    private String assemblePriorContext(UUID bookId, UUID chapterId) throws SQLException {
+        List<ChapterMemoryDao.Row> rows = chapterMemoryDao.bookChapterMemory(bookId);
+        int targetSeq = Integer.MAX_VALUE;
+        for (ChapterMemoryDao.Row row : rows) {
+            if (row.chapterId().equals(chapterId)) {
+                targetSeq = row.seq();
+                break;
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        for (ChapterMemoryDao.Row row : rows) {
+            if (row.seq() >= targetSeq) continue;
+            if (row.content() == null || row.content().isBlank()) continue;
+            String title = (row.title() == null || row.title().isBlank())
+                    ? "Chapter " + row.chapterNumber()
+                    : row.title().trim();
+            sb.append("=== Chapter ").append(row.chapterNumber()).append(": ").append(title);
+            if (row.generatedAt() != null) {
+                sb.append(" (memory generated ").append(row.generatedAt()).append(")");
+            }
+            sb.append(" ===\n").append(row.content().strip()).append("\n\n");
+        }
+        String result = sb.toString().strip();
+        return result.isEmpty() ? null : result;
     }
 
     /**

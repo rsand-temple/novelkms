@@ -22,6 +22,16 @@ import java.util.List;
  *                         provider. Never null/blank — {@code AiReviewService}
  *                         resolves it (book -&gt; project -&gt; user -&gt; system)
  *                         before building the request.
+ * @param priorContext    optional "story so far" continuity context: the memory
+ *                         documents of the preceding chapters, concatenated in
+ *                         book order. Null/blank for scene reviews, for the first
+ *                         chapter, or when no preceding memory documents exist.
+ *                         The provider presents it as context only — not material
+ *                         to be reviewed.
+ * @param referenceContext optional reference material the manuscript must respect
+ *                         (e.g. pinned Codex canon/voice entries). Forward-prep:
+ *                         currently always null; reserved for the Codex-context
+ *                         increment. The provider emits the block only when present.
  */
 public record ReviewRequest(
         String apiKey,
@@ -31,5 +41,7 @@ public record ReviewRequest(
         String subtitle,
         String text,
         List<String> categories,
-        String formInstructions) {
+        String formInstructions,
+        String priorContext,
+        String referenceContext) {
 }

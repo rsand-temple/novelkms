@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import {
+	Alert,
 	Button,
+	Snackbar,
 	CircularProgress,
 	Dialog,
 	DialogActions,
@@ -20,6 +22,8 @@ import AddIcon from '@mui/icons-material/Add'
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import CloseIcon from '@mui/icons-material/Close'
 
 import AddBookDialog from './dialogs/AddBookDialog'
 import AddChapterDialog from './dialogs/AddChapterDialog'
@@ -30,6 +34,9 @@ import AddCodexEntryDialog from './dialogs/AddCodexEntryDialog'
 import DeleteConfirmDialog from './dialogs/DeleteConfirmDialog'
 import { shouldSkipDeleteConfirm } from '../../utils/deleteConfirmPrefs'
 import ExportDialog from './dialogs/ExportDialog'
+import MemoryDocDialog from '../ai/MemoryDocDialog'
+import PreReviewMemoryDialog from '../ai/PreReviewMemoryDialog'
+import { flaggedPreceding } from '../ai/memoryStatus'
 
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
 import { useChapters, useReorderChapters, useDeleteChapter } from '../../hooks/useChapters'
@@ -41,6 +48,7 @@ import {
 	useDeletePart,
 } from '../../hooks/useParts'
 import { useRunChapterReview, useRunSceneReview } from '../../hooks/useAiReviews'
+import { useGenerateChapterMemory, useChapterMemoryStatus, useDeleteChapterMemory } from '../../hooks/useChapterMemory'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
 import { useReview } from '../../review/ReviewContext'
 
@@ -199,6 +207,23 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		[aiCredentials],
 	)
 	const canRunReview = aiCredentials.length > 0
+
+	// Chapter memory document (nav "Generate / Edit memory document").
+	const { mutate: generateMemory, isPending: generatingMemory } = useGenerateChapterMemory()
+	const [memoryDialogOpen, setMemoryDialogOpen] = useState(false)
+	const [memoryNode, setMemoryNode] = useState(null)
+	const [memorySnack, setMemorySnack] = useState(null) // { severity, message } | null
+	const { data: chapterMemStatus = [] } = useChapterMemoryStatus(
+		menuNode?.type === 'chapter' ? menuNode?.bookId : null,
+	)
+	const { mutate: clearMemory } = useDeleteChapterMemory()
+	const [gateOpen, setGateOpen] = useState(false)
+	const [gateNode, setGateNode] = useState(null)
+	const [gateFlagged, setGateFlagged] = useState([])
+	const [clearOpen, setClearOpen] = useState(false)
+	const [clearNode, setClearNode] = useState(null)
+	const menuChapterState = chapterMemStatus.find(s => s.chapterId === menuNode?.id)?.state
+	const menuChapterHasDoc = !!menuChapterState && menuChapterState !== 'MISSING'
 	const isManuscriptNode = !!menuNode?.bookId
 	const reviewNodeType = menuNode?.type  // 'chapter' or 'scene'
 	const reviewLabel =
@@ -227,6 +252,55 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				{ onSuccess, onError },
 			)
 		}
+	}
+
+	const doGenerateMemory = (node) => {
+		generateMemory(
+			{ chapterId: node.id, bookId: node.bookId, credentialId: defaultCredentialId },
+			{
+				onSuccess: () => setMemorySnack({ severity: 'success', message: `Memory document generated for “${node.title?.trim() || 'chapter'}”.` }),
+				onError: (e) => setMemorySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.' }),
+			},
+		)
+	}
+
+	// Inline generation is gated like a chapter review: if an earlier chapter's
+	// memory document is missing or behind, warn before generating this one.
+	const handleGenerateMemory = () => {
+		const node = menuNode
+		if (!node) return
+		closeMenu()
+		const flagged = flaggedPreceding(chapterMemStatus, node.id)
+		if (flagged.length > 0) {
+			setGateNode(node)
+			setGateFlagged(flagged)
+			setGateOpen(true)
+			return
+		}
+		doGenerateMemory(node)
+	}
+
+	const openClearConfirm = () => {
+		setClearNode(menuNode)
+		setClearOpen(true)
+	}
+
+	const handleConfirmClear = () => {
+		const node = clearNode
+		setClearOpen(false)
+		if (!node) return
+		clearMemory(
+			{ chapterId: node.id, bookId: node.bookId },
+			{
+				onSuccess: () => setMemorySnack({ severity: 'success', message: `Memory document cleared for “${node.title?.trim() || 'chapter'}”.` }),
+				onError: (e) => setMemorySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Clear failed.' }),
+			},
+		)
+	}
+
+	const openMemoryDialog = () => {
+		setMemoryNode(menuNode)
+		setMemoryDialogOpen(true)
 	}
 
 	// ── Public API ────────────────────────────────────────────────────────────
@@ -513,19 +587,49 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
-				{/* AI Review — chapter and scene manuscript nodes only */}
+				{/* AI Review — chapter and scene manuscript nodes only. Flat MenuItems
+				    (no Fragment children): MUI's Menu indexes direct children, and adjacent
+				    fragments can cross-wire a click to the wrong item. */}
+				{isManuscriptNode && (reviewNodeType === 'chapter' || reviewNodeType === 'scene') && <Divider />}
 				{isManuscriptNode && (reviewNodeType === 'chapter' || reviewNodeType === 'scene') && (
-					<>
-						<Divider />
-						<MenuItem
-							dense
-							disabled={!canRunReview}
-							onClick={() => { closeMenu(); setReviewError(null); setReviewDialogOpen(true) }}
-						>
-							<ListItemIcon><CheckCircleOutlinedIcon fontSize="small" /></ListItemIcon>
-							<ListItemText>AI Review</ListItemText>
-						</MenuItem>
-					</>
+					<MenuItem
+						dense
+						disabled={!canRunReview}
+						onClick={() => { closeMenu(); setReviewError(null); setReviewDialogOpen(true) }}
+					>
+						<ListItemIcon><CheckCircleOutlinedIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>AI Review</ListItemText>
+					</MenuItem>
+				)}
+
+				{/* Chapter memory document — chapter manuscript nodes only */}
+				{isManuscriptNode && reviewNodeType === 'chapter' && (
+					<MenuItem
+						dense
+						disabled={!canRunReview || generatingMemory}
+						onClick={handleGenerateMemory}
+					>
+						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Generate memory document</ListItemText>
+					</MenuItem>
+				)}
+				{isManuscriptNode && reviewNodeType === 'chapter' && (
+					<MenuItem
+						dense
+						onClick={() => { closeMenu(); openMemoryDialog() }}
+					>
+						<ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Edit memory document…</ListItemText>
+					</MenuItem>
+				)}
+				{isManuscriptNode && reviewNodeType === 'chapter' && menuChapterHasDoc && (
+					<MenuItem
+						dense
+						onClick={() => { closeMenu(); openClearConfirm() }}
+					>
+						<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Clear memory document</ListItemText>
+					</MenuItem>
 				)}
 
 				{/* Delete — not available for project */}
@@ -630,6 +734,56 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					>
 						{runningReview ? 'Reviewing…' : 'Review'}
 					</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* ── Chapter memory document ────────────────────────────────────── */}
+			<MemoryDocDialog
+				open={memoryDialogOpen}
+				onClose={() => setMemoryDialogOpen(false)}
+				chapterId={memoryNode?.id}
+				bookId={memoryNode?.bookId}
+				title={memoryNode?.title}
+			/>
+
+			<Snackbar
+				open={!!memorySnack}
+				autoHideDuration={4000}
+				onClose={() => setMemorySnack(null)}
+				anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+			>
+				{memorySnack ? (
+					<Alert severity={memorySnack.severity} onClose={() => setMemorySnack(null)} sx={{ width: '100%' }}>
+						{memorySnack.message}
+					</Alert>
+				) : undefined}
+			</Snackbar>
+
+			{/* Pre-generation memory gate (earlier chapters missing/behind) */}
+			<PreReviewMemoryDialog
+				open={gateOpen}
+				onCancel={() => setGateOpen(false)}
+				onProceed={() => { setGateOpen(false); if (gateNode) doGenerateMemory(gateNode) }}
+				flagged={gateFlagged}
+				bookId={gateNode?.bookId}
+				credentialId={defaultCredentialId}
+				title="Earlier chapters’ memory is missing or out of date"
+				intro="Memory documents read best as a complete chain in book order."
+				proceedLabel="Generate anyway"
+				regenerateLabel="Regenerate earlier first"
+			/>
+
+			{/* Clear memory document confirmation */}
+			<Dialog open={clearOpen} onClose={() => setClearOpen(false)} maxWidth="xs" fullWidth>
+				<DialogTitle>Clear memory document</DialogTitle>
+				<DialogContent>
+					<Typography variant="body2">
+						Delete the memory document for {clearNode?.title?.trim() ? `“${clearNode.title.trim()}”` : 'this chapter'}? You can generate a new one at any time.
+					</Typography>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setClearOpen(false)}>Cancel</Button>
+					<Button color="error" variant="contained" onClick={handleConfirmClear}>Clear</Button>
 				</DialogActions>
 			</Dialog>
 		</NavContextMenuContext.Provider>

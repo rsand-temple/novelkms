@@ -30,6 +30,7 @@ import {
 	useDeleteReview,
 	AI_REVIEW_KEYS,
 } from '../../hooks/useAiReviews'
+import { useChapterMemoryStatus } from '../../hooks/useChapterMemory'
 import { aiApi } from '../../api/ai'
 import { useScenes } from '../../hooks/useScenes'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
@@ -43,6 +44,9 @@ import {
 	reviewScope,
 } from './recommendationUtils'
 import ReviewCard from './ReviewCard'
+import ChapterMemoryEditor from './ChapterMemoryEditor'
+import PreReviewMemoryDialog from './PreReviewMemoryDialog'
+import { isFlagged } from './memoryStatus'
 
 const RAIL_WIDTH = 332
 const RAIL_COLLAPSED_WIDTH = 44
@@ -83,7 +87,7 @@ function formatTime(iso) {
  *   sceneId   {string|null}   the selected scene, when one is selected
  *   editor    TipTap editor instance (for scroll-to-passage highlights)
  */
-export default function ReviewRail({ chapterId, sceneId, editor }) {
+export default function ReviewRail({ chapterId, sceneId, bookId, editor }) {
 	const review = useReview()
 
 	const scope = sceneId ? 'SCENE' : 'CHAPTER'
@@ -96,11 +100,22 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 	const [credentialId, setCredentialId] = useState(null)
 	const [runError, setRunError] = useState(null)
 	const [promotingId, setPromotingId] = useState(null)
-	const [tab, setTab] = useState('ACTIVE') // ACTIVE | RESOLVED | HISTORY
+	const [tab, setTab] = useState('ACTIVE') // ACTIVE | RESOLVED | HISTORY | MEMORY
+	const [memWarnOpen, setMemWarnOpen] = useState(false)
 
 	const { data: credentials = [] } = useAiCredentials()
 	const { data: scenes = [] } = useScenes(chapterId)
 	const { data: reviews = [], isLoading: loadingReviews } = useChapterReviews(chapterId)
+
+	// Per-chapter memory status for the book — used to warn before a chapter
+	// review when a PRECEDING chapter's memory document is missing or behind.
+	const { data: memStatus = [] } = useChapterMemoryStatus(bookId, !!bookId)
+	const flaggedPreceding = useMemo(() => {
+		if (scope !== 'CHAPTER' || memStatus.length === 0) return []
+		const idx = memStatus.findIndex(s => s.chapterId === chapterId)
+		if (idx <= 0) return []
+		return memStatus.slice(0, idx).filter(s => isFlagged(s.state))
+	}, [memStatus, scope, chapterId])
 
 	// ── Scope-filtered reviews ──────────────────────────────────────────────
 	const filteredReviews = useMemo(() => {
@@ -196,15 +211,25 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 	const anyCompleted = completedReviews.length > 0
 
 	// ── Handlers ────────────────────────────────────────────────────────────
+	const onRunSuccess = (r) => { setExplicit({ id: r.id, scopeKey }); setTab('ACTIVE') }
+	const onRunError = (e) => setRunError(errMessage(e))
+
+	const doRunChapter = () => {
+		setRunError(null)
+		runChapter({ chapterId, credentialId: effectiveCredId, model: null },
+			{ onSuccess: onRunSuccess, onError: onRunError })
+	}
+
 	const handleRun = () => {
 		setRunError(null)
-		const onSuccess = (r) => { setExplicit({ id: r.id, scopeKey }); setTab('ACTIVE') }
-		const onError = (e) => setRunError(errMessage(e))
 		if (scope === 'SCENE') {
-			runScene({ sceneId, credentialId: effectiveCredId, model: null }, { onSuccess, onError })
-		} else {
-			runChapter({ chapterId, credentialId: effectiveCredId, model: null }, { onSuccess, onError })
+			runScene({ sceneId, credentialId: effectiveCredId, model: null },
+				{ onSuccess: onRunSuccess, onError: onRunError })
+			return
 		}
+		// Chapter scope: warn first if a preceding chapter's memory is missing/stale.
+		if (flaggedPreceding.length > 0) { setMemWarnOpen(true); return }
+		doRunChapter()
 	}
 
 	const handleSetStatus = (rec, value) => {
@@ -492,16 +517,34 @@ export default function ReviewRail({ chapterId, sceneId, editor }) {
 							<Tab value="ACTIVE" label={`Active (${activeRecs.length})`} />
 							<Tab value="RESOLVED" label={`Resolved (${resolvedRecs.length})`} />
 							<Tab value="HISTORY" label="History" />
+							<Tab value="MEMORY" label="Memory" />
 						</Tabs>
 
 						<Box sx={{ mt: 1.5 }}>
 							{tab === 'ACTIVE' && renderFindings(activeRecs, 'Nothing active — the queue is clear.')}
 							{tab === 'RESOLVED' && renderFindings(resolvedRecs, 'No resolved findings yet.')}
 							{tab === 'HISTORY' && renderHistory()}
+							{tab === 'MEMORY' && (
+								<ChapterMemoryEditor
+									chapterId={chapterId}
+									bookId={bookId}
+									credentialId={effectiveCredId}
+									sceneScopeNote={scope === 'SCENE'}
+								/>
+							)}
 						</Box>
 					</>
 				)}
 			</Box>
+
+			<PreReviewMemoryDialog
+				open={memWarnOpen}
+				onCancel={() => setMemWarnOpen(false)}
+				onProceed={() => { setMemWarnOpen(false); doRunChapter() }}
+				flagged={flaggedPreceding}
+				bookId={bookId}
+				credentialId={effectiveCredId}
+			/>
 		</Box>
 	)
 }

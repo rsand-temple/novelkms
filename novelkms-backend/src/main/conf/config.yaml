@@ -38,8 +38,10 @@ logging:
     timeZone: America/New_York
   appenders:
     - type: console
+      timeZone: America/New_York
 {% if LOGTOFILE == "true" %}
     - type: file
+      timeZone: America/New_York
       currentLogFilename: {{ LOGPATH | d('/logs', true)}}/novelkms.log
       archivedLogFilenamePattern: {{ LOGPATH | d('/logs', true)}}/novelkms-%d.log.gz
       archivedFileCount: 14
