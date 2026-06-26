@@ -31,6 +31,7 @@ import com.richardsand.novelkms.dao.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.CodexCategoryDao;
 import com.richardsand.novelkms.dao.CodexDao;
 import com.richardsand.novelkms.dao.EditorSettingsDao;
+import com.richardsand.novelkms.dao.KmsArchiveDao;
 import com.richardsand.novelkms.dao.MemoryTemplateDao;
 import com.richardsand.novelkms.dao.PageLayoutDao;
 import com.richardsand.novelkms.dao.PartDao;
@@ -75,9 +76,10 @@ import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
+import io.dropwizard.lifecycle.Managed;
 
 public class NovelKmsServer extends Application<NovelKmsConfig> {
-    private static final Logger          logger     = LoggerFactory.getLogger(NovelKmsServer.class);
+    private static final Logger   logger     = LoggerFactory.getLogger(NovelKmsServer.class);
     private boolean               isPostgres = false;
     private final BasicDataSource ds         = new BasicDataSource();
 
@@ -135,49 +137,54 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 .load()
                 .migrate();
 
-        ProjectDao       projectDao       = new ProjectDao(ds);
-        BookDao          bookDao          = new BookDao(ds);
-        PageLayoutDao    pageLayoutDao    = new PageLayoutDao(ds);
-        PartDao          partDao          = new PartDao(ds);
-        ChapterDao       chapterDao       = new ChapterDao(ds);
-        CodexDao         codexDao         = new CodexDao(ds);
-        CodexCategoryDao codexCategoryDao = new CodexCategoryDao(ds);
-        SceneDao         sceneDao         = new SceneDao(ds);
-        TemplateDao      templateDao      = new TemplateDao(ds);
-        UserStyleDao     userStyleDao     = new UserStyleDao(ds);
-        AuthDao          authDao          = new AuthDao(ds);
-        TenantAccessDao  tenantAccessDao  = new TenantAccessDao(ds);
-        TrashDao         trashDao         = new TrashDao(ds);
+        // DAOs
+        AiFormInstructionsDao   aiFormInstructionsDao = new AiFormInstructionsDao(ds);
+        AiReviewDao             aiReviewDao           = new AiReviewDao(ds);
+        AuthDao           authDao           = new AuthDao(ds);
+        BookDao           bookDao           = new BookDao(ds);
+        BookSummaryDao          bookSummaryDao        = new BookSummaryDao(ds);
+        ChapterDao        chapterDao        = new ChapterDao(ds);
+        ChapterMemoryDao        chapterMemoryDao      = new ChapterMemoryDao(ds);
+        ChapterSummaryDao       chapterSummaryDao     = new ChapterSummaryDao(ds);
+        CodexDao          codexDao          = new CodexDao(ds);
+        CodexCategoryDao  codexCategoryDao  = new CodexCategoryDao(ds);
         EditorSettingsDao editorSettingsDao = new EditorSettingsDao(ds);
+        KmsArchiveDao     kmsArchiveDao     = new KmsArchiveDao(ds);
+        MemoryTemplateDao       memoryTemplateDao     = new MemoryTemplateDao(ds);
+        PageLayoutDao     pageLayoutDao     = new PageLayoutDao(ds);
+        PartDao           partDao           = new PartDao(ds);
+        ProjectDao        projectDao        = new ProjectDao(ds);
+        SceneDao          sceneDao          = new SceneDao(ds);
+        TemplateDao       templateDao       = new TemplateDao(ds);
+        TenantAccessDao   tenantAccessDao   = new TenantAccessDao(ds);
+        TrashDao          trashDao          = new TrashDao(ds);
         UserPreferenceDao userPreferenceDao = new UserPreferenceDao(ds);
+        UserStyleDao      userStyleDao      = new UserStyleDao(ds);
 
-        ImportService     importService     = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        ExportService     exportService     = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
+        // Services
         EpubExportService epubExportService = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        SessionService    sessionService    = new SessionService(authDao, config.getAuth());
+        ExportService     exportService     = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
+        ImportService     importService     = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
+        KmsArchiveService kmsArchiveService = new KmsArchiveService(kmsArchiveDao);
         OAuthService      oauthService      = new OAuthService(config.getAuth(), authDao);
+        SessionService    sessionService    = new SessionService(authDao, config.getAuth());
+        TrashService      trashService      = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
 
-        SecretCipher    secretCipher    = new SecretCipher(
+        // AI Credential DAO
+        SecretCipher            secretCipher          = new SecretCipher(
                 config.getSecurity() != null ? config.getSecurity().encryptionKey : null);
-        AiCredentialDao aiCredentialDao = new AiCredentialDao(ds, secretCipher);
-        AiReviewDao     aiReviewDao     = new AiReviewDao(ds);
-        AiFormInstructionsDao aiFormInstructionsDao = new AiFormInstructionsDao(ds);
-        ChapterMemoryDao chapterMemoryDao = new ChapterMemoryDao(ds);
-        MemoryTemplateDao memoryTemplateDao = new MemoryTemplateDao(ds);
-        ChapterSummaryDao chapterSummaryDao = new ChapterSummaryDao(ds);
-        BookSummaryDao    bookSummaryDao    = new BookSummaryDao(ds);
-        OpenAiProvider  openAiProvider  = new OpenAiProvider();
-        Map<String, AiProvider> aiProviders = Map.of(openAiProvider.providerKey(), openAiProvider);
-        AiReviewService aiReviewService = new AiReviewService(
+        AiCredentialDao         aiCredentialDao       = new AiCredentialDao(ds, secretCipher);
+
+        // AI Review Service
+        OpenAiProvider          openAiProvider        = new OpenAiProvider();
+        Map<String, AiProvider> aiProviders           = Map.of(openAiProvider.providerKey(), openAiProvider);
+        AiReviewService         aiReviewService       = new AiReviewService(
                 chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao,
                 aiFormInstructionsDao, chapterMemoryDao, memoryTemplateDao,
                 chapterSummaryDao, bookSummaryDao,
                 codexDao, codexCategoryDao, aiProviders);
 
-        TrashService trashService = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
-        KmsArchiveService kmsArchiveService = new KmsArchiveService(ds);
-        
-        env.lifecycle().manage(new io.dropwizard.lifecycle.Managed() {
+        env.lifecycle().manage(new Managed() {
             @Override
             public void start() {
             }
@@ -188,71 +195,73 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
             }
         });
 
-        env.jersey().register(MultiPartFeature.class);
-        env.jersey().register(AuthResource.class);
+        env.jersey().register(AiFormInstructionsResource.class);
+        env.jersey().register(AiReviewResource.class);
+        env.jersey().register(AiCredentialResource.class);
         env.jersey().register(AuthenticationFilter.class);
-        env.jersey().register(TenantAuthorizationFilter.class);
+        env.jersey().register(AuthResource.class);
         env.jersey().register(BookResource.class);
-        env.jersey().register(PageLayoutResource.class);
+        env.jersey().register(ChapterMemoryResource.class);
         env.jersey().register(ChapterResource.class);
         env.jersey().register(CodexResource.class);
+        env.jersey().register(EditorSettingsResource.class);
         env.jersey().register(ExportResource.class);
         env.jersey().register(ImportResource.class);
+        env.jersey().register(KmsArchiveResource.class);
+        env.jersey().register(MemoryTemplateResource.class);
+        env.jersey().register(MultiPartFeature.class);
+        env.jersey().register(PageLayoutResource.class);
         env.jersey().register(PartResource.class);
         env.jersey().register(ProjectResource.class);
         env.jersey().register(SceneResource.class);
-        env.jersey().register(TemplateResource.class);
         env.jersey().register(StyleResource.class);
-        env.jersey().register(EditorSettingsResource.class);
-        env.jersey().register(UserPreferenceResource.class);
-        env.jersey().register(AiCredentialResource.class);
-        env.jersey().register(AiReviewResource.class);
-        env.jersey().register(AiFormInstructionsResource.class);
-        env.jersey().register(ChapterMemoryResource.class);
         env.jersey().register(SummaryResource.class);
-        env.jersey().register(MemoryTemplateResource.class);
+        env.jersey().register(TemplateResource.class);
+        env.jersey().register(TenantAuthorizationFilter.class);
         env.jersey().register(TrashResource.class);
-        env.jersey().register(KmsArchiveResource.class);
-        
+        env.jersey().register(UserPreferenceResource.class);
+
+        // Object Mapper
         ObjectMapper mapper = env.getObjectMapper();
         mapper.findAndRegisterModules();
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
+        // Jersey Registrations
         env.jersey().register(new org.glassfish.hk2.utilities.binding.AbstractBinder() {
             @Override
             protected void configure() {
-                bind(mapper).to(ObjectMapper.class);
-                bind(config).to(NovelKmsConfig.class);
-                bind(projectDao).to(ProjectDao.class);
+                bind(aiCredentialDao).to(AiCredentialDao.class);
+                bind(aiFormInstructionsDao).to(AiFormInstructionsDao.class);
+                bind(aiReviewDao).to(AiReviewDao.class);
+                bind(aiReviewService).to(AiReviewService.class);
+                bind(authDao).to(AuthDao.class);
                 bind(bookDao).to(BookDao.class);
+                bind(bookSummaryDao).to(BookSummaryDao.class);
+                bind(chapterDao).to(ChapterDao.class);
+                bind(chapterMemoryDao).to(ChapterMemoryDao.class);
+                bind(chapterSummaryDao).to(ChapterSummaryDao.class);
+                bind(codexCategoryDao).to(CodexCategoryDao.class);
+                bind(codexDao).to(CodexDao.class);
+                bind(config).to(NovelKmsConfig.class);
+                bind(editorSettingsDao).to(EditorSettingsDao.class);
+                bind(epubExportService).to(EpubExportService.class);
+                bind(exportService).to(ExportService.class);
+                bind(importService).to(ImportService.class);
+                bind(kmsArchiveService).to(KmsArchiveService.class);
+                bind(mapper).to(ObjectMapper.class);
+                bind(memoryTemplateDao).to(MemoryTemplateDao.class);
+                bind(oauthService).to(OAuthService.class);
                 bind(pageLayoutDao).to(PageLayoutDao.class);
                 bind(partDao).to(PartDao.class);
-                bind(chapterDao).to(ChapterDao.class);
-                bind(codexDao).to(CodexDao.class);
-                bind(codexCategoryDao).to(CodexCategoryDao.class);
+                bind(projectDao).to(ProjectDao.class);
                 bind(sceneDao).to(SceneDao.class);
-                bind(templateDao).to(TemplateDao.class);
-                bind(userStyleDao).to(UserStyleDao.class);
-                bind(authDao).to(AuthDao.class);
-                bind(tenantAccessDao).to(TenantAccessDao.class);
-                bind(importService).to(ImportService.class);
-                bind(exportService).to(ExportService.class);
-                bind(epubExportService).to(EpubExportService.class);
                 bind(sessionService).to(SessionService.class);
-                bind(oauthService).to(OAuthService.class);
-                bind(aiCredentialDao).to(AiCredentialDao.class);
-                bind(aiReviewDao).to(AiReviewDao.class);
-                bind(aiFormInstructionsDao).to(AiFormInstructionsDao.class);
-                bind(chapterMemoryDao).to(ChapterMemoryDao.class);
-                bind(memoryTemplateDao).to(MemoryTemplateDao.class);
-                bind(chapterSummaryDao).to(ChapterSummaryDao.class);
-                bind(bookSummaryDao).to(BookSummaryDao.class);
-                bind(aiReviewService).to(AiReviewService.class);
+                bind(templateDao).to(TemplateDao.class);
+                bind(tenantAccessDao).to(TenantAccessDao.class);
                 bind(trashDao).to(TrashDao.class);
                 bind(trashService).to(TrashService.class);
-                bind(editorSettingsDao).to(EditorSettingsDao.class);
+                bind(userStyleDao).to(UserStyleDao.class);
                 bind(userPreferenceDao).to(UserPreferenceDao.class);
-                bind(kmsArchiveService).to(KmsArchiveService.class);
             }
         });
 
