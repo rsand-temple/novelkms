@@ -134,6 +134,7 @@ public class ExportService {
      * in display order, each chapter on its own page.
      */
     public ExportMeta exportBook(UUID bookId) throws Exception {
+        logger.info("Starting DOCX book export: bookId={}", bookId);
         Book       book     = requireBook(bookId);
         Project    project  = loadProject(book);
         PageLayout layout   = pageLayoutDao.resolveBook(book.getId());

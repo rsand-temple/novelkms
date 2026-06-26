@@ -8,6 +8,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.ProjectDao;
@@ -34,6 +37,8 @@ import com.richardsand.novelkms.model.TrashItem;
  */
 public class TrashService {
 
+    private static final Logger logger = LoggerFactory.getLogger(TrashService.class);
+
     private final TrashDao    trashDao;
     private final ProjectDao  projectDao;
     private final BookDao     bookDao;
@@ -54,22 +59,27 @@ public class TrashService {
     // =========================================================================
 
     public Optional<TrashItem> trashProject(UUID userId, UUID id) throws SQLException {
+        logger.info("Moving project to trash: userId={}, projectId={}", userId, id);
         return trashDao.trashProject(userId, id);
     }
 
     public Optional<TrashItem> trashBook(UUID userId, UUID id) throws SQLException {
+        logger.info("Moving book to trash: userId={}, bookId={}", userId, id);
         return trashDao.trashBook(userId, id);
     }
 
     public Optional<TrashItem> trashChapter(UUID userId, UUID id) throws SQLException {
+        logger.info("Moving chapter to trash: userId={}, chapterId={}", userId, id);
         return trashDao.trashChapter(userId, id);
     }
 
     public Optional<TrashItem> trashScene(UUID userId, UUID id) throws SQLException {
+        logger.info("Moving scene to trash: userId={}, sceneId={}", userId, id);
         return trashDao.trashScene(userId, id);
     }
 
     public Optional<TrashItem> trashReview(UUID userId, UUID id) throws SQLException {
+        logger.info("Moving AI review to trash: userId={}, reviewId={}", userId, id);
         return trashDao.trashReview(userId, id);
     }
 
@@ -91,8 +101,10 @@ public class TrashService {
      * has been permanently removed (restore the parent first).
      */
     public TrashItem restore(UUID userId, UUID batchId) throws SQLException {
+        logger.info("Restoring trash item: userId={}, batchId={}", userId, batchId);
         TrashItem batch = trashDao.findBatch(userId, batchId)
                 .orElseThrow(() -> new TrashException(404, "not_found", "Trash item not found."));
+        logger.debug("Resolved trash batch for restore: batchId={}, rootType={}, rootId={}", batchId, batch.getRootType(), batch.getRootId());
 
         switch (batch.getRootType()) {
             case "PROJECT"        -> restoreProject(userId, batch);
@@ -106,6 +118,7 @@ public class TrashService {
         }
 
         trashDao.deleteBatch(batchId);
+        logger.info("Trash item restored: userId={}, batchId={}, rootType={}, rootId={}", userId, batchId, batch.getRootType(), batch.getRootId());
         return batch;
     }
 
@@ -193,26 +206,32 @@ public class TrashService {
 
     /** Permanently removes one trash batch (and its descendants). */
     public TrashItem purge(UUID userId, UUID batchId) throws SQLException {
+        logger.warn("Purging trash item permanently: userId={}, batchId={}", userId, batchId);
         TrashItem batch = trashDao.findBatch(userId, batchId)
                 .orElseThrow(() -> new TrashException(404, "not_found", "Trash item not found."));
+        logger.debug("Resolved trash batch for purge: batchId={}, rootType={}, rootId={}", batchId, batch.getRootType(), batch.getRootId());
         purgeRoot(batch);
         trashDao.deleteBatch(batchId);
         trashDao.sweepOrphans(userId);
+        logger.warn("Trash item purged permanently: userId={}, batchId={}, rootType={}, rootId={}", userId, batchId, batch.getRootType(), batch.getRootId());
         return batch;
     }
 
     /** Permanently removes every item in the user's trash. Returns the count. */
     public int empty(UUID userId) throws SQLException {
         List<TrashItem> items = trashDao.listForUser(userId);
+        logger.warn("Emptying trash permanently: userId={}, itemCount={}", userId, items.size());
         for (TrashItem item : items) {
             purgeRoot(item);
         }
         trashDao.deleteAllBatchesForUser(userId);
         trashDao.sweepOrphans(userId);
+        logger.warn("Trash emptied permanently: userId={}, itemCount={}", userId, items.size());
         return items.size();
     }
 
     private void purgeRoot(TrashItem batch) throws SQLException {
+        logger.debug("Purging trash root: rootType={}, rootId={}", batch.getRootType(), batch.getRootId());
         switch (batch.getRootType()) {
             case "PROJECT"                  -> trashDao.purgeProject(batch.getRootId());
             case "BOOK"                     -> trashDao.purgeBook(batch.getRootId());

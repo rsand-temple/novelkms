@@ -73,6 +73,7 @@ public class EpubExportService {
 
     /** Exports a complete book as a single .epub file. */
     public ExportMeta exportBook(UUID bookId) throws Exception {
+        logger.info("Starting EPUB export: bookId={}", bookId);
         Book book = requireBook(bookId);
         Project project = loadProject(book);
 
@@ -91,6 +92,7 @@ public class EpubExportService {
 
         List<Part> parts = partDao.findByBookId(bookId);
         List<Chapter> directChapters = chapterDao.findByBookId(bookId);
+        logger.debug("EPUB export structure loaded: bookId={}, parts={}, directChapters={}, hasCoverImage={}", bookId, parts.size(), directChapters.size(), coverImage != null);
 
         int chapterSeq = 1;
         int partSeq = 1;

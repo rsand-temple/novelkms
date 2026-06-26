@@ -91,6 +91,7 @@ public class ImportService {
             String filename, InputStream stream) throws Exception {
         ImportResult result = new ImportResult();
 
+        logger.info("DOCX import requested: projectId={}, filename={}, overrideTitlePresent={}", projectId, filename, bookTitleOverride != null && !bookTitleOverride.isBlank());
         try (XWPFDocument doc = new XWPFDocument(stream)) {
             List<XWPFParagraph> paragraphs = doc.getParagraphs();
             logger.info("DOCX import started: projectId={}, paragraphs={}", projectId, paragraphs.size());
@@ -110,6 +111,7 @@ public class ImportService {
 
             // Create book — subtitle from cover page if detected (and not a byline)
             com.richardsand.novelkms.model.Book book = bookDao.create(projectId, bookTitle, coverPage.subtitle, null, null);
+            logger.info("DOCX import created book: projectId={}, bookId={}, title={}", projectId, book.getId(), bookTitle);
             result.bookId = book.getId();
             result.bookTitle = bookTitle;
 
@@ -159,6 +161,7 @@ public class ImportService {
                 }
             }
 
+            logger.debug("DOCX import parse starting: bookId={}, coverPageSkipped={}", book.getId(), coverPage.isCoverPage);
             parse(paragraphs, doc, book.getId(), coverPage.isCoverPage, result);
         }
 

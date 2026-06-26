@@ -126,6 +126,7 @@ public class AiReviewService {
      */
     public AiReview runChapterReview(UUID userId, UUID chapterId, UUID credentialId,
             String modelOverride) throws SQLException {
+        logger.info("Starting AI chapter review: userId={}, chapterId={}, credentialId={}, modelOverride={}", userId, chapterId, credentialId, modelOverride);
         Chapter chapter = chapterDao.findById(chapterId)
                 .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
 
@@ -142,6 +143,7 @@ public class AiReviewService {
         }
 
         String priorContext = assemblePriorContext(bookId, chapterId);
+        logger.debug("AI chapter review context assembled: chapterId={}, textChars={}, priorContextChars={}", chapterId, chapterText.length(), priorContext == null ? 0 : priorContext.length());
         ReviewTarget target = new ReviewTarget(chapterId, null, bookId,
                 "chapter", chapterLabel(chapter), chapter.getSubtitle(), chapterText,
                 priorContext, null);
@@ -156,6 +158,7 @@ public class AiReviewService {
      */
     public AiReview runSceneReview(UUID userId, UUID sceneId, UUID credentialId,
             String modelOverride) throws SQLException {
+        logger.info("Starting AI scene review: userId={}, sceneId={}, credentialId={}, modelOverride={}", userId, sceneId, credentialId, modelOverride);
         Scene scene = sceneDao.findById(sceneId)
                 .orElseThrow(() -> new ReviewException(404, "not_found", "Scene not found."));
 
@@ -178,6 +181,7 @@ public class AiReviewService {
                     "This scene has no text to review yet.");
         }
 
+        logger.debug("AI scene review context assembled: sceneId={}, chapterId={}, textChars={}", sceneId, chapterId, sceneText.length());
         ReviewTarget target = new ReviewTarget(chapterId, sceneId, bookId,
                 "scene", sceneLabel(scene), null, sceneText, null, null);
         return execute(userId, target, credentialId, modelOverride);
@@ -205,12 +209,17 @@ public class AiReviewService {
         AiFormInstructionsDao.Resolved form =
                 formInstructionsDao.resolveForReview(userId, projectId, target.bookId());
 
+        logger.debug("Resolved AI review execution context: userId={}, projectId={}, bookId={}, chapterId={}, sceneId={}, provider={}, model={}, formScope={}",
+                userId, projectId, target.bookId(), target.chapterId(), target.sceneId(), provider.providerKey(), model, form.scope());
+
         UUID reviewId = reviewDao.createPending(userId, projectId, target.bookId(),
                 target.chapterId(), target.sceneId(), provider.providerKey(), model,
                 form.scope(), form.instructions());
+        logger.info("Created pending AI review: reviewId={}, scope={}, chapterId={}, sceneId={}, provider={}, model={}", reviewId, target.scopeWord(), target.chapterId(), target.sceneId(), provider.providerKey(), model);
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
+            logger.warn("AI review {} failed before provider call: decrypted API key unavailable", reviewId);
             reviewDao.failReview(reviewId, "Stored API key could not be read.");
             return reviewDao.findByIdForUser(reviewId, userId).orElseThrow();
         }
