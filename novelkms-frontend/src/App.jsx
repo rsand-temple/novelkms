@@ -21,6 +21,8 @@ import ImportDialog from './components/nav/dialogs/ImportDialog'
 import ExportDialog from './components/nav/dialogs/ExportDialog'
 import SettingsDialog from './components/settings/SettingsDialog'
 import EditorSettingsDialog from './components/settings/EditorSettingsDialog'
+import KmsArchiveImportDialog from './components/archive/KmsArchiveImportDialog'
+import { kmsArchiveApi } from './api/kmsArchive'
 import { LogoMark } from './components/branding/Logo'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
@@ -176,6 +178,7 @@ export default function App() {
 	const [exportAnchor, setExportAnchor] = useState(null)
 	const [exportDialog, setExportDialog] = useState({ open: false, url: null, suggestedName: '' })
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
+	const [kmsImportDialogOpen, setKmsImportDialogOpen] = useState(false)
 	const [settings, setSettings] = useState({ open: false, tab: 'document' })
 	const [settingsMenuAnchor, setSettingsMenuAnchor] = useState(null)
 	const [ctxSettings, setCtxSettings] = useState({ open: false, scope: null })
@@ -339,6 +342,18 @@ export default function App() {
 		setImportDialogOpen(true)
 	}
 
+	const openKmsImportDialog = () => {
+		setImportAnchor(null)
+		setKmsImportDialogOpen(true)
+	}
+
+	const handleKmsImportSuccess = useCallback((result) => {
+		const projectId = result?.projectIds?.[0] ?? null
+		if (projectId) {
+			setSelection({ projectId })
+		}
+	}, [setSelection])
+
 	const openSettings = () => {
 		setSettings({ open: true, tab: 'document' })
 	}
@@ -358,518 +373,531 @@ export default function App() {
 	return (
 		<SearchProvider selection={selection}>
 			<ReviewProvider>
-			<Box sx={{
-				display: 'flex',
-				flexDirection: 'column',
-				height: '100vh',
-				overflow: 'hidden',
-				bgcolor: 'background.default',
-			}}>
-				<AppBar position="static" elevation={0}>
-					<Toolbar sx={{ minHeight: '54px !important', px: 2 }}>
-						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-							<LogoMark size={34} />
-							<Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
-								<Typography
-									variant="h6"
-									sx={{ fontWeight: 750, letterSpacing: 0.5, lineHeight: 1 }}
-								>
-									NovelKMS
-								</Typography>
-								<Typography
-									variant="caption"
-									sx={{
-										display: { xs: 'none', md: 'block' },
-										color: 'rgba(255,255,255,0.62)',
-										letterSpacing: 0.25,
-									}}
-								>
-									Novel Knowledge Management System
-								</Typography>
+				<Box sx={{
+					display: 'flex',
+					flexDirection: 'column',
+					height: '100vh',
+					overflow: 'hidden',
+					bgcolor: 'background.default',
+				}}>
+					<AppBar position="static" elevation={0}>
+						<Toolbar sx={{ minHeight: '54px !important', px: 2 }}>
+							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+								<LogoMark size={34} />
+								<Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
+									<Typography
+										variant="h6"
+										sx={{ fontWeight: 750, letterSpacing: 0.5, lineHeight: 1 }}
+									>
+										NovelKMS
+									</Typography>
+									<Typography
+										variant="caption"
+										sx={{
+											display: { xs: 'none', md: 'block' },
+											color: 'rgba(255,255,255,0.62)',
+											letterSpacing: 0.25,
+										}}
+									>
+										Novel Knowledge Management System
+									</Typography>
+								</Box>
 							</Box>
-						</Box>
 
-						<Box sx={{ flexGrow: 1 }} />
+							<Box sx={{ flexGrow: 1 }} />
 
-						<Button
-							color="inherit"
-							size="small"
-							startIcon={<FileDownloadIcon fontSize="small" />}
-							endIcon={<ArrowDropDownIcon />}
-							onClick={(e) => setExportAnchor(e.currentTarget)}
-							sx={topBarButtonSx}
-						>
-							Export
-						</Button>
-						<Menu anchorEl={exportAnchor} open={!!exportAnchor} onClose={() => setExportAnchor(null)}>
-							{selection.bookId ? [
-								<MenuItem key="book" onClick={() => doExport(exportApi.bookDocxUrl(selection.bookId), 'Book')}>
-									Book (.docx)
-								</MenuItem>,
-								<MenuItem key="book-epub" onClick={() => doDirectExport(exportApi.bookEpubUrl(selection.bookId))}>
-									Book (.epub)
-								</MenuItem>,
-								selection.partId && (
-									<MenuItem key="part" onClick={() => doExport(exportApi.partDocxUrl(selection.partId), 'Part')}>
-										This Part (.docx)
-									</MenuItem>
-								),
-								selection.chapterId && (
-									<MenuItem key="chapter" onClick={() => doExport(exportApi.chapterDocxUrl(selection.chapterId), 'Chapter')}>
-										This Chapter (.docx)
-									</MenuItem>
-								),
-								selection.sceneId && (
-									<MenuItem key="scene" onClick={() => doExport(exportApi.sceneDocxUrl(selection.sceneId), 'Scene')}>
-										This Scene (.docx)
-									</MenuItem>
-								),
-							] : (
-								<MenuItem disabled>Select a book to export</MenuItem>
-							)}
-						</Menu>
-
-						<Button
-							color="inherit"
-							size="small"
-							startIcon={<FileUploadIcon fontSize="small" />}
-							endIcon={<ArrowDropDownIcon />}
-							onClick={(e) => setImportAnchor(e.currentTarget)}
-							sx={topBarButtonSx}
-						>
-							Import
-						</Button>
-						<Menu anchorEl={importAnchor} open={!!importAnchor} onClose={() => setImportAnchor(null)}>
-							<MenuItem onClick={openImportDialog}>From Word (.docx)</MenuItem>
-							<MenuItem disabled>From Markdown (coming soon)</MenuItem>
-						</Menu>
-
-						<Button
-							color="inherit"
-							size="small"
-							startIcon={<DescriptionIcon fontSize="small" />}
-							endIcon={<ArrowDropDownIcon />}
-							onClick={(e) => setTplAnchor(e.currentTarget)}
-							sx={topBarButtonSx}
-						>
-							Templates
-						</Button>
-						<Menu anchorEl={tplAnchor} open={!!tplAnchor} onClose={() => setTplAnchor(null)}>
-							<MenuItem disabled sx={{ fontSize: '0.75rem', opacity: 0.7 }}>Global defaults</MenuItem>
-							<MenuItem onClick={() => openGlobalTemplate('cover')}>Cover Page</MenuItem>
-							<MenuItem onClick={() => openGlobalTemplate('part')}>Part Page</MenuItem>
-						</Menu>
-
-						<Tooltip title="Settings">
-							<IconButton
+							<Button
 								color="inherit"
 								size="small"
-								aria-label="Open settings"
-								onClick={(e) => setSettingsMenuAnchor(e.currentTarget)}
-								sx={{ ml: 0.5, color: 'rgba(255,255,255,0.86)', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.09)' } }}
+								startIcon={<FileDownloadIcon fontSize="small" />}
+								endIcon={<ArrowDropDownIcon />}
+								onClick={(e) => setExportAnchor(e.currentTarget)}
+								sx={topBarButtonSx}
 							>
-								<SettingsIcon fontSize="small" />
-							</IconButton>
-						</Tooltip>
+								Export
+							</Button>
+							<Menu anchorEl={exportAnchor} open={!!exportAnchor} onClose={() => setExportAnchor(null)}>
+								{selection.projectId && (
+									<MenuItem onClick={() => { setExportAnchor(null); kmsArchiveApi.downloadProject(selection.projectId) }}>
+										Project archive (.json)
+									</MenuItem>
+								)}
+								{selection.projectId && <Divider />}
+								{selection.bookId ? [
+									<MenuItem key="book" onClick={() => doExport(exportApi.bookDocxUrl(selection.bookId), 'Book')}>
+										Book (.docx)
+									</MenuItem>,
+									<MenuItem key="book-epub" onClick={() => doDirectExport(exportApi.bookEpubUrl(selection.bookId))}>
+										Book (.epub)
+									</MenuItem>,
+									selection.partId && (
+										<MenuItem key="part" onClick={() => doExport(exportApi.partDocxUrl(selection.partId), 'Part')}>
+											This Part (.docx)
+										</MenuItem>
+									),
+									selection.chapterId && (
+										<MenuItem key="chapter" onClick={() => doExport(exportApi.chapterDocxUrl(selection.chapterId), 'Chapter')}>
+											This Chapter (.docx)
+										</MenuItem>
+									),
+									selection.sceneId && (
+										<MenuItem key="scene" onClick={() => doExport(exportApi.sceneDocxUrl(selection.sceneId), 'Scene')}>
+											This Scene (.docx)
+										</MenuItem>
+									),
+								] : (
+									<MenuItem disabled>Select a book to export</MenuItem>
+								)}
+							</Menu>
 
-						<Menu
-							anchorEl={settingsMenuAnchor}
-							open={!!settingsMenuAnchor}
-							onClose={() => setSettingsMenuAnchor(null)}
-						>
-							<MenuItem onClick={openContextSettings} disabled={!selection.projectId && !selection.bookId}>
-								{selection.bookId ? 'Book Settings' : selection.projectId ? 'Project Settings' : 'Settings'}
-							</MenuItem>
-							<Divider />
-							<MenuItem onClick={() => { setSettingsMenuAnchor(null); openSettings() }}>
-								Global Defaults…
-							</MenuItem>
-						</Menu>
-					</Toolbar>
-				</AppBar>
+							<Button
+								color="inherit"
+								size="small"
+								startIcon={<FileUploadIcon fontSize="small" />}
+								endIcon={<ArrowDropDownIcon />}
+								onClick={(e) => setImportAnchor(e.currentTarget)}
+								sx={topBarButtonSx}
+							>
+								Import
+							</Button>
+							<Menu anchorEl={importAnchor} open={!!importAnchor} onClose={() => setImportAnchor(null)}>
+								<MenuItem onClick={openImportDialog}>From Word (.docx)</MenuItem>
+								<MenuItem disabled>From Markdown (coming soon)</MenuItem>
+								<MenuItem onClick={openKmsImportDialog}>From NovelKMS archive (.json)</MenuItem>
+							</Menu>
 
-				<Box sx={{
-					display: 'flex',
-					flex: 1,
-					minHeight: 0,
-					overflow: 'hidden',
-					p: 1,
-					gap: 1,
-				}}>
+							<Button
+								color="inherit"
+								size="small"
+								startIcon={<DescriptionIcon fontSize="small" />}
+								endIcon={<ArrowDropDownIcon />}
+								onClick={(e) => setTplAnchor(e.currentTarget)}
+								sx={topBarButtonSx}
+							>
+								Templates
+							</Button>
+							<Menu anchorEl={tplAnchor} open={!!tplAnchor} onClose={() => setTplAnchor(null)}>
+								<MenuItem disabled sx={{ fontSize: '0.75rem', opacity: 0.7 }}>Global defaults</MenuItem>
+								<MenuItem onClick={() => openGlobalTemplate('cover')}>Cover Page</MenuItem>
+								<MenuItem onClick={() => openGlobalTemplate('part')}>Part Page</MenuItem>
+							</Menu>
+
+							<Tooltip title="Settings">
+								<IconButton
+									color="inherit"
+									size="small"
+									aria-label="Open settings"
+									onClick={(e) => setSettingsMenuAnchor(e.currentTarget)}
+									sx={{ ml: 0.5, color: 'rgba(255,255,255,0.86)', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.09)' } }}
+								>
+									<SettingsIcon fontSize="small" />
+								</IconButton>
+							</Tooltip>
+
+							<Menu
+								anchorEl={settingsMenuAnchor}
+								open={!!settingsMenuAnchor}
+								onClose={() => setSettingsMenuAnchor(null)}
+							>
+								<MenuItem onClick={openContextSettings} disabled={!selection.projectId && !selection.bookId}>
+									{selection.bookId ? 'Book Settings' : selection.projectId ? 'Project Settings' : 'Settings'}
+								</MenuItem>
+								<Divider />
+								<MenuItem onClick={() => { setSettingsMenuAnchor(null); openSettings() }}>
+									Global Defaults…
+								</MenuItem>
+							</Menu>
+						</Toolbar>
+					</AppBar>
+
 					<Box sx={{
-						width: navCollapsed ? COLLAPSED_PANEL_WIDTH : navWidth,
-						flexShrink: 0,
-						minHeight: 0,
-						overflow: 'hidden',
 						display: 'flex',
-						flexDirection: 'column',
-						bgcolor: 'background.paper',
-						border: '1px solid',
-						borderColor: 'divider',
-						borderRadius: 1.5,
-						boxShadow: 1,
-					}}>
-						{navCollapsed ? (
-							<Box sx={{
-								height: '100%',
-								display: 'flex',
-								flexDirection: 'column',
-								alignItems: 'center',
-								py: 1,
-								gap: 1,
-							}}>
-								<Tooltip title="Show manuscript panel" placement="right">
-									<IconButton size="small" onClick={() => setNavCollapsed(false)}>
-										<ChevronRightIcon fontSize="small" />
-									</IconButton>
-								</Tooltip>
-								<AutoStoriesOutlinedIcon sx={{ fontSize: 19, color: 'primary.main', mt: 0.5 }} />
-							</Box>
-						) : (
-							<>
-								<WorkspacePanelHeader
-									icon={<AutoStoriesOutlinedIcon />}
-									title="Manuscript"
-									subtitle="Projects, books, chapters, and scenes"
-									actions={
-										<>
-											<Tooltip title="All projects">
-												<IconButton
-													size="small"
-													aria-label="Show all projects"
-													onClick={() => setSelection(EMPTY_SELECTION)}
-													disabled={!selection.projectId}
-												>
-													<FolderOpenOutlinedIcon fontSize="small" />
-												</IconButton>
-											</Tooltip>
-											<Tooltip title="Collapse manuscript panel">
-												<IconButton size="small" onClick={() => setNavCollapsed(true)}>
-													<ChevronLeftIcon fontSize="small" />
-												</IconButton>
-											</Tooltip>
-										</>
-									}
-								/>
-								<Box sx={{
-									flex: 1,
-									minHeight: 0,
-									overflow: 'hidden',
-									bgcolor: 'background.paper',
-
-									'& .MuiListItemButton-root': {
-										position: 'relative',
-										minHeight: 34,
-										py: 0.35,
-										pr: 1,
-										ml: 0,
-										mr: 0,
-										borderRadius: 0,
-										borderLeft: '3px solid transparent',
-										transition: 'background-color 120ms ease, border-color 120ms ease, color 120ms ease',
-									},
-									'& .MuiListItemButton-root:hover': {
-										bgcolor: 'action.hover',
-									},
-									'& .MuiListItemButton-root.Mui-selected': {
-										bgcolor: 'action.selected',
-										borderLeftColor: 'primary.main',
-									},
-									'& .MuiListItemButton-root.Mui-selected:hover': {
-										bgcolor: 'action.selected',
-									},
-									'& .MuiListItemIcon-root': {
-										color: 'text.secondary',
-										transition: 'color 120ms ease, opacity 120ms ease',
-									},
-									'& .MuiListItemText-primary': {
-										overflow: 'hidden',
-										textOverflow: 'ellipsis',
-										whiteSpace: 'nowrap',
-									},
-									'& .MuiListItemText-secondary': {
-										mt: 0.15,
-										fontSize: '0.66rem',
-										lineHeight: 1.1,
-										color: 'warning.dark',
-									},
-
-									// Project rows — strongest anchors
-									'& .MuiListItemButton-root:has([data-testid="FolderIcon"])': {
-										minHeight: 40,
-										mt: 0.5,
-										bgcolor: 'rgba(42, 57, 66, 0.035)',
-										borderTop: '1px solid',
-										borderBottom: '1px solid',
-										borderTopColor: 'divider',
-										borderBottomColor: 'divider',
-									},
-									'& .MuiListItemButton-root:has([data-testid="FolderIcon"]) .MuiListItemText-primary': {
-										fontWeight: 750,
-										letterSpacing: 0.1,
-									},
-									'& [data-testid="FolderIcon"]': {
-										color: 'primary.main',
-									},
-
-									// Book rows — visible document anchors
-									'& .MuiListItemButton-root:has([data-testid="MenuBookIcon"])': {
-										minHeight: 38,
-										bgcolor: 'rgba(42, 57, 66, 0.018)',
-									},
-									'& .MuiListItemButton-root:has([data-testid="MenuBookIcon"]) .MuiListItemText-primary': {
-										fontWeight: 650,
-									},
-									'& [data-testid="MenuBookIcon"]': {
-										color: 'primary.light',
-									},
-
-									// Parts — sectional dividers
-									'& .MuiListItemButton-root:has([data-testid="BookmarksIcon"])': {
-										minHeight: 36,
-										mt: 0.35,
-									},
-									'& .MuiListItemButton-root:has([data-testid="BookmarksIcon"]) .MuiListItemText-primary': {
-										fontWeight: 650,
-										fontStyle: 'normal',
-										fontSize: '0.78rem',
-										textTransform: 'uppercase',
-										letterSpacing: '0.055em',
-										color: 'text.secondary',
-									},
-									'& [data-testid="BookmarksIcon"]': {
-										color: 'secondary.main',
-									},
-
-									// Chapters — primary working outline entries
-									'& .MuiListItemButton-root:has([data-testid="ArticleIcon"]) .MuiListItemText-primary': {
-										fontWeight: 550,
-									},
-									'& [data-testid="ArticleIcon"]': {
-										fontSize: 18,
-									},
-
-									// Scenes — quieter leaves
-									'& .MuiListItemButton-root:has([data-testid="TheatersIcon"])': {
-										minHeight: 31,
-										color: 'text.secondary',
-									},
-									'& .MuiListItemButton-root:has([data-testid="TheatersIcon"]) .MuiListItemText-primary': {
-										fontSize: '0.78rem',
-										fontWeight: 400,
-									},
-									'& .MuiListItemButton-root:has([data-testid="TheatersIcon"]).Mui-selected': {
-										color: 'text.primary',
-									},
-									'& [data-testid="TheatersIcon"]': {
-										fontSize: 16,
-										opacity: 0.72,
-									},
-
-									// Expand/collapse affordances
-									'& [data-testid="ChevronRightIcon"], & [data-testid="ExpandMoreIcon"]': {
-										fontSize: 18,
-										opacity: 0.62,
-										transition: 'opacity 120ms ease',
-									},
-									'& .MuiListItemButton-root:hover [data-testid="ChevronRightIcon"], & .MuiListItemButton-root:hover [data-testid="ExpandMoreIcon"]': {
-										opacity: 1,
-									},
-								}}>
-									<NavPanel selection={selection} setSelection={setSelection} />
-								</Box>
-							</>
-						)}
-					</Box>
-
-					<ResizeHandle
-						side="left"
-						disabled={navCollapsed}
-						onMouseDown={(event) => handleResizeMouseDown(event, 'nav')}
-					/>
-
-					<Box sx={{
 						flex: 1,
-						minWidth: 0,
 						minHeight: 0,
 						overflow: 'hidden',
-						display: 'flex',
-						flexDirection: 'column',
-						bgcolor: 'background.paper',
-						border: '1px solid',
-						borderColor: 'divider',
-						borderRadius: 1.5,
-						boxShadow: 1,
+						p: 1,
+						gap: 1,
 					}}>
-						{selection.trashSelected ? (
-							<TrashPanel />
-						) : (
-							<EditorPanel
-								partId={selection.partId}
-								chapterId={selection.chapterId}
-								sceneId={selection.sceneId}
-								projectId={selection.projectId}
-								bookId={selection.bookId}
-								codexId={selection.codexId}
-								templateType={selection.templateType}
-								templateScope={selection.templateScope}
-								aiDocType={selection.aiDocType}
-								setSelection={setSelection}
-								onSelectBook={handleSelectBook}
-							/>
-						)}
-					</Box>
+						<Box sx={{
+							width: navCollapsed ? COLLAPSED_PANEL_WIDTH : navWidth,
+							flexShrink: 0,
+							minHeight: 0,
+							overflow: 'hidden',
+							display: 'flex',
+							flexDirection: 'column',
+							bgcolor: 'background.paper',
+							border: '1px solid',
+							borderColor: 'divider',
+							borderRadius: 1.5,
+							boxShadow: 1,
+						}}>
+							{navCollapsed ? (
+								<Box sx={{
+									height: '100%',
+									display: 'flex',
+									flexDirection: 'column',
+									alignItems: 'center',
+									py: 1,
+									gap: 1,
+								}}>
+									<Tooltip title="Show manuscript panel" placement="right">
+										<IconButton size="small" onClick={() => setNavCollapsed(false)}>
+											<ChevronRightIcon fontSize="small" />
+										</IconButton>
+									</Tooltip>
+									<AutoStoriesOutlinedIcon sx={{ fontSize: 19, color: 'primary.main', mt: 0.5 }} />
+								</Box>
+							) : (
+								<>
+									<WorkspacePanelHeader
+										icon={<AutoStoriesOutlinedIcon />}
+										title="Manuscript"
+										subtitle="Projects, books, chapters, and scenes"
+										actions={
+											<>
+												<Tooltip title="All projects">
+													<IconButton
+														size="small"
+														aria-label="Show all projects"
+														onClick={() => setSelection(EMPTY_SELECTION)}
+														disabled={!selection.projectId}
+													>
+														<FolderOpenOutlinedIcon fontSize="small" />
+													</IconButton>
+												</Tooltip>
+												<Tooltip title="Collapse manuscript panel">
+													<IconButton size="small" onClick={() => setNavCollapsed(true)}>
+														<ChevronLeftIcon fontSize="small" />
+													</IconButton>
+												</Tooltip>
+											</>
+										}
+									/>
+									<Box sx={{
+										flex: 1,
+										minHeight: 0,
+										overflow: 'hidden',
+										bgcolor: 'background.paper',
 
-					<ResizeHandle
-						side="right"
-						disabled={propsCollapsed}
-						onMouseDown={(event) => handleResizeMouseDown(event, 'props')}
-					/>
+										'& .MuiListItemButton-root': {
+											position: 'relative',
+											minHeight: 34,
+											py: 0.35,
+											pr: 1,
+											ml: 0,
+											mr: 0,
+											borderRadius: 0,
+											borderLeft: '3px solid transparent',
+											transition: 'background-color 120ms ease, border-color 120ms ease, color 120ms ease',
+										},
+										'& .MuiListItemButton-root:hover': {
+											bgcolor: 'action.hover',
+										},
+										'& .MuiListItemButton-root.Mui-selected': {
+											bgcolor: 'action.selected',
+											borderLeftColor: 'primary.main',
+										},
+										'& .MuiListItemButton-root.Mui-selected:hover': {
+											bgcolor: 'action.selected',
+										},
+										'& .MuiListItemIcon-root': {
+											color: 'text.secondary',
+											transition: 'color 120ms ease, opacity 120ms ease',
+										},
+										'& .MuiListItemText-primary': {
+											overflow: 'hidden',
+											textOverflow: 'ellipsis',
+											whiteSpace: 'nowrap',
+										},
+										'& .MuiListItemText-secondary': {
+											mt: 0.15,
+											fontSize: '0.66rem',
+											lineHeight: 1.1,
+											color: 'warning.dark',
+										},
+
+										// Project rows — strongest anchors
+										'& .MuiListItemButton-root:has([data-testid="FolderIcon"])': {
+											minHeight: 40,
+											mt: 0.5,
+											bgcolor: 'rgba(42, 57, 66, 0.035)',
+											borderTop: '1px solid',
+											borderBottom: '1px solid',
+											borderTopColor: 'divider',
+											borderBottomColor: 'divider',
+										},
+										'& .MuiListItemButton-root:has([data-testid="FolderIcon"]) .MuiListItemText-primary': {
+											fontWeight: 750,
+											letterSpacing: 0.1,
+										},
+										'& [data-testid="FolderIcon"]': {
+											color: 'primary.main',
+										},
+
+										// Book rows — visible document anchors
+										'& .MuiListItemButton-root:has([data-testid="MenuBookIcon"])': {
+											minHeight: 38,
+											bgcolor: 'rgba(42, 57, 66, 0.018)',
+										},
+										'& .MuiListItemButton-root:has([data-testid="MenuBookIcon"]) .MuiListItemText-primary': {
+											fontWeight: 650,
+										},
+										'& [data-testid="MenuBookIcon"]': {
+											color: 'primary.light',
+										},
+
+										// Parts — sectional dividers
+										'& .MuiListItemButton-root:has([data-testid="BookmarksIcon"])': {
+											minHeight: 36,
+											mt: 0.35,
+										},
+										'& .MuiListItemButton-root:has([data-testid="BookmarksIcon"]) .MuiListItemText-primary': {
+											fontWeight: 650,
+											fontStyle: 'normal',
+											fontSize: '0.78rem',
+											textTransform: 'uppercase',
+											letterSpacing: '0.055em',
+											color: 'text.secondary',
+										},
+										'& [data-testid="BookmarksIcon"]': {
+											color: 'secondary.main',
+										},
+
+										// Chapters — primary working outline entries
+										'& .MuiListItemButton-root:has([data-testid="ArticleIcon"]) .MuiListItemText-primary': {
+											fontWeight: 550,
+										},
+										'& [data-testid="ArticleIcon"]': {
+											fontSize: 18,
+										},
+
+										// Scenes — quieter leaves
+										'& .MuiListItemButton-root:has([data-testid="TheatersIcon"])': {
+											minHeight: 31,
+											color: 'text.secondary',
+										},
+										'& .MuiListItemButton-root:has([data-testid="TheatersIcon"]) .MuiListItemText-primary': {
+											fontSize: '0.78rem',
+											fontWeight: 400,
+										},
+										'& .MuiListItemButton-root:has([data-testid="TheatersIcon"]).Mui-selected': {
+											color: 'text.primary',
+										},
+										'& [data-testid="TheatersIcon"]': {
+											fontSize: 16,
+											opacity: 0.72,
+										},
+
+										// Expand/collapse affordances
+										'& [data-testid="ChevronRightIcon"], & [data-testid="ExpandMoreIcon"]': {
+											fontSize: 18,
+											opacity: 0.62,
+											transition: 'opacity 120ms ease',
+										},
+										'& .MuiListItemButton-root:hover [data-testid="ChevronRightIcon"], & .MuiListItemButton-root:hover [data-testid="ExpandMoreIcon"]': {
+											opacity: 1,
+										},
+									}}>
+										<NavPanel selection={selection} setSelection={setSelection} />
+									</Box>
+								</>
+							)}
+						</Box>
+
+						<ResizeHandle
+							side="left"
+							disabled={navCollapsed}
+							onMouseDown={(event) => handleResizeMouseDown(event, 'nav')}
+						/>
+
+						<Box sx={{
+							flex: 1,
+							minWidth: 0,
+							minHeight: 0,
+							overflow: 'hidden',
+							display: 'flex',
+							flexDirection: 'column',
+							bgcolor: 'background.paper',
+							border: '1px solid',
+							borderColor: 'divider',
+							borderRadius: 1.5,
+							boxShadow: 1,
+						}}>
+							{selection.trashSelected ? (
+								<TrashPanel />
+							) : (
+								<EditorPanel
+									partId={selection.partId}
+									chapterId={selection.chapterId}
+									sceneId={selection.sceneId}
+									projectId={selection.projectId}
+									bookId={selection.bookId}
+									codexId={selection.codexId}
+									templateType={selection.templateType}
+									templateScope={selection.templateScope}
+									aiDocType={selection.aiDocType}
+									setSelection={setSelection}
+									onSelectBook={handleSelectBook}
+								/>
+							)}
+						</Box>
+
+						<ResizeHandle
+							side="right"
+							disabled={propsCollapsed}
+							onMouseDown={(event) => handleResizeMouseDown(event, 'props')}
+						/>
+
+						<Box sx={{
+							width: propsCollapsed ? COLLAPSED_PANEL_WIDTH : propsWidth,
+							flexShrink: 0,
+							minHeight: 0,
+							overflow: 'hidden',
+							display: 'flex',
+							flexDirection: 'column',
+							bgcolor: 'background.paper',
+							border: '1px solid',
+							borderColor: 'divider',
+							borderRadius: 1.5,
+							boxShadow: 1,
+						}}>
+							{propsCollapsed ? (
+								<Box sx={{
+									height: '100%',
+									display: 'flex',
+									flexDirection: 'column',
+									alignItems: 'center',
+									py: 1,
+									gap: 1,
+								}}>
+									<Tooltip title="Show inspector" placement="left">
+										<IconButton size="small" onClick={() => setPropsCollapsed(false)}>
+											<ChevronLeftIcon fontSize="small" />
+										</IconButton>
+									</Tooltip>
+									<TuneOutlinedIcon sx={{ fontSize: 19, color: 'primary.main', mt: 0.5 }} />
+								</Box>
+							) : (
+								<>
+									<WorkspacePanelHeader
+										icon={<TuneOutlinedIcon />}
+										title="Inspector"
+										subtitle="Details and document settings"
+										actions={
+											<Tooltip title="Collapse inspector">
+												<IconButton size="small" onClick={() => setPropsCollapsed(true)}>
+													<ChevronRightIcon fontSize="small" />
+												</IconButton>
+											</Tooltip>
+										}
+									/>
+									<Box sx={{
+										flex: 1,
+										minHeight: 0,
+										overflow: 'hidden',
+										bgcolor: 'background.default',
+										'& > .MuiBox-root': {
+											bgcolor: 'transparent',
+										},
+										'& > .MuiBox-root > .MuiStack-root': {
+											m: 1,
+											p: 1.75,
+											border: '1px solid',
+											borderColor: 'divider',
+											borderRadius: 1.25,
+											bgcolor: 'background.paper',
+											boxShadow: 1,
+										},
+										'& .MuiTypography-overline': {
+											display: 'block',
+											fontSize: '0.68rem',
+											fontWeight: 800,
+											letterSpacing: '0.11em',
+											color: 'primary.main',
+										},
+									}}>
+										<PropertiesPanel
+											selection={selection}
+											setSelection={setSelection}
+											selectTemplate={selectTemplate}
+										/>
+									</Box>
+								</>
+							)}
+						</Box>
+					</Box>
 
 					<Box sx={{
-						width: propsCollapsed ? COLLAPSED_PANEL_WIDTH : propsWidth,
+						height: 22,
 						flexShrink: 0,
-						minHeight: 0,
-						overflow: 'hidden',
 						display: 'flex',
-						flexDirection: 'column',
-						bgcolor: 'background.paper',
-						border: '1px solid',
-						borderColor: 'divider',
-						borderRadius: 1.5,
-						boxShadow: 1,
+						alignItems: 'center',
+						justifyContent: 'space-between',
+						px: 2,
 					}}>
-						{propsCollapsed ? (
-							<Box sx={{
-								height: '100%',
-								display: 'flex',
-								flexDirection: 'column',
-								alignItems: 'center',
-								py: 1,
-								gap: 1,
-							}}>
-								<Tooltip title="Show inspector" placement="left">
-									<IconButton size="small" onClick={() => setPropsCollapsed(false)}>
-										<ChevronLeftIcon fontSize="small" />
-									</IconButton>
-								</Tooltip>
-								<TuneOutlinedIcon sx={{ fontSize: 19, color: 'primary.main', mt: 0.5 }} />
-							</Box>
-						) : (
-							<>
-								<WorkspacePanelHeader
-									icon={<TuneOutlinedIcon />}
-									title="Inspector"
-									subtitle="Details and document settings"
-									actions={
-										<Tooltip title="Collapse inspector">
-											<IconButton size="small" onClick={() => setPropsCollapsed(true)}>
-												<ChevronRightIcon fontSize="small" />
-											</IconButton>
-										</Tooltip>
-									}
-								/>
-								<Box sx={{
-									flex: 1,
-									minHeight: 0,
-									overflow: 'hidden',
-									bgcolor: 'background.default',
-									'& > .MuiBox-root': {
-										bgcolor: 'transparent',
-									},
-									'& > .MuiBox-root > .MuiStack-root': {
-										m: 1,
-										p: 1.75,
-										border: '1px solid',
-										borderColor: 'divider',
-										borderRadius: 1.25,
-										bgcolor: 'background.paper',
-										boxShadow: 1,
-									},
-									'& .MuiTypography-overline': {
-										display: 'block',
-										fontSize: '0.68rem',
-										fontWeight: 800,
-										letterSpacing: '0.11em',
-										color: 'primary.main',
-									},
-								}}>
-									<PropertiesPanel
-										selection={selection}
-										setSelection={setSelection}
-										selectTemplate={selectTemplate}
-									/>
-								</Box>
-							</>
-						)}
+						<Typography
+							variant="caption"
+							sx={{
+								fontSize: '0.65rem',
+								color: 'text.disabled',
+								letterSpacing: 0.3,
+								userSelect: 'none',
+							}}
+						>
+							© {new Date().getFullYear()} Richard A. Sand. All rights reserved.
+						</Typography>
+						<Typography
+							variant="caption"
+							sx={{
+								fontSize: '0.65rem',
+								color: 'text.disabled',
+								letterSpacing: 0.3,
+								userSelect: 'none',
+							}}
+						>
+							{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
+						</Typography>
 					</Box>
+
+					<ImportDialog
+						open={importDialogOpen}
+						onClose={() => setImportDialogOpen(false)}
+						projectId={selection.projectId}
+						onSuccess={handleImportSuccess}
+					/>
+
+					<ExportDialog
+						open={exportDialog.open}
+						onClose={() => setExportDialog(d => ({ ...d, open: false }))}
+						url={exportDialog.url}
+						suggestedName={exportDialog.suggestedName}
+					/>
+					
+					<KmsArchiveImportDialog
+						open={kmsImportDialogOpen}
+						onClose={() => setKmsImportDialogOpen(false)}
+						onImported={handleKmsImportSuccess}
+					/>
+
+					<SettingsDialog
+						open={settings.open}
+						initialTab={settings.tab}
+						projectId={selection.projectId}
+						onClose={() => setSettings(s => ({ ...s, open: false }))}
+					/>
+
+					<EditorSettingsDialog
+						open={ctxSettings.open}
+						scope={ctxSettings.scope}
+						projectId={selection.projectId}
+						bookId={selection.bookId}
+						scopeLabel={ctxSettings.scope === 'book'
+							? 'Settings for the selected book'
+							: 'Settings for the selected project'}
+						onEditGlobal={editGlobalFromContext}
+						onClose={() => setCtxSettings(s => ({ ...s, open: false }))}
+					/>
 				</Box>
-
-				<Box sx={{
-					height: 22,
-					flexShrink: 0,
-					display: 'flex',
-					alignItems: 'center',
-					justifyContent: 'space-between',
-					px: 2,
-				}}>
-					<Typography
-						variant="caption"
-						sx={{
-							fontSize: '0.65rem',
-							color: 'text.disabled',
-							letterSpacing: 0.3,
-							userSelect: 'none',
-						}}
-					>
-						© {new Date().getFullYear()} Richard A. Sand. All rights reserved.
-					</Typography>
-					<Typography
-						variant="caption"
-						sx={{
-							fontSize: '0.65rem',
-							color: 'text.disabled',
-							letterSpacing: 0.3,
-							userSelect: 'none',
-						}}
-					>
-						{`Version ${APP_VERSION} Build ${BUILD_NUMBER}`}
-					</Typography>
-				</Box>
-
-				<ImportDialog
-					open={importDialogOpen}
-					onClose={() => setImportDialogOpen(false)}
-					projectId={selection.projectId}
-					onSuccess={handleImportSuccess}
-				/>
-
-				<ExportDialog
-					open={exportDialog.open}
-					onClose={() => setExportDialog(d => ({ ...d, open: false }))}
-					url={exportDialog.url}
-					suggestedName={exportDialog.suggestedName}
-				/>
-
-				<SettingsDialog
-					open={settings.open}
-					initialTab={settings.tab}
-					projectId={selection.projectId}
-					onClose={() => setSettings(s => ({ ...s, open: false }))}
-				/>
-
-				<EditorSettingsDialog
-					open={ctxSettings.open}
-					scope={ctxSettings.scope}
-					projectId={selection.projectId}
-					bookId={selection.bookId}
-					scopeLabel={ctxSettings.scope === 'book'
-						? 'Settings for the selected book'
-						: 'Settings for the selected project'}
-					onEditGlobal={editGlobalFromContext}
-					onClose={() => setCtxSettings(s => ({ ...s, open: false }))}
-				/>
-			</Box>
 			</ReviewProvider>
 		</SearchProvider>
 	)

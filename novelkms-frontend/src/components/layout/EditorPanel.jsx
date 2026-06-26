@@ -959,255 +959,255 @@ export default function EditorPanel({
 
 			{/* ── Content row: editor surface + optional review rail ───────── */}
 			<Box sx={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
-			<Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+				<Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-			{projectShelfMode ? (
-				<ProjectShelf
-					projectId={projectId}
-					onSelectBook={onSelectBook}
-				/>
-			) : showEmptyState ? (
-				<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.disabled' }}>
-					<Typography variant="body1">
-						{codexId
-							? 'Select an entry to begin editing, or add a new one.'
-							: 'Select a chapter or scene to begin editing.'}
-					</Typography>
-				</Box>
-			) : isLoading ? (
-				<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-					<CircularProgress size={28} />
-				</Box>
-			) : (
-				<Box
-					sx={{
-						flex: 1,
-						overflowY: 'auto',
-						py: 5,
-						px: 2,
-
-						'--nkms-font-family': settings.fontFamily,
-						'--nkms-font-size': settings.fontSize,
-						'--nkms-line-height': settings.lineHeight,
-						'--nkms-text-indent': templateMode ? '0px' : settings.firstLineIndent,
-						'--nkms-spacing-after': settings.spacingAfter,
-
-						'& .tiptap p': {
-							textIndent: 'var(--nkms-text-indent)',
-							marginBottom: 'var(--nkms-spacing-after)',
-							marginTop: 0,
-						},
-						'& .tiptap': { outline: 'none' },
-						'& .tiptap p.is-editor-empty:first-of-type::before': {
-							content: 'attr(data-placeholder)',
-							color: 'text.disabled',
-							pointerEvents: 'none',
-							float: 'left',
-							height: 0,
-						},
-						'& .nkms-token': {
-							display: 'inline-block',
-							px: 0.5,
-							borderRadius: 0.75,
-							bgcolor: 'primary.main',
-							color: 'primary.contrastText',
-							fontSize: '0.8em',
-							fontFamily: 'system-ui, -apple-system, sans-serif',
-							lineHeight: 1.5,
-							whiteSpace: 'nowrap',
-							userSelect: 'none',
-							verticalAlign: 'baseline',
-						},
-						'& .tiptap blockquote': {
-							borderLeft: '3px solid',
-							borderColor: 'divider',
-							pl: 2,
-							ml: 0,
-							color: 'text.secondary',
-							fontStyle: 'italic',
-						},
-						'& .tiptap hr': {
-							border: 'none',
-							textAlign: 'center',
-							my: 3,
-							'&::after': {
-								content: '"· · ·"',
-								color: 'text.disabled',
-								letterSpacing: '0.5em',
-							},
-						},
-						'& .tiptap h1': { fontSize: '1.6rem', fontWeight: 700, mt: 2, mb: 0.5 },
-						'& .tiptap h2': { fontSize: '1.3rem', fontWeight: 700, mt: 2, mb: 0.5 },
-						'& .tiptap h3': { fontSize: '1.1rem', fontWeight: 600, mt: 1.5, mb: 0.5 },
-						'& .tiptap ul, & .tiptap ol': { pl: 3 },
-						'& .nkms-search-match': { bgcolor: 'warning.light', borderRadius: '2px' },
-						'& .nkms-search-active': { bgcolor: 'warning.main', outline: '2px solid', outlineColor: 'warning.dark' },
-						'& .nkms-review-highlight': {
-							bgcolor: 'info.light',
-							borderRadius: '2px',
-							outline: '2px solid',
-							outlineColor: 'info.main',
-							transition: 'background-color 0.3s ease',
-						},
-						'& .nkms-draft-heading': {
-							minHeight: '1.5em',
-							maxWidth: '72ch', mx: 'auto', px: 1, textAlign: 'center',
-							userSelect: 'none', color: 'text.primary',
-						},
-						'& .nkms-draft-heading-part': { mt: 10, mb: 7 },
-						'& .nkms-draft-heading-chapter': { mt: 7, mb: 5 },
-						'& .nkms-draft-heading::before': { display: 'block', content: 'attr(data-title)', fontWeight: 700 },
-						'& .nkms-draft-heading::after': { display: 'block', content: 'attr(data-subtitle)', mt: 0.75, fontSize: '1.1rem', fontStyle: 'italic', color: 'text.secondary' },
-						'& .nkms-draft-heading[data-subtitle=""]::after': { display: 'none' },
-						'& .nkms-draft-heading-part::before': { fontSize: '2rem' },
-						'& .nkms-draft-heading-chapter::before': { fontSize: '1.75rem' },
-
-						...styleSx,
-					}}
-				>
-					{bookDraftMode && (
-						<BookCoverPreview
-							bookId={bookId}
-							book={previewPageBook}
-							project={previewPageProject}
-							pageConfig={effectivePageConfig}
-							settings={settings}
-							embedded
+					{projectShelfMode ? (
+						<ProjectShelf
+							projectId={projectId}
+							onSelectBook={onSelectBook}
 						/>
-					)}
-					{partDraftMode && (
-						<PartPagePreview
-							partId={partId}
-							bookId={bookId}
-							book={previewPageBook}
-							project={previewPageProject}
-							pageConfig={effectivePageConfig}
-							settings={settings}
-							embedded
-						/>
-					)}
+					) : showEmptyState ? (
+						<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.disabled' }}>
+							<Typography variant="body1">
+								{codexId
+									? 'Select an entry to begin editing, or add a new one.'
+									: 'Select a chapter or scene to begin editing.'}
+							</Typography>
+						</Box>
+					) : isLoading ? (
+						<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+							<CircularProgress size={28} />
+						</Box>
+					) : (
+						<Box
+							sx={{
+								flex: 1,
+								overflowY: 'auto',
+								py: 5,
+								px: 2,
 
-					<Box sx={{ display: showEditorPreview ? 'none' : 'block', mt: aggregateDraftMode ? 6 : 0 }}>
+								'--nkms-font-family': settings.fontFamily,
+								'--nkms-font-size': settings.fontSize,
+								'--nkms-line-height': settings.lineHeight,
+								'--nkms-text-indent': templateMode ? '0px' : settings.firstLineIndent,
+								'--nkms-spacing-after': settings.spacingAfter,
 
-						{multiSceneMode && chapterHeadingTitle && (
-							<Box
-								sx={{
+								'& .tiptap p': {
+									textIndent: 'var(--nkms-text-indent)',
+									marginBottom: 'var(--nkms-spacing-after)',
+									marginTop: 0,
+								},
+								'& .tiptap': { outline: 'none' },
+								'& .tiptap p.is-editor-empty:first-of-type::before': {
+									content: 'attr(data-placeholder)',
+									color: 'text.disabled',
+									pointerEvents: 'none',
+									float: 'left',
+									height: 0,
+								},
+								'& .nkms-token': {
+									display: 'inline-block',
+									px: 0.5,
+									borderRadius: 0.75,
+									bgcolor: 'primary.main',
+									color: 'primary.contrastText',
+									fontSize: '0.8em',
+									fontFamily: 'system-ui, -apple-system, sans-serif',
+									lineHeight: 1.5,
+									whiteSpace: 'nowrap',
+									userSelect: 'none',
+									verticalAlign: 'baseline',
+								},
+								'& .tiptap blockquote': {
+									borderLeft: '3px solid',
+									borderColor: 'divider',
+									pl: 2,
+									ml: 0,
+									color: 'text.secondary',
+									fontStyle: 'italic',
+								},
+								'& .tiptap hr': {
+									border: 'none',
 									textAlign: 'center',
-									maxWidth: '72ch',
-									mx: 'auto',
-									px: 1,
-									mb: 5,
-								}}
-							>
-								<Typography
-									sx={{
-										fontFamily: 'var(--nkms-font-family)',
-										fontSize: '1.75rem',
-										fontWeight: 700,
-										lineHeight: 1.2,
-										color: 'text.primary',
-									}}
-								>
-									{chapterHeadingTitle}
-								</Typography>
-								{chapterHeadingSubtitle && (
-									<Typography
+									my: 3,
+									'&::after': {
+										content: '"· · ·"',
+										color: 'text.disabled',
+										letterSpacing: '0.5em',
+									},
+								},
+								'& .tiptap h1': { fontSize: '1.6rem', fontWeight: 700, mt: 2, mb: 0.5 },
+								'& .tiptap h2': { fontSize: '1.3rem', fontWeight: 700, mt: 2, mb: 0.5 },
+								'& .tiptap h3': { fontSize: '1.1rem', fontWeight: 600, mt: 1.5, mb: 0.5 },
+								'& .tiptap ul, & .tiptap ol': { pl: 3 },
+								'& .nkms-search-match': { bgcolor: 'warning.light', borderRadius: '2px' },
+								'& .nkms-search-active': { bgcolor: 'warning.main', outline: '2px solid', outlineColor: 'warning.dark' },
+								'& .nkms-review-highlight': {
+									bgcolor: 'info.light',
+									borderRadius: '2px',
+									outline: '2px solid',
+									outlineColor: 'info.main',
+									transition: 'background-color 0.3s ease',
+								},
+								'& .nkms-draft-heading': {
+									minHeight: '1.5em',
+									maxWidth: '72ch', mx: 'auto', px: 1, textAlign: 'center',
+									userSelect: 'none', color: 'text.primary',
+								},
+								'& .nkms-draft-heading-part': { mt: 10, mb: 7 },
+								'& .nkms-draft-heading-chapter': { mt: 7, mb: 5 },
+								'& .nkms-draft-heading::before': { display: 'block', content: 'attr(data-title)', fontWeight: 700 },
+								'& .nkms-draft-heading::after': { display: 'block', content: 'attr(data-subtitle)', mt: 0.75, fontSize: '1.1rem', fontStyle: 'italic', color: 'text.secondary' },
+								'& .nkms-draft-heading[data-subtitle=""]::after': { display: 'none' },
+								'& .nkms-draft-heading-part::before': { fontSize: '2rem' },
+								'& .nkms-draft-heading-chapter::before': { fontSize: '1.75rem' },
+
+								...styleSx,
+							}}
+						>
+							{bookDraftMode && (
+								<BookCoverPreview
+									bookId={bookId}
+									book={previewPageBook}
+									project={previewPageProject}
+									pageConfig={effectivePageConfig}
+									settings={settings}
+									embedded
+								/>
+							)}
+							{partDraftMode && (
+								<PartPagePreview
+									partId={partId}
+									bookId={bookId}
+									book={previewPageBook}
+									project={previewPageProject}
+									pageConfig={effectivePageConfig}
+									settings={settings}
+									embedded
+								/>
+							)}
+
+							<Box sx={{ display: showEditorPreview ? 'none' : 'block', mt: aggregateDraftMode ? 6 : 0 }}>
+
+								{multiSceneMode && chapterHeadingTitle && (
+									<Box
 										sx={{
-											fontFamily: 'var(--nkms-font-family)',
-											fontSize: '1.1rem',
-											fontWeight: 400,
-											fontStyle: 'italic',
-											color: 'text.secondary',
-											mt: 0.75,
+											textAlign: 'center',
+											maxWidth: '72ch',
+											mx: 'auto',
+											px: 1,
+											mb: 5,
 										}}
 									>
-										{chapterHeadingSubtitle}
-									</Typography>
+										<Typography
+											sx={{
+												fontFamily: 'var(--nkms-font-family)',
+												fontSize: '1.75rem',
+												fontWeight: 700,
+												lineHeight: 1.2,
+												color: 'text.primary',
+											}}
+										>
+											{chapterHeadingTitle}
+										</Typography>
+										{chapterHeadingSubtitle && (
+											<Typography
+												sx={{
+													fontFamily: 'var(--nkms-font-family)',
+													fontSize: '1.1rem',
+													fontWeight: 400,
+													fontStyle: 'italic',
+													color: 'text.secondary',
+													mt: 0.75,
+												}}
+											>
+												{chapterHeadingSubtitle}
+											</Typography>
+										)}
+									</Box>
 								)}
-							</Box>
-						)}
 
-						{isCodexEntry && codexEntryHeadingTitle && (
-							<Box
-								sx={{
-									textAlign: 'center',
-									maxWidth: '72ch',
-									mx: 'auto',
-									px: 1,
-									mb: 5,
-								}}
-							>
-								<Typography
-									sx={{
-										fontFamily: 'var(--nkms-font-family)',
-										fontSize: '1.75rem',
-										fontWeight: 700,
-										lineHeight: 1.2,
-										color: 'text.primary',
-									}}
-								>
-									{codexEntryHeadingTitle}
-								</Typography>
-							</Box>
-						)}
-
-						{aiDocMode && (
-							<Box
-								sx={{
-									textAlign: 'center',
-									maxWidth: '72ch',
-									mx: 'auto',
-									px: 1,
-									mb: 5,
-								}}
-							>
-								<Typography
-									sx={{
-										fontFamily: 'var(--nkms-font-family)',
-										fontSize: '1.5rem',
-										fontWeight: 700,
-										fontStyle: 'italic',
-										lineHeight: 1.2,
-										color: 'text.secondary',
-									}}
-								>
-									{aiDocTypeLabel}{aiDocHeadingLabel ? ` — ${aiDocHeadingLabel}` : ''}
-								</Typography>
-								{aiDocMetaLine && (
-									<Typography
-										variant="caption"
-										sx={{ display: 'block', mt: 0.75, color: 'text.disabled' }}
+								{isCodexEntry && codexEntryHeadingTitle && (
+									<Box
+										sx={{
+											textAlign: 'center',
+											maxWidth: '72ch',
+											mx: 'auto',
+											px: 1,
+											mb: 5,
+										}}
 									>
-										{aiDocMetaLine}
-									</Typography>
+										<Typography
+											sx={{
+												fontFamily: 'var(--nkms-font-family)',
+												fontSize: '1.75rem',
+												fontWeight: 700,
+												lineHeight: 1.2,
+												color: 'text.primary',
+											}}
+										>
+											{codexEntryHeadingTitle}
+										</Typography>
+									</Box>
 								)}
+
+								{aiDocMode && (
+									<Box
+										sx={{
+											textAlign: 'center',
+											maxWidth: '72ch',
+											mx: 'auto',
+											px: 1,
+											mb: 5,
+										}}
+									>
+										<Typography
+											sx={{
+												fontFamily: 'var(--nkms-font-family)',
+												fontSize: '1.5rem',
+												fontWeight: 700,
+												fontStyle: 'italic',
+												lineHeight: 1.2,
+												color: 'text.secondary',
+											}}
+										>
+											{aiDocTypeLabel}{aiDocHeadingLabel ? ` — ${aiDocHeadingLabel}` : ''}
+										</Typography>
+										{aiDocMetaLine && (
+											<Typography
+												variant="caption"
+												sx={{ display: 'block', mt: 0.75, color: 'text.disabled' }}
+											>
+												{aiDocMetaLine}
+											</Typography>
+										)}
+									</Box>
+								)}
+
+								<EditorContent editor={editor} />
 							</Box>
-						)}
 
-						<EditorContent editor={editor} />
-					</Box>
-
-					{showEditorPreview && (
-						<Box
-							className="tiptap"
-							sx={{
-								fontFamily: 'var(--nkms-font-family)',
-								fontSize: 'var(--nkms-font-size)',
-								lineHeight: 'var(--nkms-line-height)',
-								maxWidth: '72ch',
-								mx: 'auto',
-								px: 1,
-							}}
-							dangerouslySetInnerHTML={{ __html: previewHtml }}
-						/>
+							{showEditorPreview && (
+								<Box
+									className="tiptap"
+									sx={{
+										fontFamily: 'var(--nkms-font-family)',
+										fontSize: 'var(--nkms-font-size)',
+										lineHeight: 'var(--nkms-line-height)',
+										maxWidth: '72ch',
+										mx: 'auto',
+										px: 1,
+									}}
+									dangerouslySetInnerHTML={{ __html: previewHtml }}
+								/>
+							)}
+						</Box>
 					)}
 				</Box>
-			)}
-			</Box>
 
-			{reviewRailVisible && (
-				<ReviewRail key={chapterId} chapterId={chapterId} sceneId={sceneId} bookId={bookId} editor={editor} setSelection={setSelection} />
-			)}
+				{reviewRailVisible && (
+					<ReviewRail key={chapterId} chapterId={chapterId} sceneId={sceneId} bookId={bookId} editor={editor} setSelection={setSelection} />
+				)}
 			</Box>
 
 			<RegenerateConfirmDialog
