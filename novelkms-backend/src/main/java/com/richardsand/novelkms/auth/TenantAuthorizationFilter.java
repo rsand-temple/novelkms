@@ -29,8 +29,8 @@ import jakarta.ws.rs.ext.Provider;
 @Priority(Priorities.AUTHORIZATION)
 public class TenantAuthorizationFilter implements ContainerRequestFilter {
     private static final Set<String> PUBLIC_PREFIXES = Set.of("auth/", "healthcheck");
-    private static final Logger logger = LoggerFactory.getLogger(TenantAuthorizationFilter.class);
-    
+    private static final Logger      logger          = LoggerFactory.getLogger(TenantAuthorizationFilter.class);
+
     private final TenantAccessDao access;
     private final ObjectMapper    mapper;
 
@@ -92,6 +92,7 @@ public class TenantAuthorizationFilter implements ContainerRequestFilter {
             UUID id = parseUuid(s[2]);
             if (id != null) {
                 boolean owned = switch (s[1]) {
+                case "projects" -> access.ownsProject(userId, id);
                 case "books" -> access.ownsBook(userId, id);
                 case "parts" -> access.ownsPart(userId, id);
                 case "codex" -> access.ownsCodex(userId, id);

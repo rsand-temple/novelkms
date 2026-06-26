@@ -1,5 +1,6 @@
 package com.richardsand.novelkms.dao;
 
+import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -348,7 +349,7 @@ public class ArchiveDao {
         }
     }
 
-    private Object jsonValue(Object value) {
+    private Object jsonValue(Object value) throws SQLException {
         if (value == null) {
             return null;
         }
@@ -362,6 +363,17 @@ public class ArchiveDao {
             return d.toLocalDate().toString();
         }
         if (value instanceof byte[] bytes) {
+            return Base64.getEncoder().encodeToString(bytes);
+        }
+        if (value instanceof Blob blob) {
+            long length = blob.length();
+            if (length == 0) {
+                return "";
+            }
+            if (length > Integer.MAX_VALUE) {
+                throw new SQLException("BLOB too large to export: " + length + " bytes");
+            }
+            byte[] bytes = blob.getBytes(1, (int) length);
             return Base64.getEncoder().encodeToString(bytes);
         }
         return value;
