@@ -106,6 +106,7 @@ public class ChapterResource {
     @GET
     @Path("/books/{bookId}/chapters")
     public Response listChapters(@PathParam("bookId") UUID bookId) {
+        logger.debug("ChapterResource.listChapters invoked: bookId={}", bookId);
         try {
             List<Chapter> chapters = chapterDao.findByBookId(bookId);
             return Response.ok(chapters).build();
@@ -117,6 +118,7 @@ public class ChapterResource {
     @GET
     @Path("/chapters/{id}")
     public Response getChapter(@PathParam("id") UUID id) {
+        logger.debug("ChapterResource.getChapter invoked: id={}", id);
         try {
             return chapterDao.findById(id)
                     .map(ch -> Response.ok(ch).build())
@@ -129,6 +131,7 @@ public class ChapterResource {
     @POST
     @Path("/books/{bookId}/chapters")
     public Response createChapter(@PathParam("bookId") UUID bookId, CreateRequest req) {
+        logger.info("ChapterResource.createChapter invoked: bookId={}, partId={}", bookId, req == null ? null : req.partId);
         if (req == null || req.title == null || req.title.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("title is required").build();
@@ -144,6 +147,7 @@ public class ChapterResource {
     @PUT
     @Path("/chapters/{id}")
     public Response updateChapter(@PathParam("id") UUID id, UpdateRequest req) {
+        logger.info("ChapterResource.updateChapter invoked: id={}", id);
         if (req == null) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("request body is required").build();
@@ -169,6 +173,7 @@ public class ChapterResource {
     @Path("/chapters/{id}/move")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response moveChapter(@PathParam("id") UUID id, MoveChapterRequest req) {
+        logger.info("ChapterResource.moveChapter invoked: id={}, partId={}", id, req == null ? null : req.partId);
         try {
             chapterDao.moveChapter(id, req.partId, req.sourceIds, req.targetIds);
             return Response.ok().build();
@@ -181,6 +186,7 @@ public class ChapterResource {
     @Path("/scenes/{id}/move")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response moveScene(@PathParam("id") UUID id, MoveSceneRequest req) {
+        logger.info("ChapterResource.moveScene invoked: id={}, chapterId={}", id, req == null ? null : req.chapterId);
         try {
             sceneDao.moveScene(id, req.chapterId, req.sourceIds, req.targetIds);
             return Response.ok().build();
@@ -192,6 +198,7 @@ public class ChapterResource {
     @DELETE
     @Path("/chapters/{id}")
     public Response deleteChapter(@PathParam("id") UUID id, @Context ContainerRequestContext request) {
+        logger.info("ChapterResource.deleteChapter invoked: id={}", id);
         try {
             return trashService.trashChapter(CurrentUser.id(request), id).isPresent()
                     ? Response.noContent().build()
@@ -212,6 +219,7 @@ public class ChapterResource {
     @PUT
     @Path("/books/{bookId}/chapters/reorder")
     public Response reorderChapters(@PathParam("bookId") UUID bookId, ReorderRequest req) {
+        logger.info("ChapterResource.reorderChapters invoked: bookId={}, count={}", bookId, req == null || req.ids == null ? 0 : req.ids.size());
         if (req == null || req.ids == null || req.ids.isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("ids is required").build();
@@ -238,6 +246,7 @@ public class ChapterResource {
     @PUT
     @Path("/chapters/{chapterId}/scenes/reorder")
     public Response reorderScenes(@PathParam("chapterId") UUID chapterId, ReorderRequest req) {
+        logger.info("ChapterResource.reorderScenes invoked: chapterId={}, count={}", chapterId, req == null || req.ids == null ? 0 : req.ids.size());
         if (req == null || req.ids == null || req.ids.isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("ids is required").build();
@@ -253,7 +262,7 @@ public class ChapterResource {
     // -------------------------------------------------------------------------
 
     private Response serverError(SQLException sqle) {
-        logger.info("SQLException: {}", sqle.getMessage());
+        logger.error("Database error in ChapterResource: {}", sqle.getMessage(), sqle);
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                 .entity(sqle.getMessage()).build();
     }

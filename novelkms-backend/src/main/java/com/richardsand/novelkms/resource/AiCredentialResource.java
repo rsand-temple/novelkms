@@ -5,6 +5,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.AiCredentialDao;
@@ -33,6 +36,8 @@ import jakarta.ws.rs.core.Response;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class AiCredentialResource {
+
+    private static final Logger logger = LoggerFactory.getLogger(AiCredentialResource.class);
 
     /** Providers a credential may be stored for in v1. */
     private static final Set<String> SUPPORTED_PROVIDERS = Set.of("OPENAI");
@@ -64,12 +69,14 @@ public class AiCredentialResource {
     @GET
     @Path("/ai/credentials")
     public Response list() {
+        logger.debug("AiCredentialResource.list invoked");
         return run(() -> Response.ok(dao.findByUser(CurrentUser.id(request))).build());
     }
 
     @POST
     @Path("/ai/credentials")
     public Response create(CreateRequest body) {
+        logger.info("AiCredentialResource.create invoked: provider={}", body == null ? null : body.provider);
         if (body == null || isBlank(body.apiKey)) {
             return error(400, "missing_api_key", "An API key is required.");
         }
@@ -87,6 +94,7 @@ public class AiCredentialResource {
     @PUT
     @Path("/ai/credentials/{id}")
     public Response update(@PathParam("id") UUID id, UpdateRequest body) {
+        logger.info("AiCredentialResource.update invoked: id={}", id);
         if (body == null) return error(400, "bad_request", "Request body is required.");
         String label = isBlank(body.label) ? "Default" : body.label.trim();
         return run(() -> dao.update(id, CurrentUser.id(request), label,
@@ -98,6 +106,7 @@ public class AiCredentialResource {
     @DELETE
     @Path("/ai/credentials/{id}")
     public Response delete(@PathParam("id") UUID id) {
+        logger.info("AiCredentialResource.delete invoked: id={}", id);
         return run(() -> dao.delete(id, CurrentUser.id(request))
                 ? Response.noContent().build() : notFound());
     }
@@ -105,6 +114,7 @@ public class AiCredentialResource {
     @POST
     @Path("/ai/credentials/{id}/default")
     public Response makeDefault(@PathParam("id") UUID id) {
+        logger.info("AiCredentialResource.makeDefault invoked: id={}", id);
         return run(() -> dao.setDefault(id, CurrentUser.id(request))
                 .map(c -> Response.ok(c).build())
                 .orElseGet(() -> notFound()));
@@ -134,6 +144,7 @@ public class AiCredentialResource {
         try {
             return call.call();
         } catch (SQLException e) {
+            logger.error("Database error in AiCredentialResource: {}", e.getMessage(), e);
             return Response.serverError().entity(Map.of("error", "server_error")).build();
         }
     }

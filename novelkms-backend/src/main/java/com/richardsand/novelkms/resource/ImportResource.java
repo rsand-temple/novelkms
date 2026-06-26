@@ -46,9 +46,11 @@ public class ImportResource {
             @Context ContainerRequestContext request) {
 
         if (projectIdText == null || projectIdText.isBlank()) {
+            logger.warn("DOCX import rejected: missing projectId");
             return Response.status(Response.Status.BAD_REQUEST).entity("projectId is required").build();
         }
         if (fileStream == null) {
+            logger.warn("DOCX import rejected: missing file");
             return Response.status(Response.Status.BAD_REQUEST).entity("file is required").build();
         }
 
@@ -56,6 +58,7 @@ public class ImportResource {
         try {
             projectId = UUID.fromString(projectIdText.trim());
         } catch (IllegalArgumentException e) {
+            logger.warn("DOCX import rejected: invalid projectId={}", projectIdText);
             return Response.status(Response.Status.BAD_REQUEST).entity("projectId is not a valid UUID").build();
         }
 
@@ -63,11 +66,14 @@ public class ImportResource {
                 ? fileDetail.getFileName() : "import.docx";
 
         try {
+            logger.info("DOCX import requested: projectId={}, filename={}, bookTitle={}", projectId, filename, bookTitle);
             if (!access.ownsProject(CurrentUser.id(request), projectId)) {
+                logger.warn("DOCX import rejected: project not owned or not found projectId={}", projectId);
                 return Response.status(Response.Status.NOT_FOUND).build();
             }
             ImportService.ImportResult result = importService.importDocx(
                     projectId, bookTitle, filename, fileStream);
+            logger.info("DOCX import completed: projectId={}, filename={}", projectId, filename);
             return Response.ok(result).build();
         } catch (Exception e) {
             logger.error("DOCX import failed: {}", e.getMessage(), e);

@@ -82,6 +82,7 @@ public class CodexResource {
     @GET
     @Path("/codex/categories")
     public Response listCategories() {
+        logger.debug("CodexResource.listCategories invoked");
         try {
             List<CodexCategory> categories = codexCategoryDao.findAll();
             return Response.ok(categories).build();
@@ -97,6 +98,7 @@ public class CodexResource {
     @GET
     @Path("/projects/{projectId}/codex")
     public Response getProjectCodex(@PathParam("projectId") UUID projectId) {
+        logger.debug("CodexResource.getProjectCodex invoked: projectId={}", projectId);
         try {
             return codexDao.findByProjectId(projectId)
                     .map(cx -> Response.ok(cx).build())
@@ -109,6 +111,7 @@ public class CodexResource {
     @POST
     @Path("/projects/{projectId}/codex")
     public Response createProjectCodex(@PathParam("projectId") UUID projectId, CreateCodexRequest req) {
+        logger.info("CodexResource.createProjectCodex invoked: projectId={}", projectId);
         try {
             if (codexDao.findByProjectId(projectId).isPresent()) {
                 return Response.status(Response.Status.CONFLICT)
@@ -129,6 +132,7 @@ public class CodexResource {
     @GET
     @Path("/books/{bookId}/codex")
     public Response getBookCodex(@PathParam("bookId") UUID bookId) {
+        logger.debug("CodexResource.getBookCodex invoked: bookId={}", bookId);
         try {
             return codexDao.findByBookId(bookId)
                     .map(cx -> Response.ok(cx).build())
@@ -141,6 +145,7 @@ public class CodexResource {
     @POST
     @Path("/books/{bookId}/codex")
     public Response createBookCodex(@PathParam("bookId") UUID bookId, CreateCodexRequest req) {
+        logger.info("CodexResource.createBookCodex invoked: bookId={}", bookId);
         try {
             if (codexDao.findByBookId(bookId).isPresent()) {
                 return Response.status(Response.Status.CONFLICT)
@@ -161,6 +166,7 @@ public class CodexResource {
     @GET
     @Path("/codex/{id}")
     public Response getCodex(@PathParam("id") UUID id) {
+        logger.debug("CodexResource.getCodex invoked: id={}", id);
         try {
             return codexDao.findById(id)
                     .map(cx -> Response.ok(cx).build())
@@ -173,6 +179,7 @@ public class CodexResource {
     @DELETE
     @Path("/codex/{id}")
     public Response deleteCodex(@PathParam("id") UUID id) {
+        logger.info("CodexResource.deleteCodex invoked: id={}", id);
         try {
             return codexDao.delete(id)
                     ? Response.noContent().build()
@@ -189,6 +196,7 @@ public class CodexResource {
     @GET
     @Path("/codex/{codexId}/chapters")
     public Response listCodexChapters(@PathParam("codexId") UUID codexId) {
+        logger.debug("CodexResource.listCodexChapters invoked: codexId={}", codexId);
         try {
             List<Chapter> chapters = chapterDao.findByCodexId(codexId);
             return Response.ok(chapters).build();
@@ -200,6 +208,7 @@ public class CodexResource {
     @POST
     @Path("/codex/{codexId}/chapters")
     public Response createCodexChapter(@PathParam("codexId") UUID codexId, CreateCodexChapterRequest req) {
+        logger.info("CodexResource.createCodexChapter invoked: codexId={}, category={}", codexId, req == null ? null : req.codexCategory);
         if (req == null || req.title == null || req.title.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("title is required").build();
@@ -220,6 +229,7 @@ public class CodexResource {
     @PUT
     @Path("/codex/{codexId}/chapters/reorder")
     public Response reorderCodexChapters(@PathParam("codexId") UUID codexId, ReorderRequest req) {
+        logger.info("CodexResource.reorderCodexChapters invoked: codexId={}, count={}", codexId, req == null || req.ids == null ? 0 : req.ids.size());
         if (req == null || req.ids == null || req.ids.isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("ids is required").build();
@@ -245,7 +255,7 @@ public class CodexResource {
     }
 
     private Response serverError(SQLException sqle) {
-        logger.info("SQLException: {}", sqle.getMessage());
+        logger.error("Database error in CodexResource: {}", sqle.getMessage(), sqle);
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                 .entity(sqle.getMessage()).build();
     }

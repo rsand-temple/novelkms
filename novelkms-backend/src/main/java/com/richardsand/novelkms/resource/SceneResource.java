@@ -75,6 +75,7 @@ public class SceneResource {
     @GET
     @Path("/chapters/{chapterId}/scenes")
     public Response listScenes(@PathParam("chapterId") UUID chapterId) {
+        logger.debug("SceneResource.listScenes invoked: chapterId={}", chapterId);
         try {
             List<Scene> scenes = sceneDao.findByChapterId(chapterId);
             return Response.ok(scenes).build();
@@ -86,6 +87,7 @@ public class SceneResource {
     @GET
     @Path("/scenes/{id}")
     public Response getScene(@PathParam("id") UUID id) {
+        logger.debug("SceneResource.getScene invoked: id={}", id);
         try {
             return sceneDao.findById(id)
                     .map(s -> Response.ok(s).build())
@@ -98,6 +100,7 @@ public class SceneResource {
     @POST
     @Path("/chapters/{chapterId}/scenes")
     public Response createScene(@PathParam("chapterId") UUID chapterId, CreateRequest req) {
+        logger.info("SceneResource.createScene invoked: chapterId={}", chapterId);
         if (req == null || req.title == null) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("title is required").build();
@@ -113,6 +116,7 @@ public class SceneResource {
     @PUT
     @Path("/scenes/{id}")
     public Response updateScene(@PathParam("id") UUID id, UpdateRequest req) {
+        logger.info("SceneResource.updateScene invoked: id={}", id);
         if (req == null || req.title == null) {
             return Response.status(Response.Status.BAD_REQUEST).entity("title is required").build();
         }
@@ -138,6 +142,7 @@ public class SceneResource {
     @PUT
     @Path("/scenes/{id}/content")
     public Response saveContent(@PathParam("id") UUID id, SaveContentRequest req) {
+        logger.debug("SceneResource.saveContent invoked: id={}, wordCount={}", id, req == null ? null : req.wordCount);
         if (req == null) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
@@ -153,6 +158,7 @@ public class SceneResource {
     @DELETE
     @Path("/scenes/{id}")
     public Response deleteScene(@PathParam("id") UUID id, @Context ContainerRequestContext request) {
+        logger.info("SceneResource.deleteScene invoked: id={}", id);
         try {
             return trashService.trashScene(CurrentUser.id(request), id).isPresent()
                     ? Response.noContent().build()
@@ -191,7 +197,7 @@ public class SceneResource {
     // -------------------------------------------------------------------------
 
     private Response serverError(SQLException sqle) {
-        logger.info("SQLException: {}", sqle.getMessage());
+        logger.error("Database error in SceneResource: {}", sqle.getMessage(), sqle);
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                 .entity(sqle.getMessage()).build();
     }

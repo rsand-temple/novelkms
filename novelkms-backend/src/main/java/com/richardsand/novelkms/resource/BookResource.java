@@ -106,6 +106,7 @@ public class BookResource {
     @GET
     @Path("/projects/{projectId}/books")
     public Response listBooks(@PathParam("projectId") UUID projectId) {
+        logger.debug("BookResource.listBooks invoked: projectId={}", projectId);
         try {
             List<Book> books = bookDao.findByProjectId(projectId);
             return Response.ok(books).build();
@@ -117,6 +118,7 @@ public class BookResource {
     @GET
     @Path("/books/{id}")
     public Response getBook(@PathParam("id") UUID id) {
+        logger.debug("BookResource.getBook invoked: id={}", id);
         try {
             return bookDao.findById(id)
                     .map(b -> Response.ok(b).build())
@@ -129,6 +131,7 @@ public class BookResource {
     @POST
     @Path("/projects/{projectId}/books")
     public Response createBook(@PathParam("projectId") UUID projectId, CreateRequest req) {
+        logger.info("BookResource.createBook invoked: projectId={}", projectId);
         if (req == null || req.title == null || req.title.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("title is required").build();
@@ -144,6 +147,7 @@ public class BookResource {
     @PUT
     @Path("/books/{id}")
     public Response updateBook(@PathParam("id") UUID id, UpdateRequest req) {
+        logger.info("BookResource.updateBook invoked: id={}", id);
         if (req == null || req.title == null || req.title.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("title is required").build();
@@ -160,6 +164,7 @@ public class BookResource {
     @DELETE
     @Path("/books/{id}")
     public Response deleteBook(@PathParam("id") UUID id, @Context ContainerRequestContext request) {
+        logger.info("BookResource.deleteBook invoked: id={}", id);
         try {
             return trashService.trashBook(CurrentUser.id(request), id).isPresent()
                     ? Response.noContent().build()
@@ -183,6 +188,7 @@ public class BookResource {
     @GET
     @Path("/books/{id}/word-count")
     public Response getWordCount(@PathParam("id") UUID id) {
+        logger.debug("BookResource.getWordCount invoked: id={}", id);
         try {
             int count = bookDao.getTotalWordCount(id);
             return Response.ok(Map.of("wordCount", count)).build();
@@ -208,6 +214,7 @@ public class BookResource {
     @Path("/books/{id}/cover-image")
     @Produces(MediaType.WILDCARD)
     public Response getCoverImage(@PathParam("id") UUID id) {
+        logger.debug("BookResource.getCoverImage invoked: id={}", id);
         try {
             return bookDao.getCoverImage(id)
                     .map(img -> Response.ok(img.data(), img.mimeType())
@@ -224,6 +231,7 @@ public class BookResource {
     @PUT
     @Path("/books/{id}/cover-image")
     public Response setCoverImage(@PathParam("id") UUID id, CoverImageRequest req) {
+        logger.info("BookResource.setCoverImage invoked: id={}, mimeType={}", id, req == null ? null : req.mimeType);
         if (req == null || req.imageData == null || req.mimeType == null) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("imageData and mimeType are required").build();
@@ -239,6 +247,7 @@ public class BookResource {
                     ? Response.noContent().build()
                     : Response.status(Response.Status.NOT_FOUND).build();
         } catch (IllegalArgumentException e) {
+            logger.warn("Invalid cover image upload for bookId={}: {}", id, e.getMessage());
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("imageData must be valid base64").build();
         } catch (SQLException e) {
@@ -249,6 +258,7 @@ public class BookResource {
     @DELETE
     @Path("/books/{id}/cover-image")
     public Response deleteCoverImage(@PathParam("id") UUID id) {
+        logger.info("BookResource.deleteCoverImage invoked: id={}", id);
         try {
             return bookDao.deleteCoverImage(id)
                     ? Response.noContent().build()
@@ -261,7 +271,7 @@ public class BookResource {
     // -------------------------------------------------------------------------
 
     private Response serverError(SQLException sqle) {
-        logger.info("SQLException: {}", sqle.getMessage());
+        logger.error("Database error in BookResource: {}", sqle.getMessage(), sqle);
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                 .entity(sqle.getMessage()).build();
     }

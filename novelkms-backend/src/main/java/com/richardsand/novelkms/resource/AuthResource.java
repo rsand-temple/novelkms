@@ -4,6 +4,9 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.richardsand.novelkms.NovelKmsConfig;
 import com.richardsand.novelkms.auth.AuthConstants;
 import com.richardsand.novelkms.auth.CryptoTokens;
@@ -30,6 +33,9 @@ import jakarta.ws.rs.core.Response;
 @Path("/auth")
 @Produces(MediaType.APPLICATION_JSON)
 public class AuthResource {
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthResource.class);
+
     public record RegistrationRequest(
             @NotBlank String displayName,
             String firstName,
@@ -53,6 +59,7 @@ public class AuthResource {
     @GET
     @Path("/providers")
     public Map<String, Boolean> providers() {
+        logger.debug("AuthResource.providers invoked");
         return Map.of(
                 "google", configured(config.google),
                 "github", configured(config.github),
@@ -62,6 +69,7 @@ public class AuthResource {
     @GET
     @Path("/{provider}/start")
     public Response start(@PathParam("provider") String provider, @QueryParam("returnTo") String returnTo) throws Exception {
+        logger.info("OAuth start requested: provider={}, returnTo={}", provider, returnTo);
         return Response.seeOther(oauth.begin(provider, returnTo)).build();
     }
 
@@ -72,14 +80,19 @@ public class AuthResource {
             @QueryParam("state") String state,
             @QueryParam("error") String error,
             @Context HttpServletRequest request) throws Exception {
-        if (error != null)
+        logger.info("Registration completion requested: remoteAddr={}", request.getRemoteAddr());
+        if (error != null) {
+            logger.warn("OAuth callback denied by provider={}: error={}", provider, error);
             return Response.seeOther(URI.create(config.frontendBaseUrl + "/login?error=oauth_denied")).build();
+        }
         OAuthService.CallbackResult result = oauth.callback(provider, code, state);
         if (result.user() != null) {
+            logger.info("OAuth callback authenticated existing user: provider={}, userId={}", provider, result.user().id());
             String token = sessions.create(result.user(), request.getRemoteAddr(), request.getHeader("User-Agent"));
             return Response.seeOther(URI.create(config.frontendBaseUrl + result.returnPath()))
                     .cookie(sessionCookie(token)).build();
         }
+        logger.info("OAuth callback requires registration: provider={}", provider);
         return Response.seeOther(URI.create(config.frontendBaseUrl + "/register"))
                 .cookie(registrationCookie(result.pendingRegistrationToken())).build();
     }
@@ -88,6 +101,7 @@ public class AuthResource {
     @Path("/status")
     public Response status(@CookieParam(AuthConstants.SESSION_COOKIE) String sessionToken,
             @CookieParam(AuthConstants.REGISTRATION_COOKIE) String registrationToken) throws Exception {
+        logger.debug("AuthResource.status invoked: hasSessionCookie={}, hasRegistrationCookie={}", sessionToken != null, registrationToken != null);
         var user = sessions.authenticate(sessionToken);
         if (user.isPresent()) {
             var u = user.get();
@@ -129,7 +143,8 @@ public class AuthResource {
             return Response.status(Response.Status.UNAUTHORIZED).entity(Map.of("error", "registration_expired")).build();
         if (body.displayName() == null || body.displayName().isBlank() || body.displayName().trim().length() > 200)
             return Response.status(Response.Status.BAD_REQUEST).entity(Map.of("error", "display_name_required")).build();
-        var    user    = dao.register(pending.get(), body.firstName(), body.lastName(), body.displayName(), body.mobileNumber());
+        var user = dao.register(pending.get(), body.firstName(), body.lastName(), body.displayName(), body.mobileNumber());
+        logger.info("Registration completed: userId={}, email={}", user.id(), user.emailAddress());
         String session = sessions.create(user, request.getRemoteAddr(), request.getHeader("User-Agent"));
         return Response.ok(
                 Map.of(
@@ -144,6 +159,7 @@ public class AuthResource {
     @POST
     @Path("/logout")
     public Response logout(@CookieParam(AuthConstants.SESSION_COOKIE) String token) throws Exception {
+        logger.info("Logout requested: hasSessionCookie={}", token != null);
         sessions.revoke(token);
         return Response.noContent().cookie(clearCookie(AuthConstants.SESSION_COOKIE)).build();
     }

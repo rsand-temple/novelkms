@@ -3,6 +3,9 @@ package com.richardsand.novelkms.resource;
 import java.sql.SQLException;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.EditorSettingsDao;
@@ -43,6 +46,8 @@ import jakarta.ws.rs.core.Response;
 @Consumes(MediaType.APPLICATION_JSON)
 public class EditorSettingsResource {
 
+    private static final Logger logger = LoggerFactory.getLogger(EditorSettingsResource.class);
+
     private final EditorSettingsDao dao;
 
     @Context
@@ -72,12 +77,14 @@ public class EditorSettingsResource {
     @GET
     @Path("/editor-settings/global")
     public Response getUser() {
+        logger.debug("EditorSettingsResource.getUser invoked");
         return run(() -> Response.ok(dao.resolveUser(u())).build());
     }
 
     @PUT
     @Path("/editor-settings/global")
     public Response putUser(DefinitionRequest r) {
+        logger.info("EditorSettingsResource.putUser invoked");
         need(r);
         return run(() -> Response.ok(dao.upsertUser(u(), r.definition)).build());
     }
@@ -85,6 +92,7 @@ public class EditorSettingsResource {
     @POST
     @Path("/editor-settings/global/reset")
     public Response resetUser() {
+        logger.info("EditorSettingsResource.resetUser invoked");
         return run(() -> {
             dao.deleteUser(u());
             return Response.ok(dao.resolveUser(u())).build();
@@ -96,12 +104,14 @@ public class EditorSettingsResource {
     @GET
     @Path("/projects/{id}/editor-settings")
     public Response getProject(@PathParam("id") UUID projectId) {
+        logger.debug("EditorSettingsResource.getProject invoked: projectId={}", projectId);
         return run(() -> Response.ok(dao.resolveProject(u(), projectId)).build());
     }
 
     @PUT
     @Path("/projects/{id}/editor-settings")
     public Response putProject(@PathParam("id") UUID projectId, DefinitionRequest r) {
+        logger.info("EditorSettingsResource.putProject invoked: projectId={}", projectId);
         need(r);
         return run(() -> Response.ok(dao.upsertProject(projectId, r.definition)).build());
     }
@@ -109,6 +119,7 @@ public class EditorSettingsResource {
     @DELETE
     @Path("/projects/{id}/editor-settings")
     public Response deleteProject(@PathParam("id") UUID projectId) {
+        logger.info("EditorSettingsResource.deleteProject invoked: projectId={}", projectId);
         return run(() -> dao.deleteProject(projectId)
                 ? Response.noContent().build()
                 : Response.status(404).build());
@@ -119,12 +130,14 @@ public class EditorSettingsResource {
     @GET
     @Path("/books/{id}/editor-settings")
     public Response getBook(@PathParam("id") UUID bookId) {
+        logger.debug("EditorSettingsResource.getBook invoked: bookId={}", bookId);
         return run(() -> Response.ok(dao.resolveBook(u(), bookId)).build());
     }
 
     @PUT
     @Path("/books/{id}/editor-settings")
     public Response putBook(@PathParam("id") UUID bookId, DefinitionRequest r) {
+        logger.info("EditorSettingsResource.putBook invoked: bookId={}", bookId);
         need(r);
         return run(() -> Response.ok(dao.upsertBook(bookId, r.definition)).build());
     }
@@ -132,6 +145,7 @@ public class EditorSettingsResource {
     @DELETE
     @Path("/books/{id}/editor-settings")
     public Response deleteBook(@PathParam("id") UUID bookId) {
+        logger.info("EditorSettingsResource.deleteBook invoked: bookId={}", bookId);
         return run(() -> dao.deleteBook(bookId)
                 ? Response.noContent().build()
                 : Response.status(404).build());
@@ -141,6 +155,7 @@ public class EditorSettingsResource {
         try {
             return c.go();
         } catch (SQLException e) {
+            logger.error("Database error in EditorSettingsResource: {}", e.getMessage(), e);
             return Response.serverError().entity(e.getMessage()).build();
         }
     }

@@ -82,6 +82,7 @@ public class PartResource {
     @GET
     @Path("/books/{bookId}/parts")
     public Response listParts(@PathParam("bookId") UUID bookId) {
+        logger.debug("PartResource.listParts invoked: bookId={}", bookId);
         try {
             List<Part> parts = partDao.findByBookId(bookId);
             return Response.ok(parts).build();
@@ -93,6 +94,7 @@ public class PartResource {
     @POST
     @Path("/books/{bookId}/parts")
     public Response createPart(@PathParam("bookId") UUID bookId, CreatePartRequest req) {
+        logger.info("PartResource.createPart invoked: bookId={}", bookId);
         if (req == null || req.title == null || req.title.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("title is required").build();
@@ -108,6 +110,7 @@ public class PartResource {
     @GET
     @Path("/parts/{id}")
     public Response getPart(@PathParam("id") UUID id) {
+        logger.debug("PartResource.getPart invoked: id={}", id);
         try {
             return partDao.findById(id)
                     .map(p -> Response.ok(p).build())
@@ -120,6 +123,7 @@ public class PartResource {
     @PUT
     @Path("/parts/{id}")
     public Response updatePart(@PathParam("id") UUID id, UpdatePartRequest req) {
+        logger.info("PartResource.updatePart invoked: id={}", id);
         if (req == null) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("request body is required").build();
@@ -140,6 +144,7 @@ public class PartResource {
     @DELETE
     @Path("/parts/{id}")
     public Response deletePart(@PathParam("id") UUID id) {
+        logger.info("PartResource.deletePart invoked: id={}", id);
         try {
             return partDao.delete(id)
                     ? Response.noContent().build()
@@ -152,6 +157,7 @@ public class PartResource {
     @PUT
     @Path("/books/{bookId}/parts/reorder")
     public Response reorderParts(@PathParam("bookId") UUID bookId, ReorderRequest req) {
+        logger.info("PartResource.reorderParts invoked: bookId={}, count={}", bookId, req == null || req.ids == null ? 0 : req.ids.size());
         if (req == null || req.ids == null || req.ids.isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("ids is required").build();
@@ -178,6 +184,7 @@ public class PartResource {
     @GET
     @Path("/parts/{id}/word-count")
     public Response getWordCount(@PathParam("id") UUID id) {
+        logger.debug("PartResource.getWordCount invoked: id={}", id);
         try {
             int count = partDao.getTotalWordCount(id);
             return Response.ok(Map.of("wordCount", count)).build();
@@ -193,6 +200,7 @@ public class PartResource {
     @GET
     @Path("/parts/{partId}/chapters")
     public Response listPartChapters(@PathParam("partId") UUID partId) {
+        logger.debug("PartResource.listPartChapters invoked: partId={}", partId);
         try {
             List<Chapter> chapters = chapterDao.findByPartId(partId);
             return Response.ok(chapters).build();
@@ -204,6 +212,7 @@ public class PartResource {
     @POST
     @Path("/parts/{partId}/chapters")
     public Response createPartChapter(@PathParam("partId") UUID partId, CreateChapterRequest req) {
+        logger.info("PartResource.createPartChapter invoked: partId={}", partId);
         if (req == null || req.title == null || req.title.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("title is required").build();
@@ -224,6 +233,7 @@ public class PartResource {
     @PUT
     @Path("/parts/{partId}/chapters/reorder")
     public Response reorderPartChapters(@PathParam("partId") UUID partId, ReorderRequest req) {
+        logger.info("PartResource.reorderPartChapters invoked: partId={}, count={}", partId, req == null || req.ids == null ? 0 : req.ids.size());
         if (req == null || req.ids == null || req.ids.isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("ids is required").build();
@@ -239,7 +249,7 @@ public class PartResource {
     // -------------------------------------------------------------------------
 
     private Response serverError(SQLException sqle) {
-        logger.info("SQLException: {}", sqle.getMessage());
+        logger.error("Database error in PartResource: {}", sqle.getMessage(), sqle);
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                 .entity(sqle.getMessage()).build();
     }

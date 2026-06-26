@@ -2,6 +2,8 @@ package com.richardsand.novelkms.resource;
 
 import java.sql.SQLException;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.UserStyleDao;
@@ -15,6 +17,7 @@ import jakarta.ws.rs.core.*;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class StyleResource {
+    private static final Logger logger = LoggerFactory.getLogger(StyleResource.class);
     private final UserStyleDao dao;
     @Context
     ContainerRequestContext    request;
@@ -43,18 +46,21 @@ public class StyleResource {
     @GET
     @Path("/styles/global")
     public Response allUser() {
+        logger.debug("StyleResource.allUser invoked");
         return run(() -> Response.ok(dao.allUser(u())).build());
     }
 
     @GET
     @Path("/styles/global/{key}")
     public Response user(@PathParam("key") String k) {
+        logger.debug("StyleResource.user invoked: key={}", k);
         return run(() -> Response.ok(dao.resolveUser(u(), k(k))).build());
     }
 
     @PUT
     @Path("/styles/global/{key}")
     public Response putUser(@PathParam("key") String k, DefinitionRequest r) {
+        logger.info("StyleResource.putUser invoked: key={}", k);
         need(r);
         return run(() -> Response.ok(dao.upsertUser(u(), k(k), r.definition)).build());
     }
@@ -62,6 +68,7 @@ public class StyleResource {
     @POST
     @Path("/styles/global/{key}/reset")
     public Response resetUser(@PathParam("key") String k) {
+        logger.info("StyleResource.resetUser invoked: key={}", k);
         return run(() -> {
             dao.deleteUser(u(), k(k));
             return Response.ok(dao.resolveUser(u(), k(k))).build();
@@ -71,18 +78,21 @@ public class StyleResource {
     @GET
     @Path("/projects/{id}/styles")
     public Response allProject(@PathParam("id") UUID p) {
+        logger.debug("StyleResource.allProject invoked: id={}", p);
         return run(() -> Response.ok(dao.allProject(u(), p)).build());
     }
 
     @GET
     @Path("/projects/{id}/styles/{key}")
     public Response project(@PathParam("id") UUID p, @PathParam("key") String k) {
+        logger.debug("StyleResource.project invoked: id={}, key={}", p, k);
         return run(() -> Response.ok(dao.resolveProject(u(), p, k(k))).build());
     }
 
     @PUT
     @Path("/projects/{id}/styles/{key}")
     public Response putProject(@PathParam("id") UUID p, @PathParam("key") String k, DefinitionRequest r) {
+        logger.info("StyleResource.putProject invoked: id={}, key={}", p, k);
         need(r);
         return run(() -> Response.ok(dao.upsertProject(p, k(k), r.definition)).build());
     }
@@ -90,24 +100,28 @@ public class StyleResource {
     @DELETE
     @Path("/projects/{id}/styles/{key}")
     public Response delProject(@PathParam("id") UUID p, @PathParam("key") String k) {
+        logger.info("StyleResource.delProject invoked: id={}, key={}", p, k);
         return run(() -> dao.deleteProject(p, k(k)) ? Response.noContent().build() : Response.status(404).build());
     }
 
     @GET
     @Path("/books/{id}/styles")
     public Response allBook(@PathParam("id") UUID b) {
+        logger.debug("StyleResource.allBook invoked: id={}", b);
         return run(() -> Response.ok(dao.allBook(u(), b)).build());
     }
 
     @GET
     @Path("/books/{id}/styles/{key}")
     public Response book(@PathParam("id") UUID b, @PathParam("key") String k) {
+        logger.debug("StyleResource.book invoked: id={}, key={}", b, k);
         return run(() -> Response.ok(dao.resolveBook(u(), b, k(k))).build());
     }
 
     @PUT
     @Path("/books/{id}/styles/{key}")
     public Response putBook(@PathParam("id") UUID b, @PathParam("key") String k, DefinitionRequest r) {
+        logger.info("StyleResource.putBook invoked: id={}, key={}", b, k);
         need(r);
         return run(() -> Response.ok(dao.upsertBook(b, k(k), r.definition)).build());
     }
@@ -115,6 +129,7 @@ public class StyleResource {
     @DELETE
     @Path("/books/{id}/styles/{key}")
     public Response delBook(@PathParam("id") UUID b, @PathParam("key") String k) {
+        logger.info("StyleResource.delBook invoked: id={}, key={}", b, k);
         return run(() -> dao.deleteBook(b, k(k)) ? Response.noContent().build() : Response.status(404).build());
     }
 
@@ -127,6 +142,7 @@ public class StyleResource {
         try {
             return c.go();
         } catch (SQLException e) {
+            logger.error("Database error in StyleResource: {}", e.getMessage(), e);
             return Response.serverError().entity(e.getMessage()).build();
         }
     }

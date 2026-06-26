@@ -65,6 +65,7 @@ public class ProjectResource {
     @GET
     @Path("/projects")
     public Response listProjects(@Context ContainerRequestContext request) {
+        logger.debug("ProjectResource.listProjects invoked");
         try {
             List<Project> projects = projectDao.findAllForUser(CurrentUser.id(request));
             return Response.ok(projects).build();
@@ -76,6 +77,7 @@ public class ProjectResource {
     @GET
     @Path("/projects/{id}")
     public Response getProject(@PathParam("id") UUID id, @Context ContainerRequestContext request) {
+        logger.debug("ProjectResource.getProject invoked: id={}", id);
         try {
             return projectDao.findByIdForUser(id, CurrentUser.id(request))
                     .map(p -> Response.ok(p).build())
@@ -88,6 +90,7 @@ public class ProjectResource {
     @POST
     @Path("/projects")
     public Response createProject(CreateRequest body, @Context ContainerRequestContext request) {
+        logger.info("ProjectResource.createProject invoked");
         if (body == null || StringUtils.isBlank(body.title)) {
             return Response.status(Response.Status.BAD_REQUEST).entity("title is required").build();
         }
@@ -154,7 +157,7 @@ public class ProjectResource {
     }
 
     private Response serverError(SQLException e) {
-        logger.info("SQLException: {}", e.getMessage());
+        logger.error("Database error in ProjectResource: {}", e.getMessage(), e);
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
     }
 }

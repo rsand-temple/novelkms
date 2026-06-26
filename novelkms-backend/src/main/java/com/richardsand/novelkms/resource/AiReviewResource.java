@@ -5,6 +5,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.ai.ReviewException;
 import com.richardsand.novelkms.auth.CurrentUser;
@@ -42,6 +45,8 @@ import jakarta.ws.rs.core.Response;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class AiReviewResource {
+
+    private static final Logger logger = LoggerFactory.getLogger(AiReviewResource.class);
 
     private static final Set<String> VALID_STATUSES = Set.of(
             "OPEN",
@@ -87,6 +92,7 @@ public class AiReviewResource {
     @POST
     @Path("/ai/reviews/chapters/{chapterId}")
     public Response runChapterReview(@PathParam("chapterId") UUID chapterId, RunRequest body) {
+        logger.info("AiReviewResource.runChapterReview invoked: chapterId={}", chapterId);
         UUID   userId       = CurrentUser.id(request);
         UUID   credentialId = body == null ? null : body.credentialId;
         String model        = body == null ? null : body.model;
@@ -94,10 +100,12 @@ public class AiReviewResource {
             AiReview review = service.runChapterReview(userId, chapterId, credentialId, model);
             return Response.ok(review).build();
         } catch (ReviewException e) {
+            logger.warn("Chapter AI review rejected for chapterId={}: status={} code={} message={}", chapterId, e.status(), e.code(), e.getMessage());
             return Response.status(e.status())
                     .entity(Map.of("error", e.code(), "message", e.getMessage()))
                     .build();
         } catch (SQLException e) {
+            logger.error("Database error running chapter AI review for chapterId={}: {}", chapterId, e.getMessage(), e);
             return Response.serverError().entity(Map.of("error", "server_error")).build();
         }
     }
@@ -105,6 +113,7 @@ public class AiReviewResource {
     @POST
     @Path("/ai/reviews/scenes/{sceneId}")
     public Response runSceneReview(@PathParam("sceneId") UUID sceneId, RunRequest body) {
+        logger.info("AiReviewResource.runSceneReview invoked: sceneId={}", sceneId);
         UUID   userId       = CurrentUser.id(request);
         UUID   credentialId = body == null ? null : body.credentialId;
         String model        = body == null ? null : body.model;
@@ -112,10 +121,12 @@ public class AiReviewResource {
             AiReview review = service.runSceneReview(userId, sceneId, credentialId, model);
             return Response.ok(review).build();
         } catch (ReviewException e) {
+            logger.warn("Scene AI review rejected for sceneId={}: status={} code={} message={}", sceneId, e.status(), e.code(), e.getMessage());
             return Response.status(e.status())
                     .entity(Map.of("error", e.code(), "message", e.getMessage()))
                     .build();
         } catch (SQLException e) {
+            logger.error("Database error running scene AI review for sceneId={}: {}", sceneId, e.getMessage(), e);
             return Response.serverError().entity(Map.of("error", "server_error")).build();
         }
     }
@@ -123,6 +134,7 @@ public class AiReviewResource {
     @GET
     @Path("/ai/reviews/{reviewId}")
     public Response getReview(@PathParam("reviewId") UUID reviewId) {
+        logger.debug("AiReviewResource.getReview invoked: reviewId={}", reviewId);
         return run(() -> reviewDao.findByIdForUser(reviewId, CurrentUser.id(request))
                 .map(review -> Response.ok(review).build())
                 .orElseGet(() -> notFound()));
@@ -136,6 +148,7 @@ public class AiReviewResource {
     @DELETE
     @Path("/ai/reviews/{reviewId}")
     public Response deleteReview(@PathParam("reviewId") UUID reviewId) {
+        logger.info("AiReviewResource.deleteReview invoked: reviewId={}", reviewId);
         return run(() -> trashService.trashReview(CurrentUser.id(request), reviewId).isPresent()
                 ? Response.noContent().build()
                 : notFound());
@@ -146,6 +159,7 @@ public class AiReviewResource {
     public Response promoteRecommendation(@PathParam("reviewId") UUID reviewId,
             @PathParam("recId") UUID recId,
             PromoteRequest body) {
+        logger.info("AiReviewResource.promoteRecommendation invoked: reviewId={}, recId={}", reviewId, recId);
         UUID userId = CurrentUser.id(request);
         try {
             AiReview review = service.promoteRecommendation(
@@ -156,10 +170,12 @@ public class AiReviewResource {
                     body == null ? null : body.codexTitle);
             return Response.ok(review).build();
         } catch (ReviewException e) {
+            logger.warn("AI recommendation promotion rejected for reviewId={}, recId={}: status={} code={} message={}", reviewId, recId, e.status(), e.code(), e.getMessage());
             return Response.status(e.status())
                     .entity(Map.of("error", e.code(), "message", e.getMessage()))
                     .build();
         } catch (SQLException e) {
+            logger.error("Database error promoting AI recommendation reviewId={}, recId={}: {}", reviewId, recId, e.getMessage(), e);
             return Response.serverError().entity(Map.of("error", "server_error")).build();
         }
     }
@@ -167,6 +183,7 @@ public class AiReviewResource {
     @GET
     @Path("/chapters/{chapterId}/reviews")
     public Response listForChapter(@PathParam("chapterId") UUID chapterId) {
+        logger.debug("AiReviewResource.listForChapter invoked: chapterId={}", chapterId);
         return run(() -> Response.ok(reviewDao.findByChapter(chapterId)).build());
     }
 
@@ -175,6 +192,7 @@ public class AiReviewResource {
     public Response setRecommendationStatus(@PathParam("reviewId") UUID reviewId,
             @PathParam("recId") UUID recId,
             StatusRequest body) {
+        logger.info("AiReviewResource.setRecommendationStatus invoked: reviewId={}, recId={}, status={}", reviewId, recId, body == null ? null : body.status);
         if (body == null || body.status == null) {
             return error(400, "bad_request", "A status is required.");
         }
@@ -210,6 +228,7 @@ public class AiReviewResource {
         try {
             return call.call();
         } catch (SQLException e) {
+            logger.error("Database error in AiReviewResource: {}", e.getMessage(), e);
             return Response.serverError().entity(Map.of("error", "server_error")).build();
         }
     }

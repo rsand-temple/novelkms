@@ -50,6 +50,7 @@ public class ExportResource {
     @Path("/export/books/{bookId}/docx")
     @Produces(MediaType.WILDCARD)
     public Response exportBook(@PathParam("bookId") UUID bookId) {
+        logger.info("ExportResource.exportBook invoked: bookId={}", bookId);
         try {
             ExportMeta meta = exportService.exportBook(bookId);
             return download(meta.bytes(), meta.filename(), DOCX_MIME);
@@ -65,6 +66,7 @@ public class ExportResource {
     @Path("/export/books/{bookId}/epub")
     @Produces(MediaType.WILDCARD)
     public Response exportBookEpub(@PathParam("bookId") UUID bookId) {
+        logger.info("ExportResource.exportBookEpub invoked: bookId={}", bookId);
         try {
             EpubExportService.ExportMeta meta = epubExportService.exportBook(bookId);
             return download(meta.bytes(), meta.filename(), EPUB_MIME);
@@ -84,6 +86,7 @@ public class ExportResource {
     @Path("/export/parts/{partId}/docx")
     @Produces(MediaType.WILDCARD)
     public Response exportPart(@PathParam("partId") UUID partId) {
+        logger.info("ExportResource.exportPart invoked: partId={}", partId);
         try {
             ExportMeta meta = exportService.exportPart(partId);
             return download(meta.bytes(), meta.filename(), DOCX_MIME);
@@ -103,6 +106,7 @@ public class ExportResource {
     @Path("/export/chapters/{chapterId}/docx")
     @Produces(MediaType.WILDCARD)
     public Response exportChapter(@PathParam("chapterId") UUID chapterId) {
+        logger.info("ExportResource.exportChapter invoked: chapterId={}", chapterId);
         try {
             ExportMeta meta = exportService.exportChapter(chapterId);
             return download(meta.bytes(), meta.filename(), DOCX_MIME);
@@ -122,6 +126,7 @@ public class ExportResource {
     @Path("/export/scenes/{sceneId}/docx")
     @Produces(MediaType.WILDCARD)
     public Response exportScene(@PathParam("sceneId") UUID sceneId) {
+        logger.info("ExportResource.exportScene invoked: sceneId={}", sceneId);
         try {
             ExportMeta meta = exportService.exportScene(sceneId);
             return download(meta.bytes(), meta.filename(), DOCX_MIME);

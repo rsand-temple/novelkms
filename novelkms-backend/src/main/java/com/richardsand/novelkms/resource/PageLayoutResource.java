@@ -3,6 +3,9 @@ package com.richardsand.novelkms.resource;
 import java.sql.SQLException;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.dao.PageLayoutDao;
 import com.richardsand.novelkms.model.PageLayout;
@@ -34,6 +37,8 @@ import jakarta.ws.rs.core.Response;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class PageLayoutResource {
+
+    private static final Logger logger = LoggerFactory.getLogger(PageLayoutResource.class);
 
     private final PageLayoutDao dao;
 
@@ -72,18 +77,21 @@ public class PageLayoutResource {
     @GET
     @Path("/projects/{id}/page-layout")
     public Response getProject(@PathParam("id") UUID projectId) {
+        logger.debug("PageLayoutResource.getProject invoked: projectId={}", projectId);
         return run(() -> Response.ok(dao.resolveProject(projectId)).build());
     }
 
     @PUT
     @Path("/projects/{id}/page-layout")
     public Response putProject(@PathParam("id") UUID projectId, PageLayoutRequest body) {
+        logger.info("PageLayoutResource.putProject invoked: projectId={}", projectId);
         return run(() -> Response.ok(dao.upsertProject(projectId, body.toValue())).build());
     }
 
     @DELETE
     @Path("/projects/{id}/page-layout")
     public Response deleteProject(@PathParam("id") UUID projectId) {
+        logger.info("PageLayoutResource.deleteProject invoked: projectId={}", projectId);
         return run(() -> dao.deleteProject(projectId)
                 ? Response.noContent().build()
                 : Response.status(404).build());
@@ -94,18 +102,21 @@ public class PageLayoutResource {
     @GET
     @Path("/books/{id}/page-layout")
     public Response getBook(@PathParam("id") UUID bookId) {
+        logger.debug("PageLayoutResource.getBook invoked: bookId={}", bookId);
         return run(() -> Response.ok(dao.resolveBook(bookId)).build());
     }
 
     @PUT
     @Path("/books/{id}/page-layout")
     public Response putBook(@PathParam("id") UUID bookId, PageLayoutRequest body) {
+        logger.info("PageLayoutResource.putBook invoked: bookId={}", bookId);
         return run(() -> Response.ok(dao.upsertBook(bookId, body.toValue())).build());
     }
 
     @DELETE
     @Path("/books/{id}/page-layout")
     public Response deleteBook(@PathParam("id") UUID bookId) {
+        logger.info("PageLayoutResource.deleteBook invoked: bookId={}", bookId);
         return run(() -> dao.deleteBook(bookId)
                 ? Response.noContent().build()
                 : Response.status(404).build());
@@ -115,6 +126,7 @@ public class PageLayoutResource {
         try {
             return c.go();
         } catch (SQLException e) {
+            logger.error("Database error in PageLayoutResource: {}", e.getMessage(), e);
             return Response.serverError().entity(e.getMessage()).build();
         }
     }
