@@ -31,7 +31,7 @@ import com.richardsand.novelkms.dao.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.CodexCategoryDao;
 import com.richardsand.novelkms.dao.CodexDao;
 import com.richardsand.novelkms.dao.EditorSettingsDao;
-import com.richardsand.novelkms.dao.KmsArchiveDao;
+import com.richardsand.novelkms.dao.ArchiveDao;
 import com.richardsand.novelkms.dao.MemoryTemplateDao;
 import com.richardsand.novelkms.dao.PageLayoutDao;
 import com.richardsand.novelkms.dao.PartDao;
@@ -69,7 +69,7 @@ import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
-import com.richardsand.novelkms.service.KmsArchiveService;
+import com.richardsand.novelkms.service.ArchiveService;
 import com.richardsand.novelkms.service.TrashService;
 
 import io.dropwizard.assets.AssetsBundle;
@@ -149,7 +149,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         CodexDao          codexDao          = new CodexDao(ds);
         CodexCategoryDao  codexCategoryDao  = new CodexCategoryDao(ds);
         EditorSettingsDao editorSettingsDao = new EditorSettingsDao(ds);
-        KmsArchiveDao     kmsArchiveDao     = new KmsArchiveDao(ds);
+        ArchiveDao     kmsArchiveDao     = new ArchiveDao(ds);
         MemoryTemplateDao       memoryTemplateDao     = new MemoryTemplateDao(ds);
         PageLayoutDao     pageLayoutDao     = new PageLayoutDao(ds);
         PartDao           partDao           = new PartDao(ds);
@@ -165,7 +165,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         EpubExportService epubExportService = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
         ExportService     exportService     = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
         ImportService     importService     = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        KmsArchiveService kmsArchiveService = new KmsArchiveService(kmsArchiveDao);
+        ArchiveService kmsArchiveService = new ArchiveService(kmsArchiveDao);
         OAuthService      oauthService      = new OAuthService(config.getAuth(), authDao);
         SessionService    sessionService    = new SessionService(authDao, config.getAuth());
         TrashService      trashService      = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
@@ -247,7 +247,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(epubExportService).to(EpubExportService.class);
                 bind(exportService).to(ExportService.class);
                 bind(importService).to(ImportService.class);
-                bind(kmsArchiveService).to(KmsArchiveService.class);
+                bind(kmsArchiveService).to(ArchiveService.class);
                 bind(mapper).to(ObjectMapper.class);
                 bind(memoryTemplateDao).to(MemoryTemplateDao.class);
                 bind(oauthService).to(OAuthService.class);

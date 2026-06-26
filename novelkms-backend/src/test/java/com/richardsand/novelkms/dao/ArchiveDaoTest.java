@@ -23,13 +23,13 @@ import com.richardsand.novelkms.model.Chapter;
 import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.Scene;
 
-class KmsArchiveDaoTest extends NovelKmsTestBase {
+class ArchiveDaoTest extends NovelKmsTestBase {
 
     @Test
     void exportSelectorsReturnLowercaseColumnsAndExpectedRows() throws Exception {
         truncateAll();
 
-        KmsArchiveDao dao     = new KmsArchiveDao(ds);
+        ArchiveDao dao     = new ArchiveDao(ds);
         Project       project = projectDao.createForUser(TEST_USER_ID, "Source Project", null);
         Book          book    = bookDao.create(project.getId(), "Source Book", null, null, null);
         Chapter       chapter = chapterDao.create(book.getId(), null, "Chapter One", null, null);
@@ -61,7 +61,7 @@ class KmsArchiveDaoTest extends NovelKmsTestBase {
     void insertRowsInTransactionPreservesDestinationOwnerAndRelationships() throws Exception {
         truncateAll();
 
-        KmsArchiveDao dao = new KmsArchiveDao(ds);
+        ArchiveDao dao = new ArchiveDao(ds);
 
         UUID   newProjectId = UUID.randomUUID();
         UUID   newBookId    = UUID.randomUUID();
@@ -69,21 +69,21 @@ class KmsArchiveDaoTest extends NovelKmsTestBase {
         UUID   newSceneId   = UUID.randomUUID();
         String now          = Instant.now().toString();
 
-        List<KmsArchiveDao.InsertBatch> batches = new ArrayList<>();
-        batches.add(new KmsArchiveDao.InsertBatch("project", List.of(row(
+        List<ArchiveDao.InsertBatch> batches = new ArrayList<>();
+        batches.add(new ArchiveDao.InsertBatch("project", List.of(row(
                 "id", newProjectId.toString(),
                 "owner_user_id", OTHER_USER_ID.toString(),
                 "title", "Imported Project",
                 "created_at", now,
                 "updated_at", now))));
-        batches.add(new KmsArchiveDao.InsertBatch("book", List.of(row(
+        batches.add(new ArchiveDao.InsertBatch("book", List.of(row(
                 "id", newBookId.toString(),
                 "project_id", newProjectId.toString(),
                 "title", "Imported Book",
                 "display_order", 0,
                 "created_at", now,
                 "updated_at", now))));
-        batches.add(new KmsArchiveDao.InsertBatch("chapter", List.of(row(
+        batches.add(new ArchiveDao.InsertBatch("chapter", List.of(row(
                 "id", newChapterId.toString(),
                 "book_id", newBookId.toString(),
                 "title", "Imported Chapter",
@@ -91,7 +91,7 @@ class KmsArchiveDaoTest extends NovelKmsTestBase {
                 "resets_numbering", false,
                 "created_at", now,
                 "updated_at", now))));
-        batches.add(new KmsArchiveDao.InsertBatch("scene", List.of(row(
+        batches.add(new ArchiveDao.InsertBatch("scene", List.of(row(
                 "id", newSceneId.toString(),
                 "chapter_id", newChapterId.toString(),
                 "title", "Imported Scene",

@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.TenantAccessDao;
-import com.richardsand.novelkms.service.KmsArchiveService;
+import com.richardsand.novelkms.service.ArchiveService;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -37,11 +37,11 @@ public class KmsArchiveResource {
 
     private static final Logger logger = LoggerFactory.getLogger(KmsArchiveResource.class);
 
-    private final KmsArchiveService archiveService;
+    private final ArchiveService archiveService;
     private final TenantAccessDao access;
 
     @Inject
-    public KmsArchiveResource(KmsArchiveService archiveService, TenantAccessDao access) {
+    public KmsArchiveResource(ArchiveService archiveService, TenantAccessDao access) {
         this.archiveService = archiveService;
         this.access = access;
     }
@@ -57,8 +57,8 @@ public class KmsArchiveResource {
             if (!access.ownsProject(userId, projectId)) {
                 return Response.status(Response.Status.NOT_FOUND).build();
             }
-            KmsArchiveService.ExportMeta meta = archiveService.exportProject(userId, projectId);
-            return Response.ok(meta.bytes(), KmsArchiveService.MIME_TYPE)
+            ArchiveService.ExportMeta meta = archiveService.exportProject(userId, projectId);
+            return Response.ok(meta.bytes(), ArchiveService.MIME_TYPE)
                     .header("Content-Disposition", "attachment; filename=\"" + meta.filename() + "\"")
                     .header("Content-Length", meta.bytes().length)
                     .build();
@@ -107,7 +107,7 @@ public class KmsArchiveResource {
         try {
             logger.info("KMS archive import requested: userId={}, filename={}",
                     userId, fileDetail != null ? fileDetail.getFileName() : null);
-            KmsArchiveService.ImportResult result = archiveService.importAsNewProjects(userId, fileStream);
+            ArchiveService.ImportResult result = archiveService.importAsNewProjects(userId, fileStream);
             logger.info("KMS archive import completed: userId={}, projects={}, books={}, chapters={}, scenes={}",
                     userId, result.projectCount(), result.bookCount(), result.chapterCount(), result.sceneCount());
             return Response.ok(result).build();

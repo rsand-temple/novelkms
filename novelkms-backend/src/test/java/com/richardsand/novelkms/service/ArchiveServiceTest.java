@@ -15,13 +15,13 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 import com.richardsand.novelkms.NovelKmsTestBase;
-import com.richardsand.novelkms.dao.KmsArchiveDao;
+import com.richardsand.novelkms.dao.ArchiveDao;
 import com.richardsand.novelkms.model.Book;
 import com.richardsand.novelkms.model.Chapter;
 import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.Scene;
 
-class KmsArchiveServiceTest extends NovelKmsTestBase {
+class ArchiveServiceTest extends NovelKmsTestBase {
 
     @Test
     void exportPreviewAndImportProjectArchiveAsNewProject() throws Exception {
@@ -36,9 +36,9 @@ class KmsArchiveServiceTest extends NovelKmsTestBase {
         Scene scene = sceneDao.create(chapter.getId(), "Opening", null);
         sceneDao.saveContent(scene.getId(), "<p>Hello archive.</p>", 2);
 
-        KmsArchiveService service = new KmsArchiveService(new KmsArchiveDao(ds));
+        ArchiveService service = new ArchiveService(new ArchiveDao(ds));
 
-        KmsArchiveService.ExportMeta export = service.exportProject(ownerA, project.getId());
+        ArchiveService.ExportMeta export = service.exportProject(ownerA, project.getId());
         assertTrue(export.filename().endsWith("-novelkms.json"));
         assertTrue(export.bytes().length > 0);
 
@@ -47,14 +47,14 @@ class KmsArchiveServiceTest extends NovelKmsTestBase {
         assertTrue(json.contains("Source Book"), json);
         assertTrue(json.contains("<p>Hello archive.</p>"), json);
 
-        KmsArchiveService.ImportPreview preview = service.preview(new ByteArrayInputStream(export.bytes()));
+        ArchiveService.ImportPreview preview = service.preview(new ByteArrayInputStream(export.bytes()));
         assertTrue(preview.valid(), () -> String.join("; ", preview.errors()));
         assertEquals(1, preview.projectCount());
         assertEquals(1, preview.bookCount());
         assertEquals(1, preview.chapterCount());
         assertEquals(1, preview.sceneCount());
 
-        KmsArchiveService.ImportResult result = service.importAsNewProjects(ownerB, new ByteArrayInputStream(export.bytes()));
+        ArchiveService.ImportResult result = service.importAsNewProjects(ownerB, new ByteArrayInputStream(export.bytes()));
         assertEquals(1, result.projectCount());
         assertEquals(1, result.projectIds().size());
         UUID importedProjectId = result.projectIds().get(0);

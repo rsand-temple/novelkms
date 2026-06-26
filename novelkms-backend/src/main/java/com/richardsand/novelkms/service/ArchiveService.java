@@ -15,8 +15,8 @@ import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.richardsand.novelkms.dao.KmsArchiveDao;
-import com.richardsand.novelkms.dao.KmsArchiveDao.InsertBatch;
+import com.richardsand.novelkms.dao.ArchiveDao;
+import com.richardsand.novelkms.dao.ArchiveDao.InsertBatch;
 
 /**
  * User-facing NovelKMS archive export/import.
@@ -28,16 +28,16 @@ import com.richardsand.novelkms.dao.KmsArchiveDao.InsertBatch;
  * <p>V1 deliberately avoids merge/replace semantics, Trash restoration, OAuth
  * identity state, sessions, and raw secrets/API keys.</p>
  */
-public class KmsArchiveService {
+public class ArchiveService {
 
     public static final String FORMAT         = "novelkms-export";
     public static final int    FORMAT_VERSION = 1;
     public static final String MIME_TYPE      = "application/vnd.novelkms.archive+json";
 
-    private final KmsArchiveDao dao;
+    private final ArchiveDao dao;
     private final ObjectMapper  mapper;
 
-    public KmsArchiveService(KmsArchiveDao dao) {
+    public ArchiveService(ArchiveDao dao) {
         this.dao = dao;
         this.mapper = new ObjectMapper()
                 .findAndRegisterModules()

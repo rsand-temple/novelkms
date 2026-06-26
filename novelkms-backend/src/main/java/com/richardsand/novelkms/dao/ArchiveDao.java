@@ -29,13 +29,13 @@ import org.slf4j.LoggerFactory;
  * remapping policy.
  * </p>
  */
-public class KmsArchiveDao {
+public class ArchiveDao {
 
-    private static final Logger logger = LoggerFactory.getLogger(KmsArchiveDao.class);
+    private static final Logger logger = LoggerFactory.getLogger(ArchiveDao.class);
 
     private final BasicDataSource ds;
 
-    public KmsArchiveDao(BasicDataSource ds) {
+    public ArchiveDao(BasicDataSource ds) {
         this.ds = ds;
     }
 
