@@ -27,4 +27,18 @@ public interface AiProvider {
      * produces a free-text document (no recommendations, no JSON contract).
      */
     MemoryResult generateMemory(MemoryRequest request) throws AiProviderException;
+
+    /**
+     * Generates one chapter's summary synchronously: a single human-readable
+     * paragraph distilled from the chapter prose. Free-text output, no contract.
+     * Independent of memory documents.
+     */
+    SummaryResult generateChapterSummary(SummaryRequest request) throws AiProviderException;
+
+    /**
+     * Generates a whole-book summary synchronously from the supplied chapter
+     * summaries (in book order) — never from manuscript prose. Free-text output,
+     * bounded to {@link BookSummaryRequest#maxWords()}.
+     */
+    SummaryResult generateBookSummary(BookSummaryRequest request) throws AiProviderException;
 }

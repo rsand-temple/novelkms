@@ -37,6 +37,8 @@ import ExportDialog from './dialogs/ExportDialog'
 import MemoryDocDialog from '../ai/MemoryDocDialog'
 import PreReviewMemoryDialog from '../ai/PreReviewMemoryDialog'
 import { flaggedPreceding } from '../ai/memoryStatus'
+import ChapterSummaryDialog from '../ai/ChapterSummaryDialog'
+import BookSummaryDialog from '../ai/BookSummaryDialog'
 
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
 import { useChapters, useReorderChapters, useDeleteChapter } from '../../hooks/useChapters'
@@ -49,6 +51,7 @@ import {
 } from '../../hooks/useParts'
 import { useRunChapterReview, useRunSceneReview } from '../../hooks/useAiReviews'
 import { useGenerateChapterMemory, useChapterMemoryStatus, useDeleteChapterMemory } from '../../hooks/useChapterMemory'
+import { useGenerateChapterSummary, useBookChapterSummaries, useDeleteChapterSummary } from '../../hooks/useSummary'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
 import { useReview } from '../../review/ReviewContext'
 
@@ -301,6 +304,64 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const openMemoryDialog = () => {
 		setMemoryNode(menuNode)
 		setMemoryDialogOpen(true)
+	}
+
+	// ── Chapter & book summaries (nav) ─────────────────────────────────────────
+	const { mutate: generateChapterSummary, isPending: generatingSummary } = useGenerateChapterSummary()
+	const { mutate: clearChapterSummary } = useDeleteChapterSummary()
+	const { data: chapterSummaryRows = [] } = useBookChapterSummaries(
+		menuNode?.type === 'chapter' ? menuNode?.bookId : null,
+	)
+	const [summaryDialogOpen, setSummaryDialogOpen] = useState(false)   // nav chapter-summary editor
+	const [summaryNode, setSummaryNode] = useState(null)
+	const [bookSummaryOpen, setBookSummaryOpen] = useState(false)       // book-level aggregate + book summary
+	const [bookSummaryNode, setBookSummaryNode] = useState(null)
+	const [summarySnack, setSummarySnack] = useState(null)             // { severity, message } | null
+	const [clearSummaryOpen, setClearSummaryOpen] = useState(false)
+	const [clearSummaryNode, setClearSummaryNode] = useState(null)
+	const menuChapterSummaryState = chapterSummaryRows.find(s => s.chapterId === menuNode?.id)?.state
+	const menuChapterHasSummary = !!menuChapterSummaryState && menuChapterSummaryState !== 'MISSING'
+
+	// Chapter summaries are independent paragraphs — no preceding-chapter gating.
+	const handleGenerateChapterSummary = () => {
+		const node = menuNode
+		if (!node) return
+		closeMenu()
+		generateChapterSummary(
+			{ chapterId: node.id, bookId: node.bookId, credentialId: defaultCredentialId },
+			{
+				onSuccess: () => setSummarySnack({ severity: 'success', message: `Chapter summary generated for “${node.title?.trim() || 'chapter'}”.` }),
+				onError: (e) => setSummarySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.' }),
+			},
+		)
+	}
+
+	const openSummaryDialog = () => {
+		setSummaryNode(menuNode)
+		setSummaryDialogOpen(true)
+	}
+
+	const openBookSummaryDialog = () => {
+		setBookSummaryNode(menuNode)
+		setBookSummaryOpen(true)
+	}
+
+	const openClearSummaryConfirm = () => {
+		setClearSummaryNode(menuNode)
+		setClearSummaryOpen(true)
+	}
+
+	const handleConfirmClearSummary = () => {
+		const node = clearSummaryNode
+		setClearSummaryOpen(false)
+		if (!node) return
+		clearChapterSummary(
+			{ chapterId: node.id, bookId: node.bookId },
+			{
+				onSuccess: () => setSummarySnack({ severity: 'success', message: `Chapter summary cleared for “${node.title?.trim() || 'chapter'}”.` }),
+				onError: (e) => setSummarySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Clear failed.' }),
+			},
+		)
 	}
 
 	// ── Public API ────────────────────────────────────────────────────────────
@@ -587,6 +648,16 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
+				{/* Book summary — book nodes only. Opens the aggregated chapter
+				    summaries (read-only) plus the whole-book summary panel. */}
+				{isBookNode && <Divider />}
+				{isBookNode && (
+					<MenuItem dense onClick={() => { closeMenu(); openBookSummaryDialog() }}>
+						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>View chapter summaries…</ListItemText>
+					</MenuItem>
+				)}
+
 				{/* AI Review — chapter and scene manuscript nodes only. Flat MenuItems
 				    (no Fragment children): MUI's Menu indexes direct children, and adjacent
 				    fragments can cross-wire a click to the wrong item. */}
@@ -629,6 +700,37 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					>
 						<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Clear memory document</ListItemText>
+					</MenuItem>
+				)}
+
+				{/* Chapter summary — chapter manuscript nodes only */}
+				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
+				{isManuscriptNode && reviewNodeType === 'chapter' && (
+					<MenuItem
+						dense
+						disabled={!canRunReview || generatingSummary}
+						onClick={handleGenerateChapterSummary}
+					>
+						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Generate chapter summary</ListItemText>
+					</MenuItem>
+				)}
+				{isManuscriptNode && reviewNodeType === 'chapter' && (
+					<MenuItem
+						dense
+						onClick={() => { closeMenu(); openSummaryDialog() }}
+					>
+						<ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Edit chapter summary…</ListItemText>
+					</MenuItem>
+				)}
+				{isManuscriptNode && reviewNodeType === 'chapter' && menuChapterHasSummary && (
+					<MenuItem
+						dense
+						onClick={() => { closeMenu(); openClearSummaryConfirm() }}
+					>
+						<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Clear chapter summary</ListItemText>
 					</MenuItem>
 				)}
 
@@ -784,6 +886,51 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				<DialogActions>
 					<Button onClick={() => setClearOpen(false)}>Cancel</Button>
 					<Button color="error" variant="contained" onClick={handleConfirmClear}>Clear</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* ── Book summary (aggregated chapter summaries + book synopsis) ──── */}
+			<BookSummaryDialog
+				open={bookSummaryOpen}
+				onClose={() => setBookSummaryOpen(false)}
+				bookId={bookSummaryNode?.id}
+				title={bookSummaryNode?.title}
+			/>
+
+			{/* ── Chapter summary (nav standalone editor) ─────────────────────── */}
+			<ChapterSummaryDialog
+				open={summaryDialogOpen}
+				onClose={() => setSummaryDialogOpen(false)}
+				chapterId={summaryNode?.id}
+				bookId={summaryNode?.bookId}
+				title={summaryNode?.title}
+				credentialId={defaultCredentialId}
+			/>
+
+			<Snackbar
+				open={!!summarySnack}
+				autoHideDuration={4000}
+				onClose={() => setSummarySnack(null)}
+				anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+			>
+				{summarySnack ? (
+					<Alert severity={summarySnack.severity} onClose={() => setSummarySnack(null)} sx={{ width: '100%' }}>
+						{summarySnack.message}
+					</Alert>
+				) : undefined}
+			</Snackbar>
+
+			{/* Clear chapter summary confirmation */}
+			<Dialog open={clearSummaryOpen} onClose={() => setClearSummaryOpen(false)} maxWidth="xs" fullWidth>
+				<DialogTitle>Clear chapter summary</DialogTitle>
+				<DialogContent>
+					<Typography variant="body2">
+						Delete the summary for {clearSummaryNode?.title?.trim() ? `“${clearSummaryNode.title.trim()}”` : 'this chapter'}? You can generate a new one at any time.
+					</Typography>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setClearSummaryOpen(false)}>Cancel</Button>
+					<Button color="error" variant="contained" onClick={handleConfirmClearSummary}>Clear</Button>
 				</DialogActions>
 			</Dialog>
 		</NavContextMenuContext.Provider>

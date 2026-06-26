@@ -16,17 +16,22 @@ import org.slf4j.LoggerFactory;
 
 import com.richardsand.novelkms.ai.AiProvider;
 import com.richardsand.novelkms.ai.AiProviderException;
+import com.richardsand.novelkms.ai.BookSummaryRequest;
 import com.richardsand.novelkms.ai.MemoryRequest;
 import com.richardsand.novelkms.ai.MemoryResult;
 import com.richardsand.novelkms.ai.ReviewException;
 import com.richardsand.novelkms.ai.ReviewRequest;
 import com.richardsand.novelkms.ai.ReviewResult;
+import com.richardsand.novelkms.ai.SummaryRequest;
+import com.richardsand.novelkms.ai.SummaryResult;
 import com.richardsand.novelkms.dao.AiCredentialDao;
 import com.richardsand.novelkms.dao.AiFormInstructionsDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.BookDao;
+import com.richardsand.novelkms.dao.BookSummaryDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.ChapterMemoryDao;
+import com.richardsand.novelkms.dao.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.CodexCategoryDao;
 import com.richardsand.novelkms.dao.CodexDao;
 import com.richardsand.novelkms.dao.MemoryTemplateDao;
@@ -35,9 +40,13 @@ import com.richardsand.novelkms.model.AiCredential;
 import com.richardsand.novelkms.model.AiReview;
 import com.richardsand.novelkms.model.AiReviewRecommendation;
 import com.richardsand.novelkms.model.Book;
+import com.richardsand.novelkms.model.BookSummary;
+import com.richardsand.novelkms.model.BookSummaryStatus;
 import com.richardsand.novelkms.model.Chapter;
 import com.richardsand.novelkms.model.ChapterMemory;
 import com.richardsand.novelkms.model.ChapterMemoryStatus;
+import com.richardsand.novelkms.model.ChapterSummary;
+import com.richardsand.novelkms.model.ChapterSummaryStatus;
 import com.richardsand.novelkms.model.Codex;
 import com.richardsand.novelkms.model.CodexCategory;
 import com.richardsand.novelkms.model.Scene;
@@ -74,6 +83,8 @@ public class AiReviewService {
     private final AiFormInstructionsDao   formInstructionsDao;
     private final ChapterMemoryDao        chapterMemoryDao;
     private final MemoryTemplateDao       memoryTemplateDao;
+    private final ChapterSummaryDao       chapterSummaryDao;
+    private final BookSummaryDao          bookSummaryDao;
     private final CodexDao                codexDao;
     private final CodexCategoryDao        codexCategoryDao;
     private final Map<String, AiProvider> providers;
@@ -82,6 +93,7 @@ public class AiReviewService {
             AiCredentialDao credentialDao, AiReviewDao reviewDao,
             AiFormInstructionsDao formInstructionsDao,
             ChapterMemoryDao chapterMemoryDao, MemoryTemplateDao memoryTemplateDao,
+            ChapterSummaryDao chapterSummaryDao, BookSummaryDao bookSummaryDao,
             CodexDao codexDao, CodexCategoryDao codexCategoryDao,
             Map<String, AiProvider> providers) {
         this.chapterDao = chapterDao;
@@ -92,6 +104,8 @@ public class AiReviewService {
         this.formInstructionsDao = formInstructionsDao;
         this.chapterMemoryDao = chapterMemoryDao;
         this.memoryTemplateDao = memoryTemplateDao;
+        this.chapterSummaryDao = chapterSummaryDao;
+        this.bookSummaryDao = bookSummaryDao;
         this.codexDao = codexDao;
         this.codexCategoryDao = codexCategoryDao;
         this.providers = providers;
@@ -368,12 +382,244 @@ public class AiReviewService {
         return result.isEmpty() ? null : result;
     }
 
+    // ── Chapter & book summaries ──────────────────────────────────────────────
+    //
+    // A separate artifact family from memory documents: a chapter summary is one
+    // readable paragraph; the book summary is built entirely from the chapter
+    // summaries (in book order), never the manuscript prose, because a full book
+    // is too large to summarize reliably in one pass. Generating a summary never
+    // touches a memory document and vice versa.
+
+    /** Hard ceiling on book-summary length, passed to the provider and noted in prompts. */
+    public static final int BOOK_SUMMARY_MAX_WORDS = 1000;
+
     /**
-     * Promotes a recommendation into the project Codex as a new entry, using the
-     * model's suggested category and title. Idempotent: a recommendation already
-     * promoted is returned unchanged. Returns the updated review (with
-     * recommendations) so the panel can reflect the new promoted state.
+     * Generates (or regenerates) the summary for a chapter from its prose, then
+     * stores it (one summary per chapter, overwriting). Chapter ownership is
+     * enforced upstream by the tenant filter (chapters/{id}).
      */
+    public ChapterSummary generateChapterSummary(UUID userId, UUID chapterId, UUID credentialId,
+            String modelOverride) throws SQLException {
+        Chapter chapter = chapterDao.findById(chapterId)
+                .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
+
+        UUID bookId = chapter.getBookId();
+        if (bookId == null) {
+            throw new ReviewException(400, "not_manuscript",
+                    "Summaries are only available for manuscript chapters.");
+        }
+
+        String chapterText = assembleChapterText(chapterId);
+        if (chapterText.isBlank()) {
+            throw new ReviewException(400, "empty_chapter",
+                    "This chapter has no text to summarize yet.");
+        }
+
+        AiCredential credential = resolveCredential(userId, credentialId);
+        AiProvider   provider   = providers.get(credential.getProvider());
+        if (provider == null) {
+            throw new ReviewException(400, "unsupported_provider",
+                    "Provider " + credential.getProvider() + " is not supported yet.");
+        }
+        String model = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+
+        String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new ReviewException(409, "no_ai_credential", "Stored API key could not be read.");
+        }
+
+        SummaryRequest req = new SummaryRequest(apiKey, model, chapterLabel(chapter), chapterText);
+        try {
+            SummaryResult result = provider.generateChapterSummary(req);
+            chapterSummaryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model);
+        } catch (AiProviderException e) {
+            logger.warn("Chapter-summary generation for chapter {} failed: {}", chapterId, e.getMessage());
+            throw new ReviewException(502, "summary_provider_error", e.getMessage());
+        }
+        return chapterSummaryDao.findByChapter(chapterId).orElseThrow();
+    }
+
+    /** Returns the chapter's current summary, if any. */
+    public Optional<ChapterSummary> getChapterSummary(UUID chapterId) throws SQLException {
+        return chapterSummaryDao.findByChapter(chapterId);
+    }
+
+    /** Saves an author edit to an existing chapter summary (marks it EDITED). */
+    public ChapterSummary editChapterSummary(UUID chapterId, String content) throws SQLException {
+        if (!chapterSummaryDao.updateEdited(chapterId, content)) {
+            throw new ReviewException(404, "not_found",
+                    "This chapter has no summary to edit. Generate one first.");
+        }
+        return chapterSummaryDao.findByChapter(chapterId).orElseThrow();
+    }
+
+    /** Clears a chapter's summary. Returns false if there was none. */
+    public boolean deleteChapterSummary(UUID chapterId) throws SQLException {
+        return chapterSummaryDao.delete(chapterId);
+    }
+
+    /**
+     * Returns every manuscript chapter of the book in linear book order with its
+     * summary text and per-chapter staleness state. Drives the read-only
+     * aggregated chapter-summary view and the pre-book-summary coverage warning.
+     * Book ownership is enforced upstream by the tenant filter (books/{id}).
+     */
+    public List<ChapterSummaryStatus> bookChapterSummaries(UUID bookId) throws SQLException {
+        List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId);
+        List<ChapterSummaryStatus> result = new ArrayList<>();
+        for (ChapterSummaryDao.Row row : rows) {
+            result.add(new ChapterSummaryStatus(
+                    row.chapterId(), row.chapterNumber(), row.title(),
+                    row.hasDoc(), row.content(), row.generatedAt(), row.contentEditedAt(),
+                    row.source(), chapterSummaryStateFor(row)));
+        }
+        return result;
+    }
+
+    /**
+     * Per-chapter summary state: MISSING when there is no summary, STALE_CONTENT
+     * when the summary predates the chapter's latest scene edit, else OK. There is
+     * no OUT_OF_SEQUENCE — chapter summaries are independent paragraphs.
+     */
+    private String chapterSummaryStateFor(ChapterSummaryDao.Row row) {
+        if (row.generatedAt() == null) {
+            return ChapterSummaryStatus.MISSING;
+        }
+        if (row.contentEditedAt() != null && row.generatedAt().isBefore(row.contentEditedAt())) {
+            return ChapterSummaryStatus.STALE_CONTENT;
+        }
+        return ChapterSummaryStatus.OK;
+    }
+
+    /**
+     * Generates (or regenerates) the book summary entirely from the book's chapter
+     * summaries, concatenated in linear book order. Fails if no chapter has a
+     * summary yet (the frontend's pre-generation dialog is expected to offer to
+     * generate the missing ones first). Book ownership is enforced upstream
+     * (books/{id}).
+     */
+    public BookSummary generateBookSummary(UUID userId, UUID bookId, UUID credentialId,
+            String modelOverride) throws SQLException {
+        Book book = bookDao.findById(bookId)
+                .orElseThrow(() -> new ReviewException(404, "not_found", "Book not found."));
+
+        String aggregate = assembleChapterSummaries(bookId);
+        if (aggregate == null || aggregate.isBlank()) {
+            throw new ReviewException(400, "no_chapter_summaries",
+                    "No chapter summaries exist for this book yet. Generate chapter summaries first.");
+        }
+
+        AiCredential credential = resolveCredential(userId, credentialId);
+        AiProvider   provider   = providers.get(credential.getProvider());
+        if (provider == null) {
+            throw new ReviewException(400, "unsupported_provider",
+                    "Provider " + credential.getProvider() + " is not supported yet.");
+        }
+        String model = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+
+        String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new ReviewException(409, "no_ai_credential", "Stored API key could not be read.");
+        }
+
+        BookSummaryRequest req = new BookSummaryRequest(
+                apiKey, model, book.getTitle(), aggregate, BOOK_SUMMARY_MAX_WORDS);
+        try {
+            SummaryResult result    = provider.generateBookSummary(req);
+            int           wordCount = countWords(result.content());
+            bookSummaryDao.upsertGenerated(bookId, result.content(), wordCount,
+                    result.promptVersion(), model);
+        } catch (AiProviderException e) {
+            logger.warn("Book-summary generation for book {} failed: {}", bookId, e.getMessage());
+            throw new ReviewException(502, "summary_provider_error", e.getMessage());
+        }
+        return bookSummaryDao.findByBook(bookId).orElseThrow();
+    }
+
+    /** Returns the book's current summary, if any. */
+    public Optional<BookSummary> getBookSummary(UUID bookId) throws SQLException {
+        return bookSummaryDao.findByBook(bookId);
+    }
+
+    /** Saves an author edit to an existing book summary (marks it EDITED; re-counts words). */
+    public BookSummary editBookSummary(UUID bookId, String content) throws SQLException {
+        if (!bookSummaryDao.updateEdited(bookId, content, countWords(content))) {
+            throw new ReviewException(404, "not_found",
+                    "This book has no summary to edit. Generate one first.");
+        }
+        return bookSummaryDao.findByBook(bookId).orElseThrow();
+    }
+
+    /** Clears a book's summary. Returns false if there was none. */
+    public boolean deleteBookSummary(UUID bookId) throws SQLException {
+        return bookSummaryDao.delete(bookId);
+    }
+
+    /**
+     * Reports the book-summary status plus chapter-summary coverage, for the
+     * book-summary card and the pre-generation warning. Returned even when no book
+     * summary exists yet. Book ownership is enforced upstream (books/{id}).
+     */
+    public BookSummaryStatus bookSummaryStatus(UUID bookId) throws SQLException {
+        List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId);
+        int     chapterCount    = rows.size();
+        int     summarizedCount = 0;
+        int     staleCount      = 0;
+        Instant latestSummaryAt = null;
+        for (ChapterSummaryDao.Row row : rows) {
+            if (row.hasDoc()) {
+                summarizedCount++;
+                if (latestSummaryAt == null || row.generatedAt().isAfter(latestSummaryAt)) {
+                    latestSummaryAt = row.generatedAt();
+                }
+                if (ChapterSummaryStatus.STALE_CONTENT.equals(chapterSummaryStateFor(row))) {
+                    staleCount++;
+                }
+            }
+        }
+        int missingCount = chapterCount - summarizedCount;
+
+        Optional<BookSummary> summary = bookSummaryDao.findByBook(bookId);
+        boolean hasDoc = summary.isPresent();
+        boolean stale  = false;
+        if (hasDoc) {
+            Instant generatedAt = summary.get().getGeneratedAt();
+            stale = missingCount > 0
+                    || staleCount > 0
+                    || (latestSummaryAt != null && generatedAt != null
+                        && latestSummaryAt.isAfter(generatedAt));
+        }
+
+        return new BookSummaryStatus(
+                bookId,
+                hasDoc,
+                summary.map(BookSummary::getGeneratedAt).orElse(null),
+                summary.map(BookSummary::getWordCount).orElse(0),
+                summary.map(BookSummary::getSource).orElse(null),
+                stale,
+                chapterCount, summarizedCount, missingCount, staleCount);
+    }
+
+    /**
+     * Concatenates the book's chapter summaries (in linear book order) into a
+     * single block, each under a {@code Chapter N: Title} heading, or null if no
+     * chapter has a summary. Chapters without a summary are skipped (the gap is
+     * surfaced separately via {@link #bookSummaryStatus}).
+     */
+    private String assembleChapterSummaries(UUID bookId) throws SQLException {
+        List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId);
+        StringBuilder sb = new StringBuilder();
+        for (ChapterSummaryDao.Row row : rows) {
+            if (row.content() == null || row.content().isBlank()) continue;
+            String title = (row.title() == null || row.title().isBlank())
+                    ? "Chapter " + row.chapterNumber()
+                    : row.title().trim();
+            sb.append("=== Chapter ").append(row.chapterNumber()).append(": ").append(title)
+              .append(" ===\n").append(row.content().strip()).append("\n\n");
+        }
+        String result = sb.toString().strip();
+        return result.isEmpty() ? null : result;
+    }
     public AiReview promoteRecommendation(UUID userId, UUID reviewId, UUID recId,
             String codexCategoryOverride,
             String codexTitleOverride) throws SQLException {

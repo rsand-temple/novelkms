@@ -24,9 +24,11 @@ import com.richardsand.novelkms.dao.AiFormInstructionsDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.AuthDao;
 import com.richardsand.novelkms.dao.BookDao;
+import com.richardsand.novelkms.dao.BookSummaryDao;
 import com.richardsand.novelkms.dao.PageLayoutDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.ChapterMemoryDao;
+import com.richardsand.novelkms.dao.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.CodexCategoryDao;
 import com.richardsand.novelkms.dao.CodexDao;
 import com.richardsand.novelkms.dao.EditorSettingsDao;
@@ -45,6 +47,7 @@ import com.richardsand.novelkms.resource.AiFormInstructionsResource;
 import com.richardsand.novelkms.resource.AiReviewResource;
 import com.richardsand.novelkms.resource.AuthResource;
 import com.richardsand.novelkms.resource.ChapterMemoryResource;
+import com.richardsand.novelkms.resource.SummaryResource;
 import com.richardsand.novelkms.resource.MemoryTemplateResource;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.PageLayoutResource;
@@ -159,11 +162,14 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         AiFormInstructionsDao aiFormInstructionsDao = new AiFormInstructionsDao(ds);
         ChapterMemoryDao chapterMemoryDao = new ChapterMemoryDao(ds);
         MemoryTemplateDao memoryTemplateDao = new MemoryTemplateDao(ds);
+        ChapterSummaryDao chapterSummaryDao = new ChapterSummaryDao(ds);
+        BookSummaryDao    bookSummaryDao    = new BookSummaryDao(ds);
         OpenAiProvider  openAiProvider  = new OpenAiProvider();
         Map<String, AiProvider> aiProviders = Map.of(openAiProvider.providerKey(), openAiProvider);
         AiReviewService aiReviewService = new AiReviewService(
                 chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao,
                 aiFormInstructionsDao, chapterMemoryDao, memoryTemplateDao,
+                chapterSummaryDao, bookSummaryDao,
                 codexDao, codexCategoryDao, aiProviders);
 
         TrashService trashService = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
@@ -200,6 +206,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(AiReviewResource.class);
         env.jersey().register(AiFormInstructionsResource.class);
         env.jersey().register(ChapterMemoryResource.class);
+        env.jersey().register(SummaryResource.class);
         env.jersey().register(MemoryTemplateResource.class);
         env.jersey().register(TrashResource.class);
 
@@ -234,6 +241,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(aiFormInstructionsDao).to(AiFormInstructionsDao.class);
                 bind(chapterMemoryDao).to(ChapterMemoryDao.class);
                 bind(memoryTemplateDao).to(MemoryTemplateDao.class);
+                bind(chapterSummaryDao).to(ChapterSummaryDao.class);
+                bind(bookSummaryDao).to(BookSummaryDao.class);
                 bind(aiReviewService).to(AiReviewService.class);
                 bind(trashDao).to(TrashDao.class);
                 bind(trashService).to(TrashService.class);

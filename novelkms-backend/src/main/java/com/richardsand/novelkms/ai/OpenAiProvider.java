@@ -55,6 +55,10 @@ public class OpenAiProvider implements AiProvider {
     public static final  String PROMPT_VERSION = "chapter-review-v5";
     /** Memory-document generation prompt version (free-text output; no JSON contract). */
     public static final  String MEMORY_PROMPT_VERSION = "memory-v1";
+    /** Chapter-summary generation prompt version (free-text paragraph; no JSON contract). */
+    public static final  String CHAPTER_SUMMARY_PROMPT_VERSION = "chapter-summary-v1";
+    /** Book-summary generation prompt version (free-text synopsis built from chapter summaries). */
+    public static final  String BOOK_SUMMARY_PROMPT_VERSION = "book-summary-v1";
 
     private static final String ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
@@ -92,6 +96,26 @@ public class OpenAiProvider implements AiProvider {
         String body = buildMemoryRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
         return new MemoryResult(content.strip(), MEMORY_PROMPT_VERSION);
+    }
+
+    @Override
+    public SummaryResult generateChapterSummary(SummaryRequest request) throws AiProviderException {
+        String model = (request.model() == null || request.model().isBlank())
+                ? DEFAULT_MODEL : request.model().trim();
+
+        String body = buildChapterSummaryRequestBody(model, request);
+        String content = postForContent(request.apiKey(), body);
+        return new SummaryResult(content.strip(), CHAPTER_SUMMARY_PROMPT_VERSION);
+    }
+
+    @Override
+    public SummaryResult generateBookSummary(BookSummaryRequest request) throws AiProviderException {
+        String model = (request.model() == null || request.model().isBlank())
+                ? DEFAULT_MODEL : request.model().trim();
+
+        String body = buildBookSummaryRequestBody(model, request);
+        String content = postForContent(request.apiKey(), body);
+        return new SummaryResult(content.strip(), BOOK_SUMMARY_PROMPT_VERSION);
     }
 
     /**
@@ -239,6 +263,85 @@ public class OpenAiProvider implements AiProvider {
         } catch (Exception e) {
             // ObjectNode serialization does not realistically fail.
             throw new IllegalStateException("Failed to build OpenAI memory request body", e);
+        }
+    }
+
+    /** System instruction for chapter-summary generation (one readable paragraph). */
+    private static final String CHAPTER_SUMMARY_WRAPPER = """
+            You are summarizing one chapter of a novel. Write a single, clear, \
+            human-readable paragraph that captures what happens in the chapter: the \
+            key events, the characters involved, and how the chapter moves the story \
+            forward. Write in flowing prose — no headings, no bullet points, no lists, \
+            no preamble or labels. Base every statement strictly on the chapter text; \
+            do not invent or speculate. Output only the summary paragraph.""";
+
+    private String buildChapterSummaryRequestBody(String model, SummaryRequest request) {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("model", model);
+
+        ArrayNode messages = root.putArray("messages");
+
+        ObjectNode system = messages.addObject();
+        system.put("role", "system");
+        system.put("content", CHAPTER_SUMMARY_WRAPPER);
+
+        ObjectNode user = messages.addObject();
+        user.put("role", "user");
+        user.put("content",
+                "Chapter: " + nullToBlank(request.chapterLabel()) + "\n\nChapter text:\n\n"
+                        + nullToBlank(request.chapterText()));
+
+        // Free-text output: no response_format and no token caps (reasoning-model safe).
+        try {
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to build OpenAI chapter-summary request body", e);
+        }
+    }
+
+    /**
+     * System instruction for book-summary generation. The model sees only the
+     * chapter summaries (assembled in book order), never the manuscript, and is
+     * held to a hard word ceiling; {@code %1$d} is that ceiling.
+     */
+    private static final String BOOK_SUMMARY_WRAPPER = """
+            You are writing a synopsis of an entire novel from the per-chapter \
+            summaries provided below, which are given in reading order. Synthesize \
+            them into one cohesive, human-readable overview of the whole book — the \
+            overall arc, the principal characters, and how the story resolves. Write \
+            in flowing prose with no headings, bullet points, or lists, and no \
+            preamble or labels. Use no more than %1$d words; do not exceed this \
+            limit. Base everything strictly on the supplied chapter summaries; do not \
+            invent material not present in them. Output only the synopsis.""";
+
+    private String buildBookSummaryRequestBody(String model, BookSummaryRequest request) {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("model", model);
+
+        ArrayNode messages = root.putArray("messages");
+
+        int maxWords = request.maxWords() > 0 ? request.maxWords() : 1000;
+
+        ObjectNode system = messages.addObject();
+        system.put("role", "system");
+        system.put("content", BOOK_SUMMARY_WRAPPER.formatted(maxWords));
+
+        StringBuilder user = new StringBuilder();
+        if (request.bookTitle() != null && !request.bookTitle().isBlank()) {
+            user.append("Book: ").append(request.bookTitle().trim()).append("\n\n");
+        }
+        user.append("Chapter summaries (in reading order):\n\n")
+            .append(nullToBlank(request.chapterSummaries()));
+
+        ObjectNode userMsg = messages.addObject();
+        userMsg.put("role", "user");
+        userMsg.put("content", user.toString());
+
+        // Free-text output: no response_format and no token caps (reasoning-model safe).
+        try {
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to build OpenAI book-summary request body", e);
         }
     }
 
