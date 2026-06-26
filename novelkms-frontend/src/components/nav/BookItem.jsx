@@ -11,6 +11,7 @@ import PartItem from './PartItem'
 import ChapterItem from './ChapterItem'
 import ChapterListZone from './ChapterListZone'
 import CodexSection from './CodexSection'
+import BookSummaryItem from './BookSummaryItem'
 import { containerIds } from '../../dnd/dndUtils'
 import { useNavContextMenu } from './NavContextMenuContext'
 import { useSearch } from '../../search/SearchContext'
@@ -30,7 +31,7 @@ export default function BookItem({ book, selection, setSelection }) {
 	const { data: parts } = useParts(open ? book.id : null)
 	const { data: chapters } = useChapters(open ? book.id : null)
 
-	const isSelected = selection.bookId === book.id && !selection.partId && !selection.chapterId
+	const isSelected = selection.bookId === book.id && !selection.partId && !selection.chapterId && !selection.aiDocType
 
 	// ── Context menu & rename ─────────────────────────────────────────────────
 	const { openContextMenu, renamingId, endRename } = useNavContextMenu()
@@ -215,6 +216,9 @@ export default function BookItem({ book, selection, setSelection }) {
 						selection={selection}
 						setSelection={setSelection}
 					/>
+
+					{/* Fixed bottom leaf — not manuscript text, not sortable. */}
+					<BookSummaryItem bookId={book.id} selection={selection} setSelection={setSelection} />
 				</Box>
 			</Collapse>
 		</Box>

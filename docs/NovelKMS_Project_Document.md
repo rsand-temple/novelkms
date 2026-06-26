@@ -78,6 +78,7 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 - DOCX export for book, part, chapter, and scene.
 - Markdown import/export remains planned.
 - ePub export is a current priority; verify current backend/menu wiring before marking complete.
+- **Portable KMS archive export/import is planned as a user-facing portability feature.** This is distinct from operator backup/restore: backups remain PostgreSQL dumps plus deployment/config state, while archive export/import is a versioned NovelKMS data contract intended to let an author take their creative/project data with them or move data between environments. V1 should focus on project-level export and import-as-new-project using a JSON file such as `novelkms-export-v1.json`. The archive should include manuscript hierarchy, scene HTML, book/project metadata, Codex, AI reviews and recommendations, memory documents, chapter/book summaries, document/page/AI settings, and relevant templates. It should exclude authentication state, sessions, OAuth links, password hashes, and raw AI API keys; imported AI credential metadata can be restored, but secrets must be re-entered. Normal import should create new local entity IDs and remap relationships from source IDs to target IDs. Merge/replace modes, all-user export, zipped `.nkms` packaging, and admin-only preserve-ID import can follow later.
 
 ### AI workflow
 
@@ -131,10 +132,11 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 
 1. Frontend Phase 2: book-aware editor render, remove old doc-settings popover, reduce global dialog to user-only, clean Properties panel to metadata + cover.
 2. Restore or finish ePub export in the menus and verify the backing endpoint.
-3. Add a Future/deferred AI findings view.
-4. Add style-editor UI.
-5. Begin enriching AI prompts with selected Codex/context data (Phase C per-chapter memory artifact).
-6. Summary-prompt template editors (four-scope, like memory templates) were deliberately deferred — V25 uses fixed system-default prompts.
+3. Add project-level portable KMS JSON export/import as import-as-new-project first; keep it distinct from database backup/restore.
+4. Add a Future/deferred AI findings view.
+5. Add style-editor UI.
+6. Begin enriching AI prompts with selected Codex/context data (Phase C per-chapter memory artifact).
+7. Summary-prompt template editors (four-scope, like memory templates) were deliberately deferred — V25 uses fixed system-default prompts.
 
 ## Documentation maintenance rule
 

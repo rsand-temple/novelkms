@@ -8,6 +8,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useScenes }         from '../../hooks/useScenes'
 import { useUpdateChapter }  from '../../hooks/useChapters'
 import SceneItem             from './SceneItem'
+import ChapterAiDocItem      from './ChapterAiDocItem'
 import { containerIds }      from '../../dnd/dndUtils'
 import { useNavContextMenu } from './NavContextMenuContext'
 import { useSearch } from '../../search/SearchContext'
@@ -28,7 +29,7 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 	const matchCount = search.counts.chapter[chapter.id] ?? 0
 	const { data: scenes } = useScenes(open ? chapter.id : null)
 
-	const isSelected = selection.chapterId === chapter.id && !selection.sceneId
+	const isSelected = selection.chapterId === chapter.id && !selection.sceneId && !selection.aiDocType
 
 	// Computed display title used both for ListItemText and the DnD overlay.
 	const displayTitle = chapter.title?.trim() ? chapter.title : `Chapter ${chapter.chapterNumber}`
@@ -208,6 +209,26 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 						/>
 					))}
 				</SortableContext>
+
+				{/* Fixed bottom leaves — not manuscript text, not sortable. */}
+				<ChapterAiDocItem
+					docType="memory"
+					chapterId={chapter.id}
+					bookId={bookId}
+					partId={partId}
+					selection={selection}
+					setSelection={setSelection}
+					depth={depth}
+				/>
+				<ChapterAiDocItem
+					docType="chapterSummary"
+					chapterId={chapter.id}
+					bookId={bookId}
+					partId={partId}
+					selection={selection}
+					setSelection={setSelection}
+					depth={depth}
+				/>
 			</Collapse>
 		</div>
 	)

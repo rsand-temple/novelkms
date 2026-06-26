@@ -11,15 +11,17 @@ import {
 	Typography,
 } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
 import {
 	useChapterMemory,
 	useChapterMemoryStatus,
 	useGenerateChapterMemory,
-	useSaveChapterMemory,
 } from '../../hooks/useChapterMemory'
 import { isFlagged, stateColor, stateExplanation, stateLabel, formatTime, flaggedPreceding } from './memoryStatus'
 import PreReviewMemoryDialog from './PreReviewMemoryDialog'
+import RegenerateConfirmDialog from './RegenerateConfirmDialog'
+import RichTextPreview from './RichTextPreview'
 
 function errMessage(err) {
 	const data = err?.response?.data
@@ -27,31 +29,33 @@ function errMessage(err) {
 }
 
 /**
- * ChapterMemoryEditor — view, (re)generate, and hand-edit one chapter's memory
- * document. Shared by the ReviewRail "Memory" tab and the nav MemoryDocDialog,
- * so both surfaces behave identically.
+ * ChapterMemoryEditor — "peek" surface for one chapter's memory document,
+ * shown in the ReviewRail "Memory" tab. The real editing surface is the
+ * document's own nav node (Chapter -> Memory), opened in EditorPanel for
+ * full rich-text editing; this view renders the current content read-only
+ * and offers Generate/Regenerate plus a link to jump to the nav node for
+ * hand-editing.
  *
  * The document is the parent chapter's even when a scene is selected (memory is
  * per chapter), hence the optional scene-scope note.
  *
  * Props:
- *   chapterId     {string}
- *   bookId        {string|undefined}  enables the staleness chip + cache refresh
- *   credentialId  {string|null}       AI key for generation; null = default key
- *   sceneScopeNote{boolean}           show the "memory is per chapter" caption
+ *   chapterId        {string}
+ *   bookId            {string|undefined}  enables the staleness chip + cache refresh
+ *   credentialId      {string|null}       AI key for generation; null = default key
+ *   sceneScopeNote    {boolean}           show the "memory is per chapter" caption
+ *   onEditInDocument  {() => void}        selects the Memory nav node for this chapter
  */
-export default function ChapterMemoryEditor({ chapterId, bookId, credentialId = null, sceneScopeNote = false }) {
+export default function ChapterMemoryEditor({ chapterId, bookId, credentialId = null, sceneScopeNote = false, onEditInDocument }) {
 	const { data: credentials = [] } = useAiCredentials()
 	const { data: memory, isLoading } = useChapterMemory(chapterId)
 	const { data: status = [] } = useChapterMemoryStatus(bookId, !!bookId)
 
 	const { mutate: generate, isPending: generating } = useGenerateChapterMemory()
-	const { mutate: save, isPending: saving } = useSaveChapterMemory()
 
-	const [editing, setEditing] = useState(false)
-	const [text, setText] = useState('')
 	const [errorMsg, setErrorMsg] = useState(null)
 	const [gateOpen, setGateOpen] = useState(false)
+	const [regenConfirmOpen, setRegenConfirmOpen] = useState(false)
 
 	// One-time guidance for the next generation, pre-filled from whatever was
 	// used last time (stored on the document itself) so the author can tweak and
@@ -69,11 +73,10 @@ export default function ChapterMemoryEditor({ chapterId, bookId, credentialId = 
 	const hasCredentials = credentials.length > 0
 	const state = status.find(s => s.chapterId === chapterId)?.state
 	const flagged = flaggedPreceding(status, chapterId)
-	const busy = generating || saving
+	const busy = generating
 
 	const doGenerate = () => {
 		setErrorMsg(null)
-		setEditing(false)
 		generate(
 			{ chapterId, bookId, credentialId, userGuidance: guidance.trim() || null },
 			{ onError: (e) => setErrorMsg(errMessage(e)) },
@@ -83,27 +86,16 @@ export default function ChapterMemoryEditor({ chapterId, bookId, credentialId = 
 	// Generating this chapter's memory is gated the same way a chapter review is:
 	// if an earlier chapter's memory document is missing or behind, warn first so
 	// the author can fill the chain in order (or proceed anyway).
-	const handleGenerate = () => {
+	const proceedToGate = () => {
 		if (flagged.length > 0) { setGateOpen(true); return }
 		doGenerate()
 	}
 
-	const startEdit = () => {
-		setErrorMsg(null)
-		setText(memory?.content ?? '')
-		setEditing(true)
-	}
-
-	const handleSave = () => {
-		setErrorMsg(null)
-		if (!text.trim()) {
-			setErrorMsg('The memory document must not be blank.')
-			return
-		}
-		save(
-			{ chapterId, bookId, content: text.trim() },
-			{ onSuccess: () => setEditing(false), onError: (e) => setErrorMsg(errMessage(e)) },
-		)
+	// Regenerating discards whatever is currently there (content + formatting);
+	// a first-ever Generate has nothing to lose, so it skips straight to the gate.
+	const handleGenerate = () => {
+		if (memory) { setRegenConfirmOpen(true); return }
+		proceedToGate()
 	}
 
 	if (isLoading) {
@@ -188,42 +180,31 @@ export default function ChapterMemoryEditor({ chapterId, bookId, credentialId = 
 						{memory.model ? ` · ${memory.model}` : ''}
 					</Typography>
 
-					<TextField
-						value={editing ? text : (memory.content ?? '')}
-						onChange={(e) => setText(e.target.value)}
-						fullWidth
-						multiline
-						minRows={8}
-						maxRows={18}
-						size="small"
-						InputProps={{ readOnly: !editing }}
-						disabled={busy && editing}
-					/>
+					<Box sx={{ p: 1, mb: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1, maxHeight: 280, overflowY: 'auto' }}>
+						<RichTextPreview html={memory.content} />
+					</Box>
 
-					<Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1 }}>
-						{editing ? (
-							<>
-								<Button onClick={() => setEditing(false)} disabled={saving}>Cancel</Button>
-								<Button variant="contained" onClick={handleSave} disabled={saving}>
-									{saving ? 'Saving…' : 'Save'}
-								</Button>
-							</>
-						) : (
-							<>
-								<Button onClick={startEdit} disabled={busy}>Edit</Button>
-								<Button
-									variant="outlined"
-									onClick={handleGenerate}
-									disabled={!hasCredentials || busy}
-									startIcon={generating ? <CircularProgress size={16} color="inherit" /> : null}
-								>
-									{generating ? 'Generating…' : 'Regenerate'}
-								</Button>
-							</>
-						)}
+					<Stack direction="row" spacing={1} justifyContent="flex-end">
+						<Button startIcon={<EditOutlinedIcon fontSize="small" />} onClick={onEditInDocument} disabled={busy}>
+							Edit in document
+						</Button>
+						<Button
+							variant="outlined"
+							onClick={handleGenerate}
+							disabled={!hasCredentials || busy}
+							startIcon={generating ? <CircularProgress size={16} color="inherit" /> : null}
+						>
+							{generating ? 'Generating…' : 'Regenerate'}
+						</Button>
 					</Stack>
 				</>
 			)}
+
+			<RegenerateConfirmDialog
+				open={regenConfirmOpen}
+				onCancel={() => setRegenConfirmOpen(false)}
+				onConfirm={() => { setRegenConfirmOpen(false); proceedToGate() }}
+			/>
 
 			<PreReviewMemoryDialog
 				open={gateOpen}

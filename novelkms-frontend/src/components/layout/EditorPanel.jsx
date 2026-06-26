@@ -27,6 +27,21 @@ import { useProject } from '../../hooks/useProjects';
 import { useGlobalStyles, useBookStyles } from '../../hooks/useStyles';
 import { scenesApi } from '../../api/scenes';
 import { templatesApi } from '../../api/templates';
+import { chapterMemoryApi } from '../../api/chapterMemory';
+import { summaryApi } from '../../api/summary';
+import {
+	useChapterMemory, useChapterMemoryStatus,
+	useGenerateChapterMemory, CHAPTER_MEMORY_KEYS,
+} from '../../hooks/useChapterMemory';
+import {
+	useChapterSummary, useBookChapterSummaries, useBookSummary, useBookSummaryStatus,
+	useGenerateChapterSummary, useGenerateBookSummary, SUMMARY_KEYS,
+} from '../../hooks/useSummary';
+import { flaggedPreceding, formatTime as formatMemoryTime, stateColor as memoryStateColor, stateExplanation as memoryStateExplanation, stateLabel as memoryStateLabel } from '../ai/memoryStatus';
+import { flaggedChapters, stateColor as summaryStateColor, stateExplanation as summaryStateExplanation, stateLabel as summaryStateLabel } from '../ai/summaryStatus';
+import PreReviewMemoryDialog from '../ai/PreReviewMemoryDialog';
+import PreBookSummaryDialog from '../ai/PreBookSummaryDialog';
+import RegenerateConfirmDialog from '../ai/RegenerateConfirmDialog';
 import { resolveValues, renderPreviewHtml, tokensForType } from '../../utils/tokenUtils';
 import { buildStyleSx } from '../../utils/styles';
 import { derivePageConfig } from '../../utils/pageConfig';
@@ -152,6 +167,15 @@ function templateKey(t) {
 	return `${t.scope}:${t.templateType}:${t.bookId ?? ''}:${t.updatedAt}`;
 }
 
+// Identifies one AI document's current saved state (memory doc / chapter
+// summary / book summary). generatedAt is bumped by both a fresh generation
+// and a hand-edit save (upsertGenerated/updateEdited both treat an edit as a
+// refresh — see ChapterMemoryDao), so it's a reliable change marker for either.
+function aiDocKey(type, parentId, doc) {
+	if (!type || !parentId) return null;
+	return `${type}:${parentId}:${doc?.generatedAt ?? 'none'}`;
+}
+
 /**
  * Counts words in an HTML string by stripping tags and splitting on whitespace.
  * Used for per-scene word counts in multi-scene mode where only the raw HTML
@@ -178,16 +202,24 @@ function countWords(html) {
  *   bookId         — current book.
  *   templateType   — 'cover' | 'part' | null.
  *   templateScope  — 'global' | 'book' | null.
+ *   aiDocType      — 'memory' | 'chapterSummary' | 'bookSummary' | null. When set,
+ *                    chapterId (memory/chapterSummary) or bookId (bookSummary)
+ *                    identifies the document. Not manuscript text — never
+ *                    exported, never counted toward word totals.
+ *   setSelection   — passed through to ReviewRail so its Memory tab's
+ *                    "Edit in document" link can select the same document
+ *                    this panel edits.
  *   onSelectBook   — callback(bookId) invoked when the user clicks a book in
  *                    the project shelf (project home mode).
  *
  * Modes (priority order):
- *   1. template mode      — templateType set
- *   2. book cover preview — bookId set, no partId/chapterId/sceneId/template
- *   3. part page preview  — partId set, no chapterId/sceneId/template
- *   4. project shelf      — projectId set, no bookId (project home / book picker)
- *   5. single-scene mode  — sceneId set; no chapter heading
- *   6. multi-scene mode   — chapterId set; chapter title/subtitle shown above prose
+ *   1. AI doc mode         — aiDocType set (memory document / chapter or book summary)
+ *   2. template mode       — templateType set
+ *   3. book cover preview  — bookId set, no partId/chapterId/sceneId/template
+ *   4. part page preview   — partId set, no chapterId/sceneId/template
+ *   5. project shelf       — projectId set, no bookId (project home / book picker)
+ *   6. single-scene mode   — sceneId set; no chapter heading
+ *   7. multi-scene mode    — chapterId set; chapter title/subtitle shown above prose
  *
  * Codex entries are scenes (single-scene mode) whose parent chapter is a codex
  * category. "Is this a codex entry?" is determined from chapterData.codexCategory
@@ -208,7 +240,7 @@ function countWords(html) {
  */
 export default function EditorPanel({
 	partId, chapterId, sceneId, projectId, bookId, codexId,
-	templateType, templateScope, onSelectBook,
+	templateType, templateScope, aiDocType, setSelection, onSelectBook,
 }) {
 	const { settings, updateSettings } = useProjectSettings(projectId);
 	const queryClient = useQueryClient();
@@ -216,11 +248,15 @@ export default function EditorPanel({
 	const review = useReview();
 
 	// ── Mode flags ────────────────────────────────────────────────────────────
-	const templateMode = !!templateType;
-	const singleSceneMode = !templateMode && !!sceneId;
-	const multiSceneMode = !templateMode && !singleSceneMode && !!chapterId && !codexId;
-	const partDraftMode = !templateMode && !chapterId && !sceneId && !!partId && !!bookId;
-	const bookDraftMode = !templateMode && !partId && !chapterId && !sceneId && !!bookId;
+	const aiDocMode = !!aiDocType;
+	const isMemoryDoc = aiDocMode && aiDocType === 'memory';
+	const isChapterSummaryDoc = aiDocMode && aiDocType === 'chapterSummary';
+	const isBookSummaryDoc = aiDocMode && aiDocType === 'bookSummary';
+	const templateMode = !aiDocMode && !!templateType;
+	const singleSceneMode = !aiDocMode && !templateMode && !!sceneId;
+	const multiSceneMode = !aiDocMode && !templateMode && !singleSceneMode && !!chapterId && !codexId;
+	const partDraftMode = !aiDocMode && !templateMode && !chapterId && !sceneId && !!partId && !!bookId;
+	const bookDraftMode = !aiDocMode && !templateMode && !partId && !chapterId && !sceneId && !!bookId;
 	const aggregateDraftMode = partDraftMode || bookDraftMode;
 
 	// Review Mode is a layer on top of normal chapter editing: the rail shows
@@ -228,15 +264,15 @@ export default function EditorPanel({
 	// manuscript chapter (a chapter inside a book, never a codex entry), which
 	// covers both multi-scene (chapter selected) and single-scene (a scene
 	// within that chapter) editing.
-	const reviewRailVisible = review.open && !!chapterId && !!bookId && !codexId;
+	const reviewRailVisible = review.open && !aiDocMode && !!chapterId && !!bookId && !codexId;
 
 	const isGlobalTpl = templateMode && templateScope === 'global';
 	const isBookTpl = templateMode && templateScope === 'book';
 
 	// Page-layout preview: fires whenever a book (or part within a book) is
-	// selected with no chapter/scene/template active — regardless of whether
-	// page layout is configured on the book.
-	const pagePreviewEligible = !templateMode && !chapterId && !sceneId && !!bookId;
+	// selected with no chapter/scene/template/AI-doc active — regardless of
+	// whether page layout is configured on the book.
+	const pagePreviewEligible = !aiDocMode && !templateMode && !chapterId && !sceneId && !!bookId;
 
 	const { data: previewPageBook } = useBook(pagePreviewEligible ? bookId : null);
 	const { data: previewPageProject } = useProject(pagePreviewEligible ? projectId : null);
@@ -258,13 +294,82 @@ export default function EditorPanel({
 
 	// Project shelf: project selected but no book open yet.
 	// Clicking a book card calls onSelectBook to open it.
-	const projectShelfMode = !templateMode && !bookId && !chapterId && !sceneId && !!projectId;
+	const projectShelfMode = !aiDocMode && !templateMode && !bookId && !chapterId && !sceneId && !!projectId;
 
 	// ── Chapter data for heading ───────────────────────────────────────────────
-	// Fetched in multi-scene mode (chapter title/subtitle heading) AND in
-	// single-scene mode (to read codexCategory off the parent chapter so we can
-	// tell a codex entry apart from a manuscript scene — see isCodexEntry below).
-	const { data: chapterData } = useChapter((multiSceneMode || singleSceneMode) ? chapterId : null);
+	// Fetched in multi-scene mode (chapter title/subtitle heading), single-scene
+	// mode (to read codexCategory off the parent chapter so we can tell a codex
+	// entry apart from a manuscript scene — see isCodexEntry below), and the two
+	// chapter-scoped AI-doc modes (memory/chapter-summary heading label).
+	const { data: chapterData } = useChapter(
+		(multiSceneMode || singleSceneMode || isMemoryDoc || isChapterSummaryDoc) ? chapterId : null
+	);
+
+	// ── AI document data (memory / chapter summary / book summary) ───────────
+	// Only one of these three is ever active per selection.aiDocType. Autosave
+	// goes through the stable API modules directly inside scheduleSave (see
+	// below), not these mutation hooks — scheduleSave's useCallback has a
+	// limited dependency array, so a hook-returned mutate function captured in
+	// its closure could go stale across renders. The mutation hooks below are
+	// only used for the explicit Generate/Regenerate action, triggered directly
+	// from a click handler where that staleness risk doesn't apply.
+	const { data: memoryDoc, isLoading: memoryDocLoading } = useChapterMemory(isMemoryDoc ? chapterId : null);
+	const { data: memoryStatusRows = [] } = useChapterMemoryStatus(isMemoryDoc ? bookId : null, isMemoryDoc);
+	const { mutateAsync: generateMemoryAsync, isPending: generatingMemory } = useGenerateChapterMemory();
+
+	const { data: chapterSummaryDoc, isLoading: chapterSummaryDocLoading } = useChapterSummary(isChapterSummaryDoc ? chapterId : null);
+	const { data: chapterSummaryRows = [] } = useBookChapterSummaries(isChapterSummaryDoc ? bookId : null, isChapterSummaryDoc);
+	const { mutateAsync: generateChapterSummaryAsync, isPending: generatingChapterSummary } = useGenerateChapterSummary();
+
+	const { data: bookSummaryDoc, isLoading: bookSummaryDocLoading } = useBookSummary(isBookSummaryDoc ? bookId : null);
+	const { data: bookSummaryStatusData } = useBookSummaryStatus(isBookSummaryDoc ? bookId : null, isBookSummaryDoc);
+	const { data: bookSummaryChapterRows = [] } = useBookChapterSummaries(isBookSummaryDoc ? bookId : null, isBookSummaryDoc);
+	const { mutateAsync: generateBookSummaryAsync, isPending: generatingBookSummary } = useGenerateBookSummary();
+
+	// Heading label for the AI-doc modes ("Chapter 3: Title" / book title).
+	const { data: aiDocBook } = useBook(isBookSummaryDoc ? bookId : null);
+
+	const aiDocLoading = isMemoryDoc ? memoryDocLoading : isChapterSummaryDoc ? chapterSummaryDocLoading : isBookSummaryDoc ? bookSummaryDocLoading : false;
+	const aiDocCurrent = isMemoryDoc ? memoryDoc : isChapterSummaryDoc ? chapterSummaryDoc : isBookSummaryDoc ? bookSummaryDoc : null;
+	const aiDocGenerating = isMemoryDoc ? generatingMemory : isChapterSummaryDoc ? generatingChapterSummary : isBookSummaryDoc ? generatingBookSummary : false;
+
+	// Preceding-chapter gating (memory only) / coverage gating (book summary only).
+	const aiDocFlaggedPreceding = isMemoryDoc ? flaggedPreceding(memoryStatusRows, chapterId) : [];
+	const aiDocFlaggedChapters = isBookSummaryDoc ? flaggedChapters(bookSummaryChapterRows) : [];
+
+	const aiDocStatusState = isMemoryDoc
+		? memoryStatusRows.find(s => s.chapterId === chapterId)?.state
+		: isChapterSummaryDoc
+			? chapterSummaryRows.find(s => s.chapterId === chapterId)?.state
+			: isBookSummaryDoc
+				? (!bookSummaryStatusData ? null : !bookSummaryStatusData.hasDoc ? 'MISSING' : bookSummaryStatusData.stale ? 'STALE_CONTENT' : 'OK')
+				: null;
+
+	const aiDocStatusChip = !aiDocStatusState ? null : isBookSummaryDoc
+		? {
+			label: aiDocStatusState === 'MISSING' ? 'Not generated' : summaryStateLabel(aiDocStatusState),
+			color: summaryStateColor(aiDocStatusState),
+			tooltip: summaryStateExplanation(aiDocStatusState),
+		}
+		: isChapterSummaryDoc
+			? { label: summaryStateLabel(aiDocStatusState), color: summaryStateColor(aiDocStatusState), tooltip: summaryStateExplanation(aiDocStatusState) }
+			: { label: memoryStateLabel(aiDocStatusState), color: memoryStateColor(aiDocStatusState), tooltip: memoryStateExplanation(aiDocStatusState) };
+
+	const aiDocHeadingLabel = isBookSummaryDoc
+		? (aiDocBook?.title?.trim() || 'This book')
+		: chapterData
+			? (chapterData.title?.trim() ? `Chapter ${chapterData.chapterNumber}: ${chapterData.title.trim()}` : `Chapter ${chapterData.chapterNumber}`)
+			: '';
+
+	const aiDocTypeLabel = isMemoryDoc ? 'Memory document' : isChapterSummaryDoc ? 'Chapter summary' : 'Book summary';
+	const aiDocMetaLine = aiDocCurrent
+		? [
+			aiDocCurrent.source === 'EDITED' ? 'Edited' : 'Generated',
+			aiDocCurrent.generatedAt ? formatMemoryTime(aiDocCurrent.generatedAt) : null,
+			aiDocCurrent.model || null,
+			isBookSummaryDoc && typeof aiDocCurrent.wordCount === 'number' ? `${aiDocCurrent.wordCount} words` : null,
+		].filter(Boolean).join(' · ')
+		: '';
 
 	// ── Scene / template data ─────────────────────────────────────────────────
 	const { data: scenes, isLoading: scenesLoading } = useScenes(multiSceneMode ? chapterId : null);
@@ -336,13 +441,15 @@ export default function EditorPanel({
 				? (partWordCount ?? 0)
 				: null;
 
-	const isLoading = templateMode
-		? templateLoading
-		: singleSceneMode
-			? singleSceneLoading
-			: aggregateDraftMode
-				? draftLoading
-				: scenesLoading;
+	const isLoading = aiDocMode
+		? aiDocLoading
+		: templateMode
+			? templateLoading
+			: singleSceneMode
+				? singleSceneLoading
+				: aggregateDraftMode
+					? draftLoading
+					: scenesLoading;
 
 	const { mutate: deleteScene } = useDeleteScene();
 
@@ -359,6 +466,9 @@ export default function EditorPanel({
 	const loadedSceneOrderRef = useRef('');
 	const loadedSceneIdRef = useRef(null);
 	const loadedTemplateKeyRef = useRef(null);
+	const loadedAiDocKeyRef = useRef(null);
+	const aiDocTypeRef = useRef(aiDocType);
+	const aiDocModeRef = useRef(aiDocMode);
 	const singleSceneModeRef = useRef(singleSceneMode);
 	const templateModeRef = useRef(templateMode);
 	const templateScopeRef = useRef(templateScope);
@@ -378,6 +488,8 @@ export default function EditorPanel({
 	useEffect(() => { templateModeRef.current = templateMode; }, [templateMode]);
 	useEffect(() => { templateScopeRef.current = templateScope; }, [templateScope]);
 	useEffect(() => { templateTypeRef.current = templateType; }, [templateType]);
+	useEffect(() => { aiDocTypeRef.current = aiDocType; }, [aiDocType]);
+	useEffect(() => { aiDocModeRef.current = aiDocMode; }, [aiDocMode]);
 	useEffect(() => { bookIdRef.current = bookId; }, [bookId]);
 	useEffect(() => { sceneIdRef.current = sceneId; }, [sceneId]);
 	useEffect(() => { searchRef.current = search; }, [search]);
@@ -401,11 +513,12 @@ export default function EditorPanel({
 	useEffect(() => {
 		if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
 		loadedTemplateKeyRef.current = null;
+		loadedAiDocKeyRef.current = null;
 		loadedChapterIdRef.current = null;
 		loadedSceneOrderRef.current = '';
 		loadedSceneIdRef.current = null;
 		prevSceneBreakIdsRef.current = [];
-	}, [templateMode, templateType, templateScope, bookId, partId]);
+	}, [templateMode, templateType, templateScope, aiDocType, bookId, partId, chapterId]);
 
 	// ── save ─────────────────────────────────────────────────────────────────
 
@@ -414,6 +527,34 @@ export default function EditorPanel({
 		saveTimer.current = setTimeout(async () => {
 			setIsSaving(true);
 			try {
+				if (aiDocTypeRef.current) {
+					const type = aiDocTypeRef.current;
+					if (type === 'memory') {
+						const cid = chapterIdRef.current;
+						if (!cid) return;
+						const saved = await chapterMemoryApi.save(cid, html);
+						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved);
+						queryClient.setQueryData(CHAPTER_MEMORY_KEYS.doc(cid), saved);
+						queryClient.invalidateQueries({ queryKey: CHAPTER_MEMORY_KEYS.status(bookIdRef.current) });
+					} else if (type === 'chapterSummary') {
+						const cid = chapterIdRef.current;
+						if (!cid) return;
+						const saved = await summaryApi.saveChapter(cid, html);
+						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved);
+						queryClient.setQueryData(SUMMARY_KEYS.chapterDoc(cid), saved);
+						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.chapters(bookIdRef.current) });
+						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bookIdRef.current) });
+					} else if (type === 'bookSummary') {
+						const bid = bookIdRef.current;
+						if (!bid) return;
+						const saved = await summaryApi.saveBook(bid, html);
+						loadedAiDocKeyRef.current = aiDocKey(type, bid, saved);
+						queryClient.setQueryData(SUMMARY_KEYS.bookDoc(bid), saved);
+						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bid) });
+					}
+					return;
+				}
+
 				if (templateModeRef.current) {
 					const type = templateTypeRef.current;
 					let saved;
@@ -500,7 +641,7 @@ export default function EditorPanel({
 		],
 		content: '',
 		onUpdate: ({ editor }) => {
-			if (!singleSceneModeRef.current && !templateModeRef.current && !aggregateDraftModeRef.current) {
+			if (!aiDocModeRef.current && !singleSceneModeRef.current && !templateModeRef.current && !aggregateDraftModeRef.current) {
 				const currentIds = getDocSceneBreakIds(editor);
 				const prevIds = prevSceneBreakIdsRef.current;
 				const removedIds = prevIds.filter(id => !currentIds.includes(id));
@@ -514,7 +655,7 @@ export default function EditorPanel({
 			}
 			const currentHtml = editor.getHTML();
 			const liveSearch = searchRef.current;
-			if (liveSearch.open && liveSearch.query && !templateModeRef.current) {
+			if (liveSearch.open && liveSearch.query && !aiDocModeRef.current && !templateModeRef.current) {
 				if (singleSceneModeRef.current) {
 					const sid = sceneIdRef.current;
 					if (sid) {
@@ -560,7 +701,7 @@ export default function EditorPanel({
 	// shared search bar. Decorations never enter the stored HTML.
 	useEffect(() => {
 		if (!editor) return;
-		if (!search.open || !search.query || templateMode) {
+		if (!search.open || !search.query || templateMode || aiDocMode) {
 			editor.commands.clearSearch();
 			return;
 		}
@@ -577,7 +718,7 @@ export default function EditorPanel({
 		if (search.totalCount > 0) {
 			requestAnimationFrame(() => editor.commands.scrollToSearchMatch(editorMatchIndex));
 		}
-	}, [editor, search.open, search.query, search.matchCase, search.activeIndex, search.totalCount, templateMode]);
+	}, [editor, search.open, search.query, search.matchCase, search.activeIndex, search.totalCount, templateMode, aiDocMode]);
 
 	const { registerEditorActions } = search;
 
@@ -645,6 +786,17 @@ export default function EditorPanel({
 	useEffect(() => {
 		if (!editor) return;
 
+		if (aiDocMode) {
+			if (aiDocLoading) return;
+			const parentId = isBookSummaryDoc ? bookId : chapterId;
+			const key = aiDocKey(aiDocType, parentId, aiDocCurrent);
+			if (loadedAiDocKeyRef.current === key) return;
+			editor.commands.setContent(aiDocCurrent?.content || '<p></p>', false);
+			prevSceneBreakIdsRef.current = [];
+			loadedAiDocKeyRef.current = key;
+			return;
+		}
+
 		if (templateMode) {
 			if (!template) return;
 			const key = templateKey(template);
@@ -690,17 +842,72 @@ export default function EditorPanel({
 		loadedChapterIdRef.current = scopeKey;
 		loadedSceneOrderRef.current = newOrder;
 		editor.commands.setContent(html, false);
-	}, [editor, scenes, activeScenes, draftDocument, aggregateDraftMode, partDraftMode, partId, bookId, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template]);
+	}, [editor, scenes, activeScenes, draftDocument, aggregateDraftMode, partDraftMode, partId, bookId, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template, aiDocMode, aiDocLoading, aiDocCurrent, aiDocType, isBookSummaryDoc]);
 
 	useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+
+	// ── AI-doc generate / regenerate ──────────────────────────────────────────
+
+	const [aiDocRegenConfirmOpen, setAiDocRegenConfirmOpen] = useState(false);
+	const [aiDocGateOpen, setAiDocGateOpen] = useState(false);
+	const [aiDocGuidance, setAiDocGuidance] = useState('');
+	const [aiDocGuidanceInitKey, setAiDocGuidanceInitKey] = useState(null);
+
+	// Pre-fills from whatever guidance produced the current artifact, re-derived
+	// on scope switch and once loading finishes — never auto-cleared after a
+	// successful run (the same "setState during render" derived-key pattern used
+	// throughout this app instead of an effect, and the same guidance lifecycle
+	// as the legacy ChapterMemoryEditor/BookSummaryDialog peek surfaces).
+	const aiDocGuidanceKey = aiDocMode
+		? `${aiDocType}:${isBookSummaryDoc ? bookId : chapterId}:${aiDocLoading ? 'loading' : 'loaded'}`
+		: null;
+	if (aiDocMode && aiDocGuidanceKey !== aiDocGuidanceInitKey) {
+		setAiDocGuidanceInitKey(aiDocGuidanceKey);
+		setAiDocGuidance(aiDocCurrent?.userGuidance ?? '');
+	}
+
+	const doAiDocGenerate = useCallback(() => {
+		const userGuidance = aiDocGuidance.trim() || null;
+		if (isMemoryDoc) {
+			return generateMemoryAsync({ chapterId, bookId, credentialId: null, userGuidance });
+		}
+		if (isChapterSummaryDoc) {
+			return generateChapterSummaryAsync({ chapterId, bookId, credentialId: null, userGuidance });
+		}
+		if (isBookSummaryDoc) {
+			return generateBookSummaryAsync({ bookId, credentialId: null, userGuidance });
+		}
+		return Promise.resolve();
+	}, [isMemoryDoc, isChapterSummaryDoc, isBookSummaryDoc, chapterId, bookId, aiDocGuidance,
+		generateMemoryAsync, generateChapterSummaryAsync, generateBookSummaryAsync]);
+
+	// After the discard-content gate (if any), memory/book-summary generation
+	// still checks the continuity/coverage gate before actually running.
+	const proceedToAiDocGate = useCallback(() => {
+		if (isMemoryDoc && aiDocFlaggedPreceding.length > 0) { setAiDocGateOpen(true); return; }
+		if (isBookSummaryDoc && aiDocFlaggedChapters.length > 0) { setAiDocGateOpen(true); return; }
+		doAiDocGenerate();
+	}, [isMemoryDoc, isBookSummaryDoc, aiDocFlaggedPreceding, aiDocFlaggedChapters, doAiDocGenerate]);
+
+	// First-ever generation has nothing to lose, so it skips straight to the
+	// continuity/coverage gate; regenerating existing content warns first.
+	const handleAiDocGenerateClick = useCallback(() => {
+		if (aiDocCurrent) { setAiDocRegenConfirmOpen(true); return; }
+		proceedToAiDocGate();
+	}, [aiDocCurrent, proceedToAiDocGate]);
+
+	const handleAiDocRegenConfirm = useCallback(() => {
+		setAiDocRegenConfirmOpen(false);
+		proceedToAiDocGate();
+	}, [proceedToAiDocGate]);
 
 	// ── render ────────────────────────────────────────────────────────────────
 
 	// showEmptyState only when nothing at all is selected (not even a project),
 	// OR when a codex container/category is selected (editing requires an entry).
 	const showEmptyState =
-		(!templateMode && !chapterId && !sceneId && !inPagePreviewMode && !projectShelfMode)
-		|| (!!codexId && !sceneId && !templateMode);
+		(!aiDocMode && !templateMode && !chapterId && !sceneId && !inPagePreviewMode && !projectShelfMode)
+		|| (!!codexId && !sceneId && !templateMode && !aiDocMode);
 
 	// Toolbar gets a live editor reference only when actually editing;
 	// preview and shelf modes pass null so the gear icon stays accessible
@@ -727,7 +934,7 @@ export default function EditorPanel({
 				editor={toolbarEditor}
 				settings={settings}
 				onSettingsChange={updateSettings}
-				onSceneBreak={(singleSceneMode || templateMode || aggregateDraftMode || projectShelfMode) ? null : handleSceneBreak}
+				onSceneBreak={(aiDocMode || singleSceneMode || templateMode || aggregateDraftMode || projectShelfMode) ? null : handleSceneBreak}
 				isSaving={isSaving}
 				templateMode={templateMode}
 				tokenOptions={tokenOptions}
@@ -736,8 +943,16 @@ export default function EditorPanel({
 				onTogglePreview={handleTogglePreview}
 				wordCountOverride={toolbarWordCountOverride}
 				headingWordCount={multiSceneMode ? chapterHeadingWords : 0}
-				canReview={!!chapterId && !!bookId && !codexId}
+				canReview={!aiDocMode && !!chapterId && !!bookId && !codexId}
 				isScene={!!sceneId}
+				aiDocMode={aiDocMode}
+				aiDocTypeLabel={aiDocTypeLabel}
+				aiDocStatus={aiDocStatusChip}
+				aiDocBusy={aiDocGenerating}
+				aiDocHasContent={!!aiDocCurrent}
+				aiDocGuidance={aiDocGuidance}
+				onAiDocGuidanceChange={setAiDocGuidance}
+				onAiDocGenerate={handleAiDocGenerateClick}
 			/>
 
 			<SearchBar />
@@ -936,6 +1151,39 @@ export default function EditorPanel({
 							</Box>
 						)}
 
+						{aiDocMode && (
+							<Box
+								sx={{
+									textAlign: 'center',
+									maxWidth: '72ch',
+									mx: 'auto',
+									px: 1,
+									mb: 5,
+								}}
+							>
+								<Typography
+									sx={{
+										fontFamily: 'var(--nkms-font-family)',
+										fontSize: '1.5rem',
+										fontWeight: 700,
+										fontStyle: 'italic',
+										lineHeight: 1.2,
+										color: 'text.secondary',
+									}}
+								>
+									{aiDocTypeLabel}{aiDocHeadingLabel ? ` — ${aiDocHeadingLabel}` : ''}
+								</Typography>
+								{aiDocMetaLine && (
+									<Typography
+										variant="caption"
+										sx={{ display: 'block', mt: 0.75, color: 'text.disabled' }}
+									>
+										{aiDocMetaLine}
+									</Typography>
+								)}
+							</Box>
+						)}
+
 						<EditorContent editor={editor} />
 					</Box>
 
@@ -958,9 +1206,41 @@ export default function EditorPanel({
 			</Box>
 
 			{reviewRailVisible && (
-				<ReviewRail key={chapterId} chapterId={chapterId} sceneId={sceneId} bookId={bookId} editor={editor} />
+				<ReviewRail key={chapterId} chapterId={chapterId} sceneId={sceneId} bookId={bookId} editor={editor} setSelection={setSelection} />
 			)}
 			</Box>
+
+			<RegenerateConfirmDialog
+				open={aiDocRegenConfirmOpen}
+				onCancel={() => setAiDocRegenConfirmOpen(false)}
+				onConfirm={handleAiDocRegenConfirm}
+			/>
+
+			{isMemoryDoc && (
+				<PreReviewMemoryDialog
+					open={aiDocGateOpen}
+					onCancel={() => setAiDocGateOpen(false)}
+					onProceed={() => { setAiDocGateOpen(false); doAiDocGenerate(); }}
+					flagged={aiDocFlaggedPreceding}
+					bookId={bookId}
+					credentialId={null}
+					title="Earlier chapters’ memory is missing or out of date"
+					intro="Memory documents read best as a complete chain in book order."
+					proceedLabel="Generate anyway"
+					regenerateLabel="Regenerate earlier first"
+				/>
+			)}
+
+			{isBookSummaryDoc && (
+				<PreBookSummaryDialog
+					open={aiDocGateOpen}
+					onCancel={() => setAiDocGateOpen(false)}
+					onProceed={() => { setAiDocGateOpen(false); doAiDocGenerate(); }}
+					flagged={aiDocFlaggedChapters}
+					bookId={bookId}
+					credentialId={null}
+				/>
+			)}
 		</Box>
 	);
 }

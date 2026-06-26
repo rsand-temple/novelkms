@@ -87,7 +87,7 @@ function formatTime(iso) {
  *   sceneId   {string|null}   the selected scene, when one is selected
  *   editor    TipTap editor instance (for scroll-to-passage highlights)
  */
-export default function ReviewRail({ chapterId, sceneId, bookId, editor }) {
+export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSelection }) {
 	const review = useReview()
 
 	const scope = sceneId ? 'SCENE' : 'CHAPTER'
@@ -562,6 +562,16 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor }) {
 									bookId={bookId}
 									credentialId={effectiveCredId}
 									sceneScopeNote={scope === 'SCENE'}
+									onEditInDocument={() => setSelection?.((prev) => ({
+										...prev,
+										bookId,
+										partId: null,
+										chapterId,
+										sceneId: null,
+										codexId: null,
+										codexCategory: null,
+										aiDocType: 'memory',
+									}))}
 								/>
 							)}
 						</Box>

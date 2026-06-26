@@ -34,10 +34,8 @@ import AddCodexEntryDialog from './dialogs/AddCodexEntryDialog'
 import DeleteConfirmDialog from './dialogs/DeleteConfirmDialog'
 import { shouldSkipDeleteConfirm } from '../../utils/deleteConfirmPrefs'
 import ExportDialog from './dialogs/ExportDialog'
-import MemoryDocDialog from '../ai/MemoryDocDialog'
 import PreReviewMemoryDialog from '../ai/PreReviewMemoryDialog'
 import { flaggedPreceding } from '../ai/memoryStatus'
-import ChapterSummaryDialog from '../ai/ChapterSummaryDialog'
 import BookSummaryDialog from '../ai/BookSummaryDialog'
 
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
@@ -213,8 +211,6 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 
 	// Chapter memory document (nav "Generate / Edit memory document").
 	const { mutate: generateMemory, isPending: generatingMemory } = useGenerateChapterMemory()
-	const [memoryDialogOpen, setMemoryDialogOpen] = useState(false)
-	const [memoryNode, setMemoryNode] = useState(null)
 	const [memorySnack, setMemorySnack] = useState(null) // { severity, message } | null
 	const { data: chapterMemStatus = [] } = useChapterMemoryStatus(
 		menuNode?.type === 'chapter' ? menuNode?.bookId : null,
@@ -301,9 +297,23 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		)
 	}
 
-	const openMemoryDialog = () => {
-		setMemoryNode(menuNode)
-		setMemoryDialogOpen(true)
+	// "Edit memory document…" now selects the chapter's Memory leaf in the nav
+	// tree (opened for full rich-text editing in EditorPanel) instead of opening
+	// a standalone dialog — the dialog was removed once that nav node existed.
+	const openMemoryDocument = () => {
+		const node = menuNode
+		closeMenu()
+		if (!node) return
+		setSelection((prev) => ({
+			...prev,
+			bookId: node.bookId,
+			partId: node.partId ?? null,
+			chapterId: node.id,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
+			aiDocType: 'memory',
+		}))
 	}
 
 	// ── Chapter & book summaries (nav) ─────────────────────────────────────────
@@ -312,8 +322,6 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const { data: chapterSummaryRows = [] } = useBookChapterSummaries(
 		menuNode?.type === 'chapter' ? menuNode?.bookId : null,
 	)
-	const [summaryDialogOpen, setSummaryDialogOpen] = useState(false)   // nav chapter-summary editor
-	const [summaryNode, setSummaryNode] = useState(null)
 	const [bookSummaryOpen, setBookSummaryOpen] = useState(false)       // book-level aggregate + book summary
 	const [bookSummaryNode, setBookSummaryNode] = useState(null)
 	const [summarySnack, setSummarySnack] = useState(null)             // { severity, message } | null
@@ -336,14 +344,45 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		)
 	}
 
-	const openSummaryDialog = () => {
-		setSummaryNode(menuNode)
-		setSummaryDialogOpen(true)
+	// "Edit chapter summary…" now selects the chapter's Summary leaf in the nav
+	// tree, the same way openMemoryDocument does.
+	const openChapterSummaryDocument = () => {
+		const node = menuNode
+		closeMenu()
+		if (!node) return
+		setSelection((prev) => ({
+			...prev,
+			bookId: node.bookId,
+			partId: node.partId ?? null,
+			chapterId: node.id,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
+			aiDocType: 'chapterSummary',
+		}))
 	}
 
 	const openBookSummaryDialog = () => {
 		setBookSummaryNode(menuNode)
 		setBookSummaryOpen(true)
+	}
+
+	// "Edit in document" from inside BookSummaryDialog: select the book's
+	// Summary leaf and close the dashboard dialog.
+	const openBookSummaryDocument = () => {
+		const node = bookSummaryNode
+		setBookSummaryOpen(false)
+		if (!node) return
+		setSelection((prev) => ({
+			...prev,
+			bookId: node.id,
+			partId: null,
+			chapterId: null,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
+			aiDocType: 'bookSummary',
+		}))
 	}
 
 	const openClearSummaryConfirm = () => {
@@ -687,7 +726,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
 					<MenuItem
 						dense
-						onClick={() => { closeMenu(); openMemoryDialog() }}
+						onClick={openMemoryDocument}
 					>
 						<ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Edit memory document…</ListItemText>
@@ -718,7 +757,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
 					<MenuItem
 						dense
-						onClick={() => { closeMenu(); openSummaryDialog() }}
+						onClick={openChapterSummaryDocument}
 					>
 						<ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Edit chapter summary…</ListItemText>
@@ -839,15 +878,6 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				</DialogActions>
 			</Dialog>
 
-			{/* ── Chapter memory document ────────────────────────────────────── */}
-			<MemoryDocDialog
-				open={memoryDialogOpen}
-				onClose={() => setMemoryDialogOpen(false)}
-				chapterId={memoryNode?.id}
-				bookId={memoryNode?.bookId}
-				title={memoryNode?.title}
-			/>
-
 			<Snackbar
 				open={!!memorySnack}
 				autoHideDuration={4000}
@@ -895,16 +925,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				onClose={() => setBookSummaryOpen(false)}
 				bookId={bookSummaryNode?.id}
 				title={bookSummaryNode?.title}
-			/>
-
-			{/* ── Chapter summary (nav standalone editor) ─────────────────────── */}
-			<ChapterSummaryDialog
-				open={summaryDialogOpen}
-				onClose={() => setSummaryDialogOpen(false)}
-				chapterId={summaryNode?.id}
-				bookId={summaryNode?.bookId}
-				title={summaryNode?.title}
-				credentialId={defaultCredentialId}
+				onEditInDocument={openBookSummaryDocument}
 			/>
 
 			<Snackbar

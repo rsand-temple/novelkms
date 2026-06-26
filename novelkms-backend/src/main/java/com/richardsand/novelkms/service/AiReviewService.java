@@ -384,7 +384,12 @@ public class AiReviewService {
         StringBuilder sb = new StringBuilder();
         for (ChapterMemoryDao.Row row : rows) {
             if (row.seq() >= targetSeq) continue;
-            if (row.content() == null || row.content().isBlank()) continue;
+            // Memory-document content is authored HTML (rich text via the nav
+            // editor); strip it to plain text before it goes into the prompt, the
+            // same treatment scene content already gets. htmlToPlainText() falls
+            // back to raw text for legacy plain-text documents predating this.
+            String plainContent = htmlToPlainText(row.content());
+            if (plainContent.isBlank()) continue;
             String title = (row.title() == null || row.title().isBlank())
                     ? "Chapter " + row.chapterNumber()
                     : row.title().trim();
@@ -392,7 +397,7 @@ public class AiReviewService {
             if (row.generatedAt() != null) {
                 sb.append(" (memory generated ").append(row.generatedAt()).append(")");
             }
-            sb.append(" ===\n").append(row.content().strip()).append("\n\n");
+            sb.append(" ===\n").append(plainContent).append("\n\n");
         }
         String result = sb.toString().strip();
         return result.isEmpty() ? null : result;
@@ -567,7 +572,9 @@ public class AiReviewService {
 
     /** Saves an author edit to an existing book summary (marks it EDITED; re-counts words). */
     public BookSummary editBookSummary(UUID bookId, String content) throws SQLException {
-        if (!bookSummaryDao.updateEdited(bookId, content, countWords(content))) {
+        // content is authored HTML from the nav editor; word count must be taken
+        // from the plain text, not the raw markup, or tags inflate the count.
+        if (!bookSummaryDao.updateEdited(bookId, content, countWords(htmlToPlainText(content)))) {
             throw new ReviewException(404, "not_found",
                     "This book has no summary to edit. Generate one first.");
         }
@@ -634,12 +641,16 @@ public class AiReviewService {
         List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId);
         StringBuilder sb = new StringBuilder();
         for (ChapterSummaryDao.Row row : rows) {
-            if (row.content() == null || row.content().isBlank()) continue;
+            // Chapter-summary content is authored HTML (rich text via the nav
+            // editor); strip it to plain text before it goes into the book-summary
+            // prompt, the same treatment scene content already gets.
+            String plainContent = htmlToPlainText(row.content());
+            if (plainContent.isBlank()) continue;
             String title = (row.title() == null || row.title().isBlank())
                     ? "Chapter " + row.chapterNumber()
                     : row.title().trim();
             sb.append("=== Chapter ").append(row.chapterNumber()).append(": ").append(title)
-              .append(" ===\n").append(row.content().strip()).append("\n\n");
+              .append(" ===\n").append(plainContent).append("\n\n");
         }
         String result = sb.toString().strip();
         return result.isEmpty() ? null : result;

@@ -4,6 +4,7 @@ import { NodeSelection } from '@tiptap/pm/state'
 import {
 	Box, Toolbar, IconButton, Tooltip, Divider,
 	Select, MenuItem, Menu, CircularProgress, Typography,
+	Popover, TextField, Button, Chip,
 } from '@mui/material'
 import FormatBoldIcon from '@mui/icons-material/FormatBold'
 import FormatItalicIcon from '@mui/icons-material/FormatItalic'
@@ -23,6 +24,8 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import EditNoteIcon from '@mui/icons-material/EditNote'
 import DocSettingsPopover from './DocSettingsPopover'
 import { useReview } from '../../review/ReviewContext'
 import { STYLE_ORDER, STYLE_LABELS, HEADING_KEYS } from '../../utils/styles'
@@ -156,6 +159,15 @@ function VDivider() {
  *   canReview         — boolean — true when the selection is a reviewable manuscript
  *                       chapter or scene (enables the AI Review toggle)
  *   isScene           — boolean — true when the selection is a scene (adjusts tooltip)
+ *   aiDocMode         — boolean — true when editing a memory document / chapter or
+ *                       book summary (not manuscript text)
+ *   aiDocTypeLabel    — string — e.g. "Memory document", shown as a tooltip/label
+ *   aiDocStatus       — { label, color, tooltip } | null — staleness chip data
+ *   aiDocBusy         — boolean — generation in progress
+ *   aiDocHasContent   — boolean — whether a document already exists (Generate vs Regenerate)
+ *   aiDocGuidance     — string — one-time guidance text for the next generation
+ *   onAiDocGuidanceChange — (text) => void
+ *   onAiDocGenerate   — () => void — runs (or gates, then runs) generation
  */
 export default function EditorToolbar({
 	editor, settings = {}, onSettingsChange, onSceneBreak, isSaving,
@@ -166,9 +178,18 @@ export default function EditorToolbar({
 	headingWordCount = 0,
 	canReview = false,
 	isScene = false,
+	aiDocMode = false,
+	aiDocTypeLabel = '',
+	aiDocStatus = null,
+	aiDocBusy = false,
+	aiDocHasContent = false,
+	aiDocGuidance = '',
+	onAiDocGuidanceChange,
+	onAiDocGenerate,
 }) {
 	const [settingsAnchor, setSettingsAnchor] = useState(null)
 	const [fieldAnchor, setFieldAnchor] = useState(null)
+	const [guidanceAnchor, setGuidanceAnchor] = useState(null)
 
 	const imageInputRef = useRef(null)
 
@@ -490,6 +511,58 @@ export default function EditorToolbar({
 						>
 							{previewActive ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
 						</TBtn>
+					)}
+
+					{aiDocMode && (
+						<>
+							{aiDocStatus && (
+								<Tooltip title={aiDocStatus.tooltip ?? ''}>
+									<Chip size="small" color={aiDocStatus.color} variant="outlined" label={aiDocStatus.label} sx={{ mr: 0.5 }} />
+								</Tooltip>
+							)}
+							<TBtn
+								title={aiDocGuidance.trim() ? 'Edit guidance for the next generation' : 'Add guidance for the next generation (optional)'}
+								active={!!aiDocGuidance.trim()}
+								onClick={e => setGuidanceAnchor(e.currentTarget)}
+							>
+								<EditNoteIcon fontSize="small" />
+							</TBtn>
+							<Popover
+								open={!!guidanceAnchor}
+								anchorEl={guidanceAnchor}
+								onClose={() => setGuidanceAnchor(null)}
+								anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+							>
+								<Box sx={{ p: 1.5, width: 320 }}>
+									<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+										Guidance for the next generation (optional)
+									</Typography>
+									<TextField
+										autoFocus
+										value={aiDocGuidance}
+										onChange={e => onAiDocGuidanceChange?.(e.target.value)}
+										placeholder="e.g. the letter in this chapter is canonically a forgery"
+										fullWidth
+										multiline
+										minRows={2}
+										maxRows={6}
+										size="small"
+									/>
+									{aiDocGuidance.trim() && (
+										<Button size="small" sx={{ mt: 0.5 }} onClick={() => onAiDocGuidanceChange?.('')}>
+											Clear guidance
+										</Button>
+									)}
+								</Box>
+							</Popover>
+							<TBtn
+								title={aiDocBusy ? 'Working…' : (aiDocHasContent ? `Regenerate this ${aiDocTypeLabel.toLowerCase()}` : `Generate this ${aiDocTypeLabel.toLowerCase()}`)}
+								onClick={onAiDocGenerate}
+								disabled={aiDocBusy}
+							>
+								{aiDocBusy ? <CircularProgress size={16} /> : <AutoAwesomeIcon fontSize="small" />}
+							</TBtn>
+						</>
 					)}
 
 					{canReview && (

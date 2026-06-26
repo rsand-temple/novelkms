@@ -22,6 +22,10 @@ import { booksApi } from '../../api/books';
 import client from '../../api/client';
 import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor';
 import MemoryTemplateEditor from '../ai/MemoryTemplateEditor';
+import { useChapterMemory, useChapterMemoryStatus } from '../../hooks/useChapterMemory';
+import { useChapterSummary, useBookChapterSummaries, useBookSummary, useBookSummaryStatus } from '../../hooks/useSummary';
+import { stateColor as memoryStateColor, stateExplanation as memoryStateExplanation, stateLabel as memoryStateLabel, formatTime as formatMemoryTime } from '../ai/memoryStatus';
+import { stateColor as summaryStateColor, stateExplanation as summaryStateExplanation, stateLabel as summaryStateLabel } from '../ai/summaryStatus';
 
 // ── Page size presets ─────────────────────────────────────────────────────────
 
@@ -590,6 +594,96 @@ function ProjectProperties({ projectId }) {
 	return <ProjectForm key={`${project.id}:${project.title ?? ''}`} project={project} projectId={projectId} />;
 }
 
+// ── AI document (memory / chapter summary / book summary) ─────────────────────
+
+function AiDocProperties({ selection, setSelection }) {
+	const { aiDocType, chapterId, bookId, projectId } = selection;
+	const isMemory = aiDocType === 'memory';
+	const isChapterSummary = aiDocType === 'chapterSummary';
+	const isBookSummary = aiDocType === 'bookSummary';
+
+	const { data: memoryDoc } = useChapterMemory(isMemory ? chapterId : null);
+	const { data: memoryRows = [] } = useChapterMemoryStatus(isMemory ? bookId : null, isMemory);
+	const { data: chapterSummaryDoc } = useChapterSummary(isChapterSummary ? chapterId : null);
+	const { data: chapterSummaryRows = [] } = useBookChapterSummaries(isChapterSummary ? bookId : null, isChapterSummary);
+	const { data: bookSummaryDoc } = useBookSummary(isBookSummary ? bookId : null);
+	const { data: bookSummaryStatusData } = useBookSummaryStatus(isBookSummary ? bookId : null, isBookSummary);
+
+	const doc = isMemory ? memoryDoc : isChapterSummary ? chapterSummaryDoc : bookSummaryDoc;
+
+	const stateValue = isMemory
+		? memoryRows.find(s => s.chapterId === chapterId)?.state
+		: isChapterSummary
+			? chapterSummaryRows.find(s => s.chapterId === chapterId)?.state
+			: !bookSummaryStatusData ? null
+				: !bookSummaryStatusData.hasDoc ? 'MISSING'
+					: bookSummaryStatusData.stale ? 'STALE_CONTENT' : 'OK';
+
+	const label = isMemory
+		? memoryStateLabel(stateValue)
+		: isChapterSummary
+			? summaryStateLabel(stateValue)
+			: (stateValue === 'MISSING' ? 'Not generated' : summaryStateLabel(stateValue));
+	const color = isMemory ? memoryStateColor(stateValue) : summaryStateColor(stateValue);
+	const explanation = isMemory ? memoryStateExplanation(stateValue) : summaryStateExplanation(stateValue);
+
+	const typeLabel = isMemory ? 'Memory document' : isChapterSummary ? 'Chapter summary' : 'Book summary';
+
+	function handleClose() {
+		setSelection({
+			projectId: projectId ?? null,
+			bookId: bookId ?? null,
+			partId: null,
+			chapterId: isBookSummary ? null : (chapterId ?? null),
+			sceneId: null,
+		});
+	}
+
+	return (
+		<Stack spacing={2} sx={{ p: 2 }}>
+			<Typography variant="overline" color="text.secondary">{typeLabel}</Typography>
+
+			<Typography variant="body2" color="text.secondary">
+				Not part of the manuscript — never exported, never counted toward word totals.
+			</Typography>
+
+			{stateValue && (
+				<Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+					<Chip label={label} size="small" color={color} variant="outlined" />
+				</Stack>
+			)}
+			{explanation && (
+				<Typography variant="caption" color="text.secondary">{explanation}</Typography>
+			)}
+
+			{doc && (
+				<Stack spacing={0.5}>
+					<Typography variant="caption" color="text.secondary">
+						{doc.source === 'EDITED' ? 'Edited' : 'Generated'}
+						{doc.generatedAt ? ` · ${formatMemoryTime(doc.generatedAt)}` : ''}
+					</Typography>
+					{doc.model && (
+						<Typography variant="caption" color="text.secondary">Model: {doc.model}</Typography>
+					)}
+					{isBookSummary && typeof doc.wordCount === 'number' && (
+						<Typography variant="caption" color="text.secondary">{doc.wordCount} words</Typography>
+					)}
+					{doc.userGuidance && (
+						<Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+							Last guidance: “{doc.userGuidance}”
+						</Typography>
+					)}
+				</Stack>
+			)}
+
+			<Divider />
+			<Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+				<Button size="small" onClick={handleClose}>Done</Button>
+			</Box>
+		</Stack>
+	);
+}
+
 // ── Template ──────────────────────────────────────────────────────────────────
 
 function TemplateProperties({ selection, setSelection }) {
@@ -666,7 +760,17 @@ function TemplateProperties({ selection, setSelection }) {
 // ── Root panel ────────────────────────────────────────────────────────────────
 
 export default function PropertiesPanel({ selection, setSelection, selectTemplate }) {
-	const { sceneId, chapterId, partId, bookId, projectId, templateType } = selection ?? {};
+	const { sceneId, chapterId, partId, bookId, projectId, templateType, aiDocType } = selection ?? {};
+
+	// AI document mode (memory document / chapter or book summary) takes over
+	// the panel entirely, same as template mode.
+	if (aiDocType) {
+		return (
+			<Box sx={{ height: '100%', overflowY: 'auto' }}>
+				<AiDocProperties selection={selection} setSelection={setSelection} />
+			</Box>
+		);
+	}
 
 	// Template mode takes over the panel entirely.
 	if (templateType) {

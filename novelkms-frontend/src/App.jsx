@@ -66,6 +66,7 @@ const EMPTY_SELECTION = {
 	trashSelected: false, // true when the Trash node is selected
 	templateType: null,   // 'cover' | 'part' | null
 	templateScope: null,  // 'global' | 'book' | null
+	aiDocType: null,       // 'memory' | 'chapterSummary' | 'bookSummary' | null
 }
 
 function WorkspacePanelHeader({ icon, title, subtitle, actions }) {
@@ -259,12 +260,13 @@ export default function App() {
 		setSel(prev => {
 			// Remove transient panel modes before functional updaters spread prev.
 			// This prevents clicks on normal nav nodes from accidentally preserving
-			// trash/template mode.
+			// trash/template/AI-doc mode.
 			const cleanPrev = {
 				...prev,
 				trashSelected: false,
 				templateType: null,
 				templateScope: null,
+				aiDocType: null,
 			}
 
 			const base = typeof update === 'function' ? update(cleanPrev) : update
@@ -277,6 +279,7 @@ export default function App() {
 				trashSelected: base.trashSelected === true,
 				templateType: base.templateType ?? null,
 				templateScope: base.templateScope ?? null,
+				aiDocType: base.aiDocType ?? null,
 			}
 		})
 	}, [])
@@ -710,6 +713,8 @@ export default function App() {
 								codexId={selection.codexId}
 								templateType={selection.templateType}
 								templateScope={selection.templateScope}
+								aiDocType={selection.aiDocType}
+								setSelection={setSelection}
 								onSelectBook={handleSelectBook}
 							/>
 						)}
