@@ -32,9 +32,11 @@ server:
 {% endif %}
 
 logging:
-  level: INFO
+  level: DEBUG
   loggers:
-    com.richardsand.novelkms: INFO
+    com.richardsand.novelkms: DEBUG
+    org.eclipse.jetty: WARN
+    org.apache.http: WARN
     timeZone: America/New_York
   appenders:
     - type: console
@@ -83,3 +85,12 @@ auth:
     tokenUrl: https://github.com/login/oauth/access_token
     userInfoUrl: https://api.github.com/user
     scope: read:user user:email
+
+  microsoft:
+    clientId: {{MICROSOFT_CLIENT_ID}}
+    clientSecret: {{MICROSOFT_CLIENT_SECRET}}
+    tenant: ${MICROSOFT_TENANT:-common}
+    authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+    tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
+    userInfoUrl: https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration
+    scope: openid email profile

@@ -22,6 +22,7 @@ public class NovelKmsConfig extends Configuration {
         public String tokenUrl;
         public String userInfoUrl;
         public String scope;
+        public String tenant = null; // for MS
     }
 
     @Getter
@@ -33,6 +34,7 @@ public class NovelKmsConfig extends Configuration {
         public OAuthProvider google;
         public OAuthProvider meta;
         public OAuthProvider github;
+        public OAuthProvider microsoft;
     }
 
     @Getter

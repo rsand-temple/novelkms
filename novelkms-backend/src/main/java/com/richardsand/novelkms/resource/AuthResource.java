@@ -63,7 +63,9 @@ public class AuthResource {
         return Map.of(
                 "google", configured(config.google),
                 "github", configured(config.github),
-                "meta", configured(config.meta));
+                "meta", configured(config.meta),
+                "microsoft", configured(config.microsoft));
+
     }
 
     @GET

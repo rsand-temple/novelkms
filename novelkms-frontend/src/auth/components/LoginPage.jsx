@@ -4,18 +4,24 @@ import { authApi } from '../../api/auth'
 import { LogoLockup, LogoMark } from '../../components/branding/Logo'
 import EditorMockup from '../../components/marketing/EditorMockup'
 
-function SpriteIcon({ id, size = 20 }) {
+function ProviderIcon({ src, size = 20 }) {
 	return (
-		<Box component="svg" width={size} height={size} sx={{ flexShrink: 0 }}>
-			<use href={`/icons.svg#${id}`} />
-		</Box>
+		<Box
+			component="img"
+			src={src}
+			alt=""
+			aria-hidden="true"
+			sx={{ width: size, height: size, flexShrink: 0, display: 'block' }}
+		/>
 	)
 }
 
 const PROVIDERS = [
-	{ key: 'google', label: 'Continue with Google', icon: 'google-icon' },
-	{ key: 'github', label: 'Continue with GitHub', icon: 'github-icon' },
-	{ key: 'meta', label: 'Continue with Facebook', icon: 'facebook-icon' },
+	{ key: 'google', label: 'Continue with Google', icon: '/auth-icons/google.svg' },
+	{ key: 'microsoft', label: 'Continue with Microsoft', icon: '/auth-icons/microsoft.svg' },
+	{ key: 'apple', label: 'Continue with Apple', icon: '/auth-icons/apple.svg' },
+	{ key: 'meta', label: 'Continue with Facebook', icon: '/auth-icons/facebook.svg' },
+	{ key: 'github', label: 'Continue with GitHub', icon: '/auth-icons/github.svg' },
 ]
 
 const FEATURES = [
@@ -52,7 +58,7 @@ function FeatureRow({ title, body }) {
 }
 
 export default function LoginPage() {
-	const [providers, setProviders] = useState({ google: false, github: false, meta: false })
+	const [providers, setProviders] = useState({ google: false, microsoft: false, apple: false, meta: false, github: false })
 	useEffect(() => {
 		authApi.providers().then(setProviders).catch(() => {})
 	}, [])
@@ -127,7 +133,7 @@ export default function LoginPage() {
 									size="large"
 									disabled={!providers[p.key]}
 									href={authApi.startUrl(p.key)}
-									startIcon={<SpriteIcon id={p.icon} />}
+									startIcon={<ProviderIcon src={p.icon} />}
 									sx={{ justifyContent: 'flex-start', pl: 2, color: 'text.primary', borderColor: 'divider' }}
 								>
 									{p.label}

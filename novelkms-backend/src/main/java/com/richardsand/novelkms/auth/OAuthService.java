@@ -6,6 +6,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -121,6 +122,10 @@ public class OAuthService implements AutoCloseable {
         String     accessToken = token.getString("access_token");
         logger.debug("OAuth token exchange succeeded: provider={}", providerName);
 
+        if (providerName.equalsIgnoreCase("microsoft")) {
+            return microsoftProfile(token);
+        }
+
         URIBuilder userInfo = new URIBuilder(p.userInfoUrl);
         if (providerName.equalsIgnoreCase("meta")) {
             userInfo.addParameter("fields", "id,email,first_name,last_name").addParameter("access_token", accessToken);
@@ -129,6 +134,7 @@ public class OAuthService implements AutoCloseable {
         get.setHeader("Accept", "application/json");
         get.setHeader("Authorization", "Bearer " + accessToken);
         JSONObject profile = executeJson(get);
+        logger.debug("OAuth profile keys: provider={}, keys={}", providerName, profile.keySet());
         if (providerName.equalsIgnoreCase("google")) {
             return new OAuthProfile(
                     "GOOGLE",
@@ -182,7 +188,12 @@ public class OAuthService implements AutoCloseable {
     }
 
     private NovelKmsConfig.OAuthProvider provider(String name) {
-        NovelKmsConfig.OAuthProvider p = name.equalsIgnoreCase("google") ? auth.google : name.equalsIgnoreCase("github") ? auth.github : name.equalsIgnoreCase("meta") ? auth.meta : null;
+        NovelKmsConfig.OAuthProvider p = 
+                name.equalsIgnoreCase("google") ? auth.google : 
+                    name.equalsIgnoreCase("github") ? auth.github : 
+                        name.equalsIgnoreCase("meta") ? auth.meta : 
+                            name.equalsIgnoreCase("microsoft") ? auth.microsoft : 
+                                null;
         if (p == null || p.clientId == null || p.clientSecret == null)
             throw new IllegalArgumentException("OAuth provider is not configured: " + name);
         return p;
@@ -237,6 +248,53 @@ public class OAuthService implements AutoCloseable {
         // GitHub doesn't give reliable first/last names.
         // You could use login as suggested display name later, but OAuthProfile doesn't currently carry displayName.
         return new OAuthProfile("GITHUB", subject, email, verified, login, name);
+    }
+
+    private OAuthProfile microsoftProfile(JSONObject token) {
+        String idToken = token.optString("id_token", null);
+        if (idToken == null || idToken.isBlank()) {
+            throw new IllegalArgumentException("Microsoft OAuth token response did not include an id_token");
+        }
+
+        JSONObject claims = decodeJwtPayload(idToken);
+        logger.debug("OAuth Microsoft id_token claim keys: {}", claims.keySet());
+
+        String subject = claims.optString("sub", null);
+        if (subject == null || subject.isBlank()) {
+            throw new IllegalArgumentException("Microsoft id_token did not include a subject claim");
+        }
+
+        String email = firstNonBlank(
+                claims.optString("email", null),
+                claims.optString("preferred_username", null),
+                claims.optString("upn", null));
+
+        String givenName  = claims.optString("given_name", null);
+        String familyName = claims.optString("family_name", null);
+
+        // Microsoft does not consistently emit email_verified for both MSA and Entra accounts.
+        // If the account produced a valid id_token and a usable email-like identifier, treat it as verified.
+        boolean emailVerified = email != null && !email.isBlank();
+
+        return new OAuthProfile("MICROSOFT", subject, email, emailVerified, givenName, familyName);
+    }
+
+    private static JSONObject decodeJwtPayload(String jwt) {
+        String[] parts = jwt.split("\\.");
+        if (parts.length < 2) {
+            throw new IllegalArgumentException("Invalid JWT returned by OAuth provider");
+        }
+        String payload = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+        return new JSONObject(payload);
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private JSONArray executeJsonArray(HttpUriRequest request) throws IOException {
