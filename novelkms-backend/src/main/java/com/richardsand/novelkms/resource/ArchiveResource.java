@@ -33,15 +33,15 @@ import jakarta.ws.rs.core.Response;
  */
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
-public class KmsArchiveResource {
+public class ArchiveResource {
 
-    private static final Logger logger = LoggerFactory.getLogger(KmsArchiveResource.class);
+    private static final Logger logger = LoggerFactory.getLogger(ArchiveResource.class);
 
     private final ArchiveService archiveService;
     private final TenantAccessDao access;
 
     @Inject
-    public KmsArchiveResource(ArchiveService archiveService, TenantAccessDao access) {
+    public ArchiveResource(ArchiveService archiveService, TenantAccessDao access) {
         this.archiveService = archiveService;
         this.access = access;
     }
@@ -53,6 +53,7 @@ public class KmsArchiveResource {
             @PathParam("projectId") UUID projectId,
             @Context ContainerRequestContext request) {
         UUID userId = CurrentUser.id(request);
+        logger.info("User {} exporting project {}", userId, projectId);
         try {
             if (!access.ownsProject(userId, projectId)) {
                 return Response.status(Response.Status.NOT_FOUND).build();

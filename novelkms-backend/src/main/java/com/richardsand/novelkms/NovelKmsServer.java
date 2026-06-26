@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.flywaydb.core.Flyway;
+import org.glassfish.hk2.utilities.binding.AbstractBinder;
 import org.glassfish.jersey.media.multipart.MultiPartFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,7 @@ import com.richardsand.novelkms.auth.TenantAuthorizationFilter;
 import com.richardsand.novelkms.dao.AiCredentialDao;
 import com.richardsand.novelkms.dao.AiFormInstructionsDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
+import com.richardsand.novelkms.dao.ArchiveDao;
 import com.richardsand.novelkms.dao.AuthDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.BookSummaryDao;
@@ -31,7 +33,6 @@ import com.richardsand.novelkms.dao.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.CodexCategoryDao;
 import com.richardsand.novelkms.dao.CodexDao;
 import com.richardsand.novelkms.dao.EditorSettingsDao;
-import com.richardsand.novelkms.dao.ArchiveDao;
 import com.richardsand.novelkms.dao.MemoryTemplateDao;
 import com.richardsand.novelkms.dao.PageLayoutDao;
 import com.richardsand.novelkms.dao.PartDao;
@@ -46,6 +47,7 @@ import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
 import com.richardsand.novelkms.resource.AiCredentialResource;
 import com.richardsand.novelkms.resource.AiFormInstructionsResource;
 import com.richardsand.novelkms.resource.AiReviewResource;
+import com.richardsand.novelkms.resource.ArchiveResource;
 import com.richardsand.novelkms.resource.AuthResource;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterMemoryResource;
@@ -54,7 +56,6 @@ import com.richardsand.novelkms.resource.CodexResource;
 import com.richardsand.novelkms.resource.EditorSettingsResource;
 import com.richardsand.novelkms.resource.ExportResource;
 import com.richardsand.novelkms.resource.ImportResource;
-import com.richardsand.novelkms.resource.KmsArchiveResource;
 import com.richardsand.novelkms.resource.MemoryTemplateResource;
 import com.richardsand.novelkms.resource.PageLayoutResource;
 import com.richardsand.novelkms.resource.PartResource;
@@ -66,10 +67,10 @@ import com.richardsand.novelkms.resource.TemplateResource;
 import com.richardsand.novelkms.resource.TrashResource;
 import com.richardsand.novelkms.resource.UserPreferenceResource;
 import com.richardsand.novelkms.service.AiReviewService;
+import com.richardsand.novelkms.service.ArchiveService;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
-import com.richardsand.novelkms.service.ArchiveService;
 import com.richardsand.novelkms.service.TrashService;
 
 import io.dropwizard.assets.AssetsBundle;
@@ -138,47 +139,47 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 .migrate();
 
         // DAOs
-        AiFormInstructionsDao   aiFormInstructionsDao = new AiFormInstructionsDao(ds);
-        AiReviewDao             aiReviewDao           = new AiReviewDao(ds);
-        AuthDao           authDao           = new AuthDao(ds);
-        BookDao           bookDao           = new BookDao(ds);
-        BookSummaryDao          bookSummaryDao        = new BookSummaryDao(ds);
-        ChapterDao        chapterDao        = new ChapterDao(ds);
-        ChapterMemoryDao        chapterMemoryDao      = new ChapterMemoryDao(ds);
-        ChapterSummaryDao       chapterSummaryDao     = new ChapterSummaryDao(ds);
-        CodexDao          codexDao          = new CodexDao(ds);
-        CodexCategoryDao  codexCategoryDao  = new CodexCategoryDao(ds);
-        EditorSettingsDao editorSettingsDao = new EditorSettingsDao(ds);
-        ArchiveDao     kmsArchiveDao     = new ArchiveDao(ds);
-        MemoryTemplateDao       memoryTemplateDao     = new MemoryTemplateDao(ds);
-        PageLayoutDao     pageLayoutDao     = new PageLayoutDao(ds);
-        PartDao           partDao           = new PartDao(ds);
-        ProjectDao        projectDao        = new ProjectDao(ds);
-        SceneDao          sceneDao          = new SceneDao(ds);
-        TemplateDao       templateDao       = new TemplateDao(ds);
-        TenantAccessDao   tenantAccessDao   = new TenantAccessDao(ds);
-        TrashDao          trashDao          = new TrashDao(ds);
-        UserPreferenceDao userPreferenceDao = new UserPreferenceDao(ds);
-        UserStyleDao      userStyleDao      = new UserStyleDao(ds);
+        AiFormInstructionsDao aiFormInstructionsDao = new AiFormInstructionsDao(ds);
+        AiReviewDao           aiReviewDao           = new AiReviewDao(ds);
+        AuthDao               authDao               = new AuthDao(ds);
+        BookDao               bookDao               = new BookDao(ds);
+        BookSummaryDao        bookSummaryDao        = new BookSummaryDao(ds);
+        ChapterDao            chapterDao            = new ChapterDao(ds);
+        ChapterMemoryDao      chapterMemoryDao      = new ChapterMemoryDao(ds);
+        ChapterSummaryDao     chapterSummaryDao     = new ChapterSummaryDao(ds);
+        CodexDao              codexDao              = new CodexDao(ds);
+        CodexCategoryDao      codexCategoryDao      = new CodexCategoryDao(ds);
+        EditorSettingsDao     editorSettingsDao     = new EditorSettingsDao(ds);
+        ArchiveDao            archiveDao            = new ArchiveDao(ds);
+        MemoryTemplateDao     memoryTemplateDao     = new MemoryTemplateDao(ds);
+        PageLayoutDao         pageLayoutDao         = new PageLayoutDao(ds);
+        PartDao               partDao               = new PartDao(ds);
+        ProjectDao            projectDao            = new ProjectDao(ds);
+        SceneDao              sceneDao              = new SceneDao(ds);
+        TemplateDao           templateDao           = new TemplateDao(ds);
+        TenantAccessDao       tenantAccessDao       = new TenantAccessDao(ds);
+        TrashDao              trashDao              = new TrashDao(ds);
+        UserPreferenceDao     userPreferenceDao     = new UserPreferenceDao(ds);
+        UserStyleDao          userStyleDao          = new UserStyleDao(ds);
 
         // Services
         EpubExportService epubExportService = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
         ExportService     exportService     = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
         ImportService     importService     = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        ArchiveService kmsArchiveService = new ArchiveService(kmsArchiveDao);
+        ArchiveService    archiveService    = new ArchiveService(archiveDao);
         OAuthService      oauthService      = new OAuthService(config.getAuth(), authDao);
         SessionService    sessionService    = new SessionService(authDao, config.getAuth());
         TrashService      trashService      = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
 
         // AI Credential DAO
-        SecretCipher            secretCipher          = new SecretCipher(
+        SecretCipher    secretCipher    = new SecretCipher(
                 config.getSecurity() != null ? config.getSecurity().encryptionKey : null);
-        AiCredentialDao         aiCredentialDao       = new AiCredentialDao(ds, secretCipher);
+        AiCredentialDao aiCredentialDao = new AiCredentialDao(ds, secretCipher);
 
         // AI Review Service
-        OpenAiProvider          openAiProvider        = new OpenAiProvider();
-        Map<String, AiProvider> aiProviders           = Map.of(openAiProvider.providerKey(), openAiProvider);
-        AiReviewService         aiReviewService       = new AiReviewService(
+        OpenAiProvider          openAiProvider  = new OpenAiProvider();
+        Map<String, AiProvider> aiProviders     = Map.of(openAiProvider.providerKey(), openAiProvider);
+        AiReviewService         aiReviewService = new AiReviewService(
                 chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao,
                 aiFormInstructionsDao, chapterMemoryDao, memoryTemplateDao,
                 chapterSummaryDao, bookSummaryDao,
@@ -198,6 +199,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(AiFormInstructionsResource.class);
         env.jersey().register(AiReviewResource.class);
         env.jersey().register(AiCredentialResource.class);
+        env.jersey().register(ArchiveResource.class);
         env.jersey().register(AuthenticationFilter.class);
         env.jersey().register(AuthResource.class);
         env.jersey().register(BookResource.class);
@@ -207,7 +209,6 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(EditorSettingsResource.class);
         env.jersey().register(ExportResource.class);
         env.jersey().register(ImportResource.class);
-        env.jersey().register(KmsArchiveResource.class);
         env.jersey().register(MemoryTemplateResource.class);
         env.jersey().register(MultiPartFeature.class);
         env.jersey().register(PageLayoutResource.class);
@@ -227,13 +228,14 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
         // Jersey Registrations
-        env.jersey().register(new org.glassfish.hk2.utilities.binding.AbstractBinder() {
+        env.jersey().register(new AbstractBinder() {
             @Override
             protected void configure() {
                 bind(aiCredentialDao).to(AiCredentialDao.class);
                 bind(aiFormInstructionsDao).to(AiFormInstructionsDao.class);
                 bind(aiReviewDao).to(AiReviewDao.class);
                 bind(aiReviewService).to(AiReviewService.class);
+                bind(archiveDao).to(ArchiveDao.class);
                 bind(authDao).to(AuthDao.class);
                 bind(bookDao).to(BookDao.class);
                 bind(bookSummaryDao).to(BookSummaryDao.class);
@@ -247,7 +249,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(epubExportService).to(EpubExportService.class);
                 bind(exportService).to(ExportService.class);
                 bind(importService).to(ImportService.class);
-                bind(kmsArchiveService).to(ArchiveService.class);
+                bind(archiveService).to(ArchiveService.class);
                 bind(mapper).to(ObjectMapper.class);
                 bind(memoryTemplateDao).to(MemoryTemplateDao.class);
                 bind(oauthService).to(OAuthService.class);

@@ -9,6 +9,9 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.richardsand.novelkms.dao.TenantAccessDao;
@@ -26,9 +29,10 @@ import jakarta.ws.rs.ext.Provider;
 @Priority(Priorities.AUTHORIZATION)
 public class TenantAuthorizationFilter implements ContainerRequestFilter {
     private static final Set<String> PUBLIC_PREFIXES = Set.of("auth/", "healthcheck");
-
+    private static final Logger logger = LoggerFactory.getLogger(TenantAuthorizationFilter.class);
+    
     private final TenantAccessDao access;
-    private final ObjectMapper mapper;
+    private final ObjectMapper    mapper;
 
     @Inject
     public TenantAuthorizationFilter(TenantAccessDao access, ObjectMapper mapper) {
@@ -40,7 +44,8 @@ public class TenantAuthorizationFilter implements ContainerRequestFilter {
     public void filter(ContainerRequestContext request) throws IOException {
         String path = trim(request.getUriInfo().getPath());
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())
-                || PUBLIC_PREFIXES.stream().anyMatch(path::startsWith)) return;
+                || PUBLIC_PREFIXES.stream().anyMatch(path::startsWith))
+            return;
 
         UUID userId = CurrentUser.id(request);
         try {
@@ -53,7 +58,8 @@ public class TenantAuthorizationFilter implements ContainerRequestFilter {
             authorizePathIds(request, path, userId);
             authorizeSensitiveJsonBody(request, path, userId);
         } catch (Exception e) {
-            if (e instanceof IOException io) throw io;
+            if (e instanceof IOException io)
+                throw io;
             throw new IOException("Tenant authorization failed", e);
         }
     }
@@ -62,18 +68,20 @@ public class TenantAuthorizationFilter implements ContainerRequestFilter {
         String[] s = path.split("/");
         for (int i = 0; i + 1 < s.length; i++) {
             UUID id = parseUuid(s[i + 1]);
-            if (id == null) continue;
+            if (id == null)
+                continue;
 
             boolean owned = switch (s[i].toLowerCase(Locale.ROOT)) {
-                case "projects" -> access.ownsProject(userId, id);
-                case "books" -> access.ownsBook(userId, id);
-                case "parts" -> access.ownsPart(userId, id);
-                case "codex" -> access.ownsCodex(userId, id);
-                case "chapters" -> access.ownsChapter(userId, id);
-                case "scenes" -> access.ownsScene(userId, id);
-                default -> true;
+            case "projects" -> access.ownsProject(userId, id);
+            case "books" -> access.ownsBook(userId, id);
+            case "parts" -> access.ownsPart(userId, id);
+            case "codex" -> access.ownsCodex(userId, id);
+            case "chapters" -> access.ownsChapter(userId, id);
+            case "scenes" -> access.ownsScene(userId, id);
+            default -> true;
             };
             if (!owned) {
+                logger.debug("{} not owned by {}", path, userId);
                 notFound(request);
                 return;
             }
@@ -84,66 +92,82 @@ public class TenantAuthorizationFilter implements ContainerRequestFilter {
             UUID id = parseUuid(s[2]);
             if (id != null) {
                 boolean owned = switch (s[1]) {
-                    case "books" -> access.ownsBook(userId, id);
-                    case "parts" -> access.ownsPart(userId, id);
+                case "books" -> access.ownsBook(userId, id);
+                case "parts" -> access.ownsPart(userId, id);
                 case "codex" -> access.ownsCodex(userId, id);
-                    case "chapters" -> access.ownsChapter(userId, id);
-                    case "scenes" -> access.ownsScene(userId, id);
-                    default -> false;
+                case "chapters" -> access.ownsChapter(userId, id);
+                case "scenes" -> access.ownsScene(userId, id);
+                default -> false;
                 };
-                if (!owned) notFound(request);
+                if (!owned) {
+                    logger.debug("{} not owned by {}", path, userId);
+                    notFound(request);
+                }
             }
         }
     }
 
     private void authorizeSensitiveJsonBody(ContainerRequestContext request, String path, UUID userId) throws Exception {
         MediaType type = request.getMediaType();
-        if (type == null || !type.isCompatible(MediaType.APPLICATION_JSON_TYPE) || !request.hasEntity()) return;
+        if (type == null || !type.isCompatible(MediaType.APPLICATION_JSON_TYPE) || !request.hasEntity())
+            return;
 
         boolean inspect = path.endsWith("/move")
                 || path.endsWith("/reorder")
                 || ("POST".equalsIgnoreCase(request.getMethod()) && path.matches("books/[0-9a-fA-F-]+/chapters"));
-        if (!inspect) return;
+        if (!inspect)
+            return;
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         request.getEntityStream().transferTo(out);
         byte[] bytes = out.toByteArray();
         request.setEntityStream(new ByteArrayInputStream(bytes));
-        if (bytes.length == 0) return;
+        if (bytes.length == 0)
+            return;
 
         JsonNode root = mapper.readTree(bytes);
-        if (!allUuidFieldsOwned(root, null, userId)) deny(request);
+        if (!allUuidFieldsOwned(root, null, userId))
+            deny(request);
     }
 
     private boolean allUuidFieldsOwned(JsonNode node, String fieldName, UUID userId) throws Exception {
-        if (node == null || node.isNull()) return true;
+        if (node == null || node.isNull())
+            return true;
         if (node.isObject()) {
             for (Entry<String, JsonNode> prop : node.properties()) {
-                if (!allUuidFieldsOwned(prop.getValue(), prop.getKey(), userId)) return false;
+                if (!allUuidFieldsOwned(prop.getValue(), prop.getKey(), userId))
+                    return false;
             }
             return true;
         }
         if (node.isArray()) {
             for (JsonNode child : node) {
-                if (!allUuidFieldsOwned(child, fieldName, userId)) return false;
+                if (!allUuidFieldsOwned(child, fieldName, userId))
+                    return false;
             }
             return true;
         }
-        if (!node.isTextual() || fieldName == null) return true;
+        if (!node.isTextual() || fieldName == null)
+            return true;
 
         String lower = fieldName.toLowerCase(Locale.ROOT);
-        if (!(lower.equals("id") || lower.endsWith("id") || lower.endsWith("ids"))) return true;
+        if (!(lower.equals("id") || lower.endsWith("id") || lower.endsWith("ids")))
+            return true;
         UUID id = parseUuid(node.asText());
         return id == null || access.ownsAnyEntity(userId, id);
     }
 
     private static UUID parseUuid(String value) {
-        try { return UUID.fromString(value); }
-        catch (Exception ignored) { return null; }
+        try {
+            return UUID.fromString(value);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static String trim(String path) {
-        if (path == null) return "";
+        if (path == null)
+            return "";
         return path.startsWith("/") ? path.substring(1) : path;
     }
 
