@@ -82,9 +82,16 @@ public class OpenAiProvider implements AiProvider {
         String model = (request.model() == null || request.model().isBlank())
                 ? DEFAULT_MODEL : request.model().trim();
 
+        logger.info("OpenAI review request started: model={}, scope={}, unitLabel={}, promptVersion={}",
+                model, scopeWord(request), safeLabel(request.unitLabel()), PROMPT_VERSION);
+        logger.debug("OpenAI review request context: textChars={}, priorContextChars={}, referenceContextChars={}, categoryCount={}",
+                lengthOf(request.text()), lengthOf(request.priorContext()), lengthOf(request.referenceContext()),
+                request.categories() == null ? 0 : request.categories().size());
+
         String body = buildRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
         List<ReviewResult.Recommendation> recs = parseRecommendations(content);
+        logger.info("OpenAI review request completed: model={}, recommendations={}", model, recs.size());
         return new ReviewResult(recs, content, PROMPT_VERSION);
     }
 
@@ -93,8 +100,15 @@ public class OpenAiProvider implements AiProvider {
         String model = (request.model() == null || request.model().isBlank())
                 ? DEFAULT_MODEL : request.model().trim();
 
+        logger.info("OpenAI memory-generation request started: model={}, chapterLabel={}, promptVersion={}",
+                model, safeLabel(request.chapterLabel()), MEMORY_PROMPT_VERSION);
+        logger.debug("OpenAI memory-generation request context: chapterTextChars={}, templateChars={}",
+                lengthOf(request.chapterText()), lengthOf(request.template()));
+
         String body = buildMemoryRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
+        logger.info("OpenAI memory-generation request completed: model={}, outputChars={}",
+                model, lengthOf(content));
         return new MemoryResult(content.strip(), MEMORY_PROMPT_VERSION);
     }
 
@@ -103,8 +117,15 @@ public class OpenAiProvider implements AiProvider {
         String model = (request.model() == null || request.model().isBlank())
                 ? DEFAULT_MODEL : request.model().trim();
 
+        logger.info("OpenAI chapter-summary request started: model={}, chapterLabel={}, promptVersion={}",
+                model, safeLabel(request.chapterLabel()), CHAPTER_SUMMARY_PROMPT_VERSION);
+        logger.debug("OpenAI chapter-summary request context: chapterTextChars={}",
+                lengthOf(request.chapterText()));
+
         String body = buildChapterSummaryRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
+        logger.info("OpenAI chapter-summary request completed: model={}, outputChars={}",
+                model, lengthOf(content));
         return new SummaryResult(content.strip(), CHAPTER_SUMMARY_PROMPT_VERSION);
     }
 
@@ -113,8 +134,15 @@ public class OpenAiProvider implements AiProvider {
         String model = (request.model() == null || request.model().isBlank())
                 ? DEFAULT_MODEL : request.model().trim();
 
+        logger.info("OpenAI book-summary request started: model={}, bookTitle={}, maxWords={}, promptVersion={}",
+                model, safeLabel(request.bookTitle()), request.maxWords(), BOOK_SUMMARY_PROMPT_VERSION);
+        logger.debug("OpenAI book-summary request context: chapterSummariesChars={}",
+                lengthOf(request.chapterSummaries()));
+
         String body = buildBookSummaryRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
+        logger.info("OpenAI book-summary request completed: model={}, outputChars={}",
+                model, lengthOf(content));
         return new SummaryResult(content.strip(), BOOK_SUMMARY_PROMPT_VERSION);
     }
 
@@ -124,6 +152,8 @@ public class OpenAiProvider implements AiProvider {
      * Shared by {@link #review} and {@link #generateMemory}.
      */
     private String postForContent(String apiKey, String body) throws AiProviderException {
+        logger.debug("OpenAI HTTP request prepared: endpoint={}, requestBytes={}",
+                ENDPOINT, body == null ? 0 : body.getBytes(StandardCharsets.UTF_8).length);
         HttpRequest httpRequest = HttpRequest.newBuilder()
                 .uri(URI.create(ENDPOINT))
                 .timeout(Duration.ofSeconds(180))
@@ -136,15 +166,21 @@ public class OpenAiProvider implements AiProvider {
         try {
             response = client.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
+            logger.warn("OpenAI HTTP request failed before response: {}", e.getMessage());
             throw new AiProviderException("Could not reach OpenAI: " + e.getMessage(), e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            logger.warn("OpenAI HTTP request interrupted");
             throw new AiProviderException("OpenAI request was interrupted", e);
         }
 
         if (response.statusCode() != 200) {
+            logger.warn("OpenAI HTTP request returned non-success status: status={}, responseChars={}",
+                    response.statusCode(), lengthOf(response.body()));
             throw new AiProviderException(extractErrorMessage(response.statusCode(), response.body()));
         }
+        logger.debug("OpenAI HTTP request succeeded: status={}, responseChars={}",
+                response.statusCode(), lengthOf(response.body()));
         return extractContent(response.body());
     }
 
@@ -398,6 +434,7 @@ public class OpenAiProvider implements AiProvider {
     private List<ReviewResult.Recommendation> parseRecommendations(String content) throws AiProviderException {
         String json = stripCodeFences(content);
         try {
+            logger.debug("Parsing OpenAI review JSON: contentChars={}, jsonChars={}", lengthOf(content), lengthOf(json));
             JsonNode root = mapper.readTree(json);
             JsonNode array = root.path("recommendations");
             if (!array.isArray()) {
@@ -417,6 +454,7 @@ public class OpenAiProvider implements AiProvider {
                         category, severity, location, recommendation,
                         codexCategory, codexTitle, anchorText));
             }
+            logger.debug("Parsed OpenAI review JSON: recommendations={}", result.size());
             return result;
         } catch (AiProviderException e) {
             throw e;
@@ -466,5 +504,15 @@ public class OpenAiProvider implements AiProvider {
 
     private static String nullToBlank(String value) {
         return value == null ? "" : value;
+    }
+
+    private static int lengthOf(String value) {
+        return value == null ? 0 : value.length();
+    }
+
+    private static String safeLabel(String value) {
+        if (value == null || value.isBlank()) return "";
+        String stripped = value.strip().replaceAll("\\s+", " ");
+        return stripped.length() <= 120 ? stripped : stripped.substring(0, 120) + "...";
     }
 }

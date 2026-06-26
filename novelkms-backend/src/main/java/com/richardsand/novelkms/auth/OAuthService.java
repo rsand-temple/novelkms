@@ -22,12 +22,17 @@ import org.apache.http.util.EntityUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.richardsand.novelkms.NovelKmsConfig;
 import com.richardsand.novelkms.dao.AuthDao;
 import com.richardsand.novelkms.model.AppUser;
 import com.richardsand.novelkms.utils.EmailNormalizer;
 
 public class OAuthService implements AutoCloseable {
+    private static final Logger logger = LoggerFactory.getLogger(OAuthService.class);
+
     public record CallbackResult(AppUser user, String pendingRegistrationToken, String returnPath) {
     }
 
@@ -41,45 +46,68 @@ public class OAuthService implements AutoCloseable {
     }
 
     public URI begin(String providerName, String returnPath) throws Exception {
-        NovelKmsConfig.OAuthProvider p     = provider(providerName);
-        String                       state = CryptoTokens.randomToken(32);
-        dao.createOAuthState(CryptoTokens.sha256(state), providerName.toUpperCase(Locale.ROOT), safeReturnPath(returnPath), Instant.now().plus(Duration.ofMinutes(10)));
-        return new URIBuilder(p.authorizationUrl)
+        NovelKmsConfig.OAuthProvider p              = provider(providerName);
+        String                       state          = CryptoTokens.randomToken(32);
+        String                       safeReturnPath = safeReturnPath(returnPath);
+        dao.createOAuthState(CryptoTokens.sha256(state), providerName.toUpperCase(Locale.ROOT), safeReturnPath, Instant.now().plus(Duration.ofMinutes(10)));
+        URI authorizationUri = new URIBuilder(p.authorizationUrl)
                 .addParameter("client_id", p.clientId)
                 .addParameter("redirect_uri", callbackUrl(providerName))
                 .addParameter("response_type", "code")
                 .addParameter("scope", p.scope)
                 .addParameter("state", state)
                 .build();
+        logger.info("OAuth authorization started: provider={}, returnPath={}", providerName, safeReturnPath);
+        logger.debug("OAuth authorization URI built: provider={}, authorizationHost={}, callbackUrl={}",
+                providerName, authorizationUri.getHost(), callbackUrl(providerName));
+        return authorizationUri;
     }
 
     public CallbackResult callback(String providerName, String code, String state) throws Exception {
+        logger.info("OAuth callback received: provider={}, hasCode={}, hasState={}",
+                providerName, code != null && !code.isBlank(), state != null && !state.isBlank());
         AuthDao.OAuthState oauthState = dao.consumeOAuthState(CryptoTokens.sha256(state))
                 .orElseThrow(() -> new IllegalArgumentException("OAuth state is invalid or expired"));
         String             provider   = providerName.toUpperCase(Locale.ROOT);
-        if (!provider.equals(oauthState.provider()))
+        if (!provider.equals(oauthState.provider())) {
+            logger.warn("OAuth callback provider mismatch: callbackProvider={}, stateProvider={}",
+                    provider, oauthState.provider());
             throw new IllegalArgumentException("OAuth provider does not match state");
+        }
 
         OAuthProfile      profile  = exchange(providerName, code);
         Optional<AppUser> existing = dao.findUserByIdentity(profile.provider(), profile.subject());
         if (existing.isPresent()) {
             dao.touchLogin(existing.get().id(), profile.provider(), profile.subject());
+            logger.info("OAuth callback matched existing identity: provider={}, userId={}, returnPath={}",
+                    profile.provider(), existing.get().id(), oauthState.returnPath());
             return new CallbackResult(existing.get(), null, oauthState.returnPath());
         }
-        if (profile.email() == null || profile.email().isBlank())
+        if (profile.email() == null || profile.email().isBlank()) {
+            logger.warn("OAuth callback profile missing email: provider={}, subject={}",
+                    profile.provider(), profile.subject());
             throw new IllegalArgumentException("OAuth provider did not return an email address");
-        if (!profile.emailVerified())
+        }
+        if (!profile.emailVerified()) {
+            logger.warn("OAuth callback profile email not verified: provider={}, subject={}, email={}",
+                    profile.provider(), profile.subject(), profile.email());
             throw new IllegalArgumentException("OAuth provider did not verify the email address");
+        }
         if (dao.normalizedEmailExists(EmailNormalizer.normalize(profile.email()))) {
+            logger.warn("OAuth callback email collision: provider={}, subject={}, email={}",
+                    profile.provider(), profile.subject(), profile.email());
             throw new IllegalStateException("An account already exists for this email. Sign in with its existing provider.");
         }
         String pendingToken = CryptoTokens.randomToken(32);
         dao.createPendingRegistration(CryptoTokens.sha256(pendingToken), profile, Instant.now().plus(Duration.ofMinutes(20)));
+        logger.info("OAuth callback created pending registration: provider={}, subject={}, email={}, returnPath={}",
+                profile.provider(), profile.subject(), profile.email(), oauthState.returnPath());
         return new CallbackResult(null, pendingToken, oauthState.returnPath());
     }
 
     private OAuthProfile exchange(String providerName, String code) throws Exception {
         NovelKmsConfig.OAuthProvider p = provider(providerName);
+        logger.info("OAuth token exchange started: provider={}", providerName);
 
         String body = "client_id=" + enc(p.clientId) + "&client_secret=" + enc(p.clientSecret)
                 + "&code=" + enc(code) + "&redirect_uri=" + enc(callbackUrl(providerName))
@@ -91,6 +119,7 @@ public class OAuthService implements AutoCloseable {
 
         JSONObject token       = executeJson(post);
         String     accessToken = token.getString("access_token");
+        logger.debug("OAuth token exchange succeeded: provider={}", providerName);
 
         URIBuilder userInfo = new URIBuilder(p.userInfoUrl);
         if (providerName.equalsIgnoreCase("meta")) {
