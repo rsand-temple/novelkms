@@ -25,7 +25,6 @@ import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.AuthDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.BookSummaryDao;
-import com.richardsand.novelkms.dao.PageLayoutDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.ChapterMemoryDao;
 import com.richardsand.novelkms.dao.ChapterSummaryDao;
@@ -33,6 +32,7 @@ import com.richardsand.novelkms.dao.CodexCategoryDao;
 import com.richardsand.novelkms.dao.CodexDao;
 import com.richardsand.novelkms.dao.EditorSettingsDao;
 import com.richardsand.novelkms.dao.MemoryTemplateDao;
+import com.richardsand.novelkms.dao.PageLayoutDao;
 import com.richardsand.novelkms.dao.PartDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
@@ -46,20 +46,21 @@ import com.richardsand.novelkms.resource.AiCredentialResource;
 import com.richardsand.novelkms.resource.AiFormInstructionsResource;
 import com.richardsand.novelkms.resource.AiReviewResource;
 import com.richardsand.novelkms.resource.AuthResource;
-import com.richardsand.novelkms.resource.ChapterMemoryResource;
-import com.richardsand.novelkms.resource.SummaryResource;
-import com.richardsand.novelkms.resource.MemoryTemplateResource;
 import com.richardsand.novelkms.resource.BookResource;
-import com.richardsand.novelkms.resource.PageLayoutResource;
+import com.richardsand.novelkms.resource.ChapterMemoryResource;
 import com.richardsand.novelkms.resource.ChapterResource;
 import com.richardsand.novelkms.resource.CodexResource;
 import com.richardsand.novelkms.resource.EditorSettingsResource;
 import com.richardsand.novelkms.resource.ExportResource;
 import com.richardsand.novelkms.resource.ImportResource;
+import com.richardsand.novelkms.resource.KmsArchiveResource;
+import com.richardsand.novelkms.resource.MemoryTemplateResource;
+import com.richardsand.novelkms.resource.PageLayoutResource;
 import com.richardsand.novelkms.resource.PartResource;
 import com.richardsand.novelkms.resource.ProjectResource;
 import com.richardsand.novelkms.resource.SceneResource;
 import com.richardsand.novelkms.resource.StyleResource;
+import com.richardsand.novelkms.resource.SummaryResource;
 import com.richardsand.novelkms.resource.TemplateResource;
 import com.richardsand.novelkms.resource.TrashResource;
 import com.richardsand.novelkms.resource.UserPreferenceResource;
@@ -67,6 +68,7 @@ import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
+import com.richardsand.novelkms.service.KmsArchiveService;
 import com.richardsand.novelkms.service.TrashService;
 
 import io.dropwizard.assets.AssetsBundle;
@@ -173,7 +175,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 codexDao, codexCategoryDao, aiProviders);
 
         TrashService trashService = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
-
+        KmsArchiveService kmsArchiveService = new KmsArchiveService(ds);
+        
         env.lifecycle().manage(new io.dropwizard.lifecycle.Managed() {
             @Override
             public void start() {
@@ -209,7 +212,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(SummaryResource.class);
         env.jersey().register(MemoryTemplateResource.class);
         env.jersey().register(TrashResource.class);
-
+        env.jersey().register(KmsArchiveResource.class);
+        
         ObjectMapper mapper = env.getObjectMapper();
         mapper.findAndRegisterModules();
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -248,6 +252,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(trashService).to(TrashService.class);
                 bind(editorSettingsDao).to(EditorSettingsDao.class);
                 bind(userPreferenceDao).to(UserPreferenceDao.class);
+                bind(kmsArchiveService).to(KmsArchiveService.class);
             }
         });
 

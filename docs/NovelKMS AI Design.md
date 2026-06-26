@@ -308,6 +308,14 @@ multi-chapter batch run.
 other three remain free-text): `chapter-review-v6`, `memory-v2`,
 `chapter-summary-v2`, `book-summary-v2`.
 
+## Memory/summary editing surface (V27)
+
+Editing moved from modal dialogs into the document's own nav-tree leaf, opened in EditorPanel for full rich-text editing (headings, lists, blockquotes — the same markup scenes support). Each manuscript chapter has two fixed bottom leaves, *Memory* and *Summary*; each book has one, *Summary*. None are draggable, exported, or counted toward word totals. Content storage moved from plain text to authored HTML; `AiReviewService` strips it back to plain text before it reaches a prompt, so review/book-summary generation is unaffected.
+
+Regenerating warns first whenever content already exists; a first-ever Generate skips straight to the existing continuity (`PreReviewMemoryDialog`) / coverage (`PreBookSummaryDialog`) gates. One-time guidance and the staleness chip live in EditorPanel's toolbar in this mode.
+
+The ReviewRail Memory tab and the book "View chapter summaries…" dialog remain as read-only peek surfaces (Generate/Regenerate/guidance kept, inline editing replaced by an "Edit in document" link). The standalone nav-triggered `MemoryDocDialog`/`ChapterSummaryDialog`/`ChapterSummaryEditor` modals are removed.
+
 ## Non-goals for the current AI slice
 
 - General chat interface.

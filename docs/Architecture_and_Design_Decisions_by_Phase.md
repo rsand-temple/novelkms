@@ -323,3 +323,23 @@ chapter/book label and the prose/summaries in the other three builders.
 `guidanceInitKey` combining the scope/chapter/book id with the underlying query's loading state, so the field re-syncs once on scope switch and once when the source data finishes loading, without an `useEffect`. The field is deliberately **not** cleared after a successful generation, so guidance can be
 repeated or refined across runs; a "Clear guidance" button is shown when non-empty. Sequential batch-regenerate flows (`PreReviewMemoryDialog`, `PreBookSummaryDialog`) and the nav context menu's
 one-click quick-generate actions were left out of scope — they don't map cleanly onto a single free-text note.
+
+### V27 — Memory/Summary documents as nav-tree leaves
+
+Moves memory-document and chapter/book-summary editing out of modal dialogs and into EditorPanel, using the document's own nav node — the same architectural slot the V4 template "third mode" already established.
+
+**Nav tree.** Two new fixed leaf components: `ChapterAiDocItem` (Memory/Summary, rendered after a chapter's scene `SortableContext`, never a member of it) and `BookSummaryItem` (rendered after `CodexSection`, true bottom of a book's children). Both italic, alternate icons (`PsychologyOutlinedIcon` for Memory, `SummarizeOutlinedIcon` for Summary) distinct from `ArticleIcon`/`TheatersIcon`. Not draggable, no rename, no own context menu.
+
+**Selection state.** `selection.aiDocType` (`'memory'|'chapterSummary'|'bookSummary'|null`) added to `EMPTY_SELECTION`; `setSelection`'s transient-mode cleanup now strips it too, so any ordinary nav click clears it automatically — no separate `selectAiDoc` helper needed, since these nodes already carry full chapter/book parent context the way Scene/Chapter/Part/Book do.
+
+**EditorPanel.** New top-priority `aiDocMode`, gating every other mode off. Mirrors the template-mode `loadedTemplateKeyRef`/`templateKey()` pattern exactly via a new `aiDocKey(type, parentId, doc)` keyed on `generatedAt` (bumped by both generation and hand-edit saves per the existing DAO contract). Autosave goes through the stable `chapterMemoryApi`/`summaryApi` modules directly inside `scheduleSave` — not the TanStack mutation hooks, which aren't safe to call from a `useCallback` with a narrow dependency array — manually mirroring each hook's own cache invalidation. Generate/Regenerate is a separate explicit action via the mutation hooks, safe there since it's triggered directly from a click handler.
+
+**Storage format: plain text → authored HTML.** `chapter_memory.content`/`chapter_summary.content`/`book_summary.content` remain `TEXT` (no migration) but now hold TipTap HTML. `AiReviewService.assemblePriorContext()` and `assembleChapterSummaries()` call the existing `htmlToPlainText()` Jsoup helper before folding content into AI prompts; `editBookSummary()`'s word-count recompute does the same before `countWords()`. Legacy plain-text rows still display and aggregate correctly via that helper's existing raw-text fallback.
+
+**Regeneration warning.** New shared `RegenerateConfirmDialog`, shown whenever Regenerate is clicked and content already exists (skipped on a first-ever Generate). Wired into EditorPanel's toolbar and into the two kept legacy peek surfaces.
+
+**Kept legacy surfaces, redefined.** The ReviewRail "Memory" tab and the book "View chapter summaries…" dialog stay, but inline `TextField` editing is gone — both render content read-only via a new shared `RichTextPreview` (mirrors EditorPanel's own template-preview `dangerouslySetInnerHTML` pattern, same trust boundary) with an "Edit in document" button selecting the nav node. Generate/Regenerate/guidance/staleness are unchanged. The book dialog's dense chapter-summary list renders a stripped plain-text preview instead (new `utils/htmlText.js` → `stripHtmlToText()`).
+
+**Removed.** `MemoryDocDialog`, `ChapterSummaryDialog`, `ChapterSummaryEditor` — superseded by the nav leaf + EditorPanel. The chapter context menu's "Edit memory document…"/"Edit chapter summary…" now select the nav node instead of opening a dialog; Generate/Clear quick actions are unchanged.
+
+**PropertiesPanel.** New `AiDocProperties` block (source, generated-at, model, word count for book summaries, last guidance), routed ahead of the normal router exactly the way `TemplateProperties` already is.
