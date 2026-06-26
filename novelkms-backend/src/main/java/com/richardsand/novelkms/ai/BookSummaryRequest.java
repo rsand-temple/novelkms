@@ -16,11 +16,15 @@ package com.richardsand.novelkms.ai;
  * @param chapterSummaries the chapter summaries concatenated in book order, each
  *                         under a {@code Chapter N: Title} heading; never blank
  * @param maxWords         hard upper bound on the synopsis length, e.g. 1000
+ * @param userGuidance     optional one-time author note for this generation only,
+ *                         appended to the user message as a clearly-fenced
+ *                         addendum. Null/blank when not supplied.
  */
 public record BookSummaryRequest(
         String apiKey,
         String model,
         String bookTitle,
         String chapterSummaries,
-        int maxWords) {
+        int maxWords,
+        String userGuidance) {
 }

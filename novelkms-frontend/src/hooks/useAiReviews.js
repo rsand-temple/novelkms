@@ -30,8 +30,12 @@ export function useAiReview(reviewId, enabled = true) {
 export function useRunChapterReview() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ chapterId, credentialId, model }) =>
-			aiApi.runChapterReview(chapterId, { credentialId: credentialId ?? null, model: model ?? null }),
+		mutationFn: ({ chapterId, credentialId, model, userGuidance }) =>
+			aiApi.runChapterReview(chapterId, {
+				credentialId: credentialId ?? null,
+				model: model ?? null,
+				userGuidance: userGuidance ?? null,
+			}),
 		onSuccess: (review, { chapterId }) => {
 			qc.invalidateQueries({ queryKey: AI_REVIEW_KEYS.byChapter(chapterId) })
 			// The run returns the full review (with recommendations) — seed its
@@ -46,8 +50,12 @@ export function useRunChapterReview() {
 export function useRunSceneReview() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ sceneId, credentialId, model }) =>
-			aiApi.runSceneReview(sceneId, { credentialId: credentialId ?? null, model: model ?? null }),
+		mutationFn: ({ sceneId, credentialId, model, userGuidance }) =>
+			aiApi.runSceneReview(sceneId, {
+				credentialId: credentialId ?? null,
+				model: model ?? null,
+				userGuidance: userGuidance ?? null,
+			}),
 		onSuccess: (review) => {
 			if (review?.chapterId) qc.invalidateQueries({ queryKey: AI_REVIEW_KEYS.byChapter(review.chapterId) })
 			if (review?.id) qc.setQueryData(AI_REVIEW_KEYS.detail(review.id), review)

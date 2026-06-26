@@ -125,6 +125,19 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor }) {
 		return reviews // chapter scope: all reviews (chapter + scene)
 	}, [reviews, scope, sceneId])
 
+	// One-time guidance for the next run, pre-filled from the most recent review
+	// in this scope (reviews are newest-first) so the author can tweak and re-run
+	// without retyping. Re-derived on scope switch (chapter <-> a given scene) and
+	// once the review list finishes loading — never auto-cleared after a run, so
+	// guidance can be repeated or refined across successive reviews.
+	const [guidance, setGuidance] = useState('')
+	const [guidanceInitKey, setGuidanceInitKey] = useState(null)
+	const currentGuidanceKey = `${scopeKey}:${loadingReviews ? 'loading' : 'loaded'}`
+	if (currentGuidanceKey !== guidanceInitKey) {
+		setGuidanceInitKey(currentGuidanceKey)
+		setGuidance(filteredReviews[0]?.userGuidance ?? '')
+	}
+
 	const completedReviews = useMemo(
 		() => filteredReviews.filter(r => r.status === 'COMPLETED'),
 		[filteredReviews],
@@ -216,14 +229,14 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor }) {
 
 	const doRunChapter = () => {
 		setRunError(null)
-		runChapter({ chapterId, credentialId: effectiveCredId, model: null },
+		runChapter({ chapterId, credentialId: effectiveCredId, model: null, userGuidance: guidance.trim() || null },
 			{ onSuccess: onRunSuccess, onError: onRunError })
 	}
 
 	const handleRun = () => {
 		setRunError(null)
 		if (scope === 'SCENE') {
-			runScene({ sceneId, credentialId: effectiveCredId, model: null },
+			runScene({ sceneId, credentialId: effectiveCredId, model: null, userGuidance: guidance.trim() || null },
 				{ onSuccess: onRunSuccess, onError: onRunError })
 			return
 		}
@@ -484,6 +497,25 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor }) {
 									</MenuItem>
 								))}
 							</TextField>
+						)}
+
+						<TextField
+							label="Guidance for this run (optional)"
+							placeholder="e.g. the letter in this chapter is canonically a forgery"
+							value={guidance}
+							onChange={(e) => setGuidance(e.target.value)}
+							fullWidth
+							multiline
+							minRows={2}
+							maxRows={6}
+							size="small"
+							sx={{ mb: guidance.trim() ? 0.5 : 1 }}
+							disabled={running}
+						/>
+						{guidance.trim() && (
+							<Button size="small" sx={{ mb: 1 }} onClick={() => setGuidance('')} disabled={running}>
+								Clear guidance
+							</Button>
 						)}
 
 						<Button

@@ -92,6 +92,17 @@ public class AiReview {
     @JsonProperty
     private String formInstructions;
 
+    /**
+     * One-time author guidance supplied for this generation only (e.g. "treat
+     * the letter as forged"), or null. Not part of the form/functional system
+     * prompt and not subject to the four-scope override cascade — just an
+     * addendum appended to the user message for this run, recorded here as
+     * provenance and returned to the frontend so the next run's guidance field
+     * can pre-fill with it.
+     */
+    @JsonProperty
+    private String userGuidance;
+
     /** Populated only when status is FAILED. */
     @JsonProperty
     private String errorMessage;

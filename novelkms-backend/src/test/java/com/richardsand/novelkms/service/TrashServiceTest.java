@@ -179,7 +179,7 @@ class TrashServiceTest extends NovelKmsTestBase {
     @Test
     void restore_review_chapterTrashed_throws409() throws SQLException {
         UUID reviewId = aiReviewDao.createPending(
-                TEST_USER_ID, project.getId(), book.getId(), chapter.getId(), null, "OPENAI", "gpt-5.4", "SYSTEM", null);
+                TEST_USER_ID, project.getId(), book.getId(), chapter.getId(), null, "OPENAI", "gpt-5.4", "SYSTEM", null, null);
         TrashItem trashedReview = trashService.trashReview(TEST_USER_ID, reviewId).orElseThrow();
         trashService.trashChapter(TEST_USER_ID, chapter.getId());
 

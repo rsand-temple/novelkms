@@ -15,11 +15,15 @@ package com.richardsand.novelkms.ai;
  * @param chapterText  plain-text body of the chapter (HTML stripped, scenes joined)
  * @param template     the resolved memory-document template to fill in
  *                     (book -&gt; project -&gt; user -&gt; system); never null/blank
+ * @param userGuidance optional one-time author note for this generation only,
+ *                     appended to the user message as a clearly-fenced
+ *                     addendum. Null/blank when not supplied.
  */
 public record MemoryRequest(
         String apiKey,
         String model,
         String chapterLabel,
         String chapterText,
-        String template) {
+        String template,
+        String userGuidance) {
 }

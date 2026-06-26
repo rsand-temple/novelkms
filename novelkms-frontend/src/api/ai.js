@@ -15,7 +15,10 @@ export const aiApi = {
 	// A chapter review and a scene review are the same artifact, differing only
 	// in scope. A scene review is filed under the scene's parent chapter, so it
 	// appears in that chapter's review history.
-	// body: { credentialId?: uuid|null, model?: string|null }
+	// body: { credentialId?: uuid|null, model?: string|null, userGuidance?: string|null }
+	// userGuidance is a one-time author note for this run only (not a persistent
+	// override) — see api/chapterMemory.js / api/summary.js for the same field on
+	// the other three generation flows.
 	runChapterReview: (chapterId, body) => client.post(`/ai/reviews/chapters/${chapterId}`, body ?? {}).then(r => r.data),
 	runSceneReview: (sceneId, body) => client.post(`/ai/reviews/scenes/${sceneId}`, body ?? {}).then(r => r.data),
 	getReview: (reviewId) => client.get(`/ai/reviews/${reviewId}`).then(r => r.data),

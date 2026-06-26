@@ -36,6 +36,7 @@ public class BookSummaryDao {
                 .source(rs.getString("source"))
                 .promptVersion(rs.getString("prompt_version"))
                 .model(rs.getString("model"))
+                .userGuidance(rs.getString("user_guidance"))
                 .generatedAt(instant(rs, "generated_at"))
                 .createdAt(instant(rs, "created_at"))
                 .updatedAt(instant(rs, "updated_at"))
@@ -55,40 +56,43 @@ public class BookSummaryDao {
 
     /**
      * Inserts or overwrites the book's AI-generated summary, refreshing
-     * {@code generatedAt}. Sets {@code source = 'AI'}.
+     * {@code generatedAt}. Sets {@code source = 'AI'}. {@code userGuidance} is the
+     * optional one-time author note supplied for this generation (null when none).
      */
     public void upsertGenerated(UUID bookId, String content, int wordCount,
-            String promptVersion, String model) throws SQLException {
+            String promptVersion, String model, String userGuidance) throws SQLException {
         Instant now = Instant.now();
         if (findByBook(bookId).isPresent()) {
             try (Connection c = ds.getConnection();
                     PreparedStatement p = c.prepareStatement(
                             "UPDATE book_summary SET content=?, word_count=?, source='AI', prompt_version=?,"
-                                    + " model=?, generated_at=?, updated_at=? WHERE book_id=?")) {
+                                    + " model=?, user_guidance=?, generated_at=?, updated_at=? WHERE book_id=?")) {
                 p.setString(1, content);
                 p.setInt(2, wordCount);
                 p.setString(3, promptVersion);
                 p.setString(4, model);
-                p.setTimestamp(5, Timestamp.from(now));
+                p.setString(5, userGuidance);
                 p.setTimestamp(6, Timestamp.from(now));
-                p.setObject(7, bookId);
+                p.setTimestamp(7, Timestamp.from(now));
+                p.setObject(8, bookId);
                 p.executeUpdate();
             }
         } else {
             try (Connection c = ds.getConnection();
                     PreparedStatement p = c.prepareStatement(
                             "INSERT INTO book_summary(id, book_id, content, word_count, source, prompt_version,"
-                                    + " model, generated_at, created_at, updated_at)"
-                                    + " VALUES (?,?,?,?,'AI',?,?,?,?,?)")) {
+                                    + " model, user_guidance, generated_at, created_at, updated_at)"
+                                    + " VALUES (?,?,?,?,'AI',?,?,?,?,?,?)")) {
                 p.setObject(1, UUID.randomUUID());
                 p.setObject(2, bookId);
                 p.setString(3, content);
                 p.setInt(4, wordCount);
                 p.setString(5, promptVersion);
                 p.setString(6, model);
-                p.setTimestamp(7, Timestamp.from(now));
+                p.setString(7, userGuidance);
                 p.setTimestamp(8, Timestamp.from(now));
                 p.setTimestamp(9, Timestamp.from(now));
+                p.setTimestamp(10, Timestamp.from(now));
                 p.executeUpdate();
             }
         }

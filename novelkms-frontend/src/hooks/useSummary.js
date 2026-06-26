@@ -67,8 +67,12 @@ function refreshBook(qc, bookId) {
 export function useGenerateChapterSummary() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ chapterId, credentialId, model }) =>
-			summaryApi.generateChapter(chapterId, { credentialId: credentialId ?? null, model: model ?? null }),
+		mutationFn: ({ chapterId, credentialId, model, userGuidance }) =>
+			summaryApi.generateChapter(chapterId, {
+				credentialId: credentialId ?? null,
+				model: model ?? null,
+				userGuidance: userGuidance ?? null,
+			}),
 		onSuccess: (doc, { chapterId, bookId }) => {
 			if (doc) qc.setQueryData(SUMMARY_KEYS.chapterDoc(chapterId), doc)
 			refreshChapter(qc, chapterId, bookId)
@@ -103,8 +107,12 @@ export function useDeleteChapterSummary() {
 export function useGenerateBookSummary() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ bookId, credentialId, model }) =>
-			summaryApi.generateBook(bookId, { credentialId: credentialId ?? null, model: model ?? null }),
+		mutationFn: ({ bookId, credentialId, model, userGuidance }) =>
+			summaryApi.generateBook(bookId, {
+				credentialId: credentialId ?? null,
+				model: model ?? null,
+				userGuidance: userGuidance ?? null,
+			}),
 		onSuccess: (doc, { bookId }) => {
 			if (doc) qc.setQueryData(SUMMARY_KEYS.bookDoc(bookId), doc)
 			refreshBook(qc, bookId)

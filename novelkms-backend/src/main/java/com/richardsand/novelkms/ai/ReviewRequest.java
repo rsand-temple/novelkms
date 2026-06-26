@@ -32,6 +32,11 @@ import java.util.List;
  *                         (e.g. pinned Codex canon/voice entries). Forward-prep:
  *                         currently always null; reserved for the Codex-context
  *                         increment. The provider emits the block only when present.
+ * @param userGuidance     optional one-time author note for this generation only
+ *                         (e.g. "treat the letter as forged"). Not part of the
+ *                         form/functional system prompt and not subject to any
+ *                         override cascade — appended to the user message as a
+ *                         clearly-fenced addendum. Null/blank when not supplied.
  */
 public record ReviewRequest(
         String apiKey,
@@ -43,5 +48,6 @@ public record ReviewRequest(
         List<String> categories,
         String formInstructions,
         String priorContext,
-        String referenceContext) {
+        String referenceContext,
+        String userGuidance) {
 }

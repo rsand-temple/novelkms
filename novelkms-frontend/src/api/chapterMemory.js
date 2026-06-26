@@ -11,7 +11,10 @@ export const chapterMemoryApi = {
 		client.get(`/ai/memory/chapters/${chapterId}`)
 			.then(r => r.data)
 			.catch(err => { if (err?.response?.status === 404) return null; throw err }),
-	// (Re)generates via the provider. body: { credentialId?: uuid|null, model?: string|null }
+	// (Re)generates via the provider.
+	// body: { credentialId?: uuid|null, model?: string|null, userGuidance?: string|null }
+	// userGuidance is a one-time author note for this generation only — not a
+	// persistent override (compare api/aiFormInstructions.js / api/memoryTemplate.js).
 	generate: (chapterId, body) =>
 		client.post(`/ai/memory/chapters/${chapterId}`, body ?? {}).then(r => r.data),
 	// Saves an author edit (marks the document EDITED).

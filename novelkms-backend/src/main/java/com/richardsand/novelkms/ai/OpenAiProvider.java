@@ -42,6 +42,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  *       NovelKMS consumes. The form block never breaks parsing because the
  *       functional block fully specifies the required shape. {@code chapter-review-v4}
  *       marks externalizing the form block.</li>
+ *   <li>Every generation call (review, memory, chapter summary, book summary)
+ *       accepts an optional one-time {@code userGuidance} string — a free-text
+ *       author note for that single call only, unrelated to the persistent
+ *       form/template override cascades. When present it is appended to the
+ *       <em>user</em> message as a clearly-fenced addendum, closest to the
+ *       material it concerns, so the model treats it as an instruction rather
+ *       than as content to summarize or review.</li>
  * </ul>
  */
 public class OpenAiProvider implements AiProvider {
@@ -49,16 +56,16 @@ public class OpenAiProvider implements AiProvider {
 
     public static final  String PROVIDER_KEY   = "OPENAI";
     public static final  String DEFAULT_MODEL  = "gpt-5.4";
-    // chapter-review-v5: the review prompt can now carry a "story so far" block
-    // (preceding chapters' memory documents) and, later, a reference block. The
-    // JSON output contract is unchanged from v4.
-    public static final  String PROMPT_VERSION = "chapter-review-v5";
+    // chapter-review-v6: generation calls can now carry an optional one-time
+    // userGuidance addendum from the author, alongside the existing "story so
+    // far" and reference blocks. The JSON output contract is unchanged from v4.
+    public static final  String PROMPT_VERSION = "chapter-review-v6";
     /** Memory-document generation prompt version (free-text output; no JSON contract). */
-    public static final  String MEMORY_PROMPT_VERSION = "memory-v1";
+    public static final  String MEMORY_PROMPT_VERSION = "memory-v2";
     /** Chapter-summary generation prompt version (free-text paragraph; no JSON contract). */
-    public static final  String CHAPTER_SUMMARY_PROMPT_VERSION = "chapter-summary-v1";
+    public static final  String CHAPTER_SUMMARY_PROMPT_VERSION = "chapter-summary-v2";
     /** Book-summary generation prompt version (free-text synopsis built from chapter summaries). */
-    public static final  String BOOK_SUMMARY_PROMPT_VERSION = "book-summary-v1";
+    public static final  String BOOK_SUMMARY_PROMPT_VERSION = "book-summary-v2";
 
     private static final String ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
@@ -84,8 +91,9 @@ public class OpenAiProvider implements AiProvider {
 
         logger.info("OpenAI review request started: model={}, scope={}, unitLabel={}, promptVersion={}",
                 model, scopeWord(request), safeLabel(request.unitLabel()), PROMPT_VERSION);
-        logger.debug("OpenAI review request context: textChars={}, priorContextChars={}, referenceContextChars={}, categoryCount={}",
+        logger.debug("OpenAI review request context: textChars={}, priorContextChars={}, referenceContextChars={}, userGuidanceChars={}, categoryCount={}",
                 lengthOf(request.text()), lengthOf(request.priorContext()), lengthOf(request.referenceContext()),
+                lengthOf(request.userGuidance()),
                 request.categories() == null ? 0 : request.categories().size());
 
         String body = buildRequestBody(model, request);
@@ -102,8 +110,8 @@ public class OpenAiProvider implements AiProvider {
 
         logger.info("OpenAI memory-generation request started: model={}, chapterLabel={}, promptVersion={}",
                 model, safeLabel(request.chapterLabel()), MEMORY_PROMPT_VERSION);
-        logger.debug("OpenAI memory-generation request context: chapterTextChars={}, templateChars={}",
-                lengthOf(request.chapterText()), lengthOf(request.template()));
+        logger.debug("OpenAI memory-generation request context: chapterTextChars={}, templateChars={}, userGuidanceChars={}",
+                lengthOf(request.chapterText()), lengthOf(request.template()), lengthOf(request.userGuidance()));
 
         String body = buildMemoryRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
@@ -119,8 +127,8 @@ public class OpenAiProvider implements AiProvider {
 
         logger.info("OpenAI chapter-summary request started: model={}, chapterLabel={}, promptVersion={}",
                 model, safeLabel(request.chapterLabel()), CHAPTER_SUMMARY_PROMPT_VERSION);
-        logger.debug("OpenAI chapter-summary request context: chapterTextChars={}",
-                lengthOf(request.chapterText()));
+        logger.debug("OpenAI chapter-summary request context: chapterTextChars={}, userGuidanceChars={}",
+                lengthOf(request.chapterText()), lengthOf(request.userGuidance()));
 
         String body = buildChapterSummaryRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
@@ -136,8 +144,8 @@ public class OpenAiProvider implements AiProvider {
 
         logger.info("OpenAI book-summary request started: model={}, bookTitle={}, maxWords={}, promptVersion={}",
                 model, safeLabel(request.bookTitle()), request.maxWords(), BOOK_SUMMARY_PROMPT_VERSION);
-        logger.debug("OpenAI book-summary request context: chapterSummariesChars={}",
-                lengthOf(request.chapterSummaries()));
+        logger.debug("OpenAI book-summary request context: chapterSummariesChars={}, userGuidanceChars={}",
+                lengthOf(request.chapterSummaries()), lengthOf(request.userGuidance()));
 
         String body = buildBookSummaryRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
@@ -287,11 +295,19 @@ public class OpenAiProvider implements AiProvider {
         system.put("role", "system");
         system.put("content", MEMORY_WRAPPER + "\n\nTemplate:\n\n" + nullToBlank(request.template()));
 
-        ObjectNode user = messages.addObject();
-        user.put("role", "user");
-        user.put("content",
-                "Chapter: " + nullToBlank(request.chapterLabel()) + "\n\nChapter text:\n\n"
-                        + nullToBlank(request.chapterText()));
+        StringBuilder user = new StringBuilder();
+        user.append("Chapter: ").append(nullToBlank(request.chapterLabel())).append("\n\n");
+        if (request.userGuidance() != null && !request.userGuidance().isBlank()) {
+            user.append("Additional guidance from the author for this generation only — follow it, but it ")
+                .append("is not material to summarize:\n\n")
+                .append(request.userGuidance().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+        user.append("Chapter text:\n\n").append(nullToBlank(request.chapterText()));
+
+        ObjectNode userMsg = messages.addObject();
+        userMsg.put("role", "user");
+        userMsg.put("content", user.toString());
 
         // Free-text output: no response_format and no token caps (reasoning-model safe).
         try {
@@ -321,11 +337,19 @@ public class OpenAiProvider implements AiProvider {
         system.put("role", "system");
         system.put("content", CHAPTER_SUMMARY_WRAPPER);
 
-        ObjectNode user = messages.addObject();
-        user.put("role", "user");
-        user.put("content",
-                "Chapter: " + nullToBlank(request.chapterLabel()) + "\n\nChapter text:\n\n"
-                        + nullToBlank(request.chapterText()));
+        StringBuilder user = new StringBuilder();
+        user.append("Chapter: ").append(nullToBlank(request.chapterLabel())).append("\n\n");
+        if (request.userGuidance() != null && !request.userGuidance().isBlank()) {
+            user.append("Additional guidance from the author for this generation only — follow it, but it ")
+                .append("is not material to summarize:\n\n")
+                .append(request.userGuidance().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+        user.append("Chapter text:\n\n").append(nullToBlank(request.chapterText()));
+
+        ObjectNode userMsg = messages.addObject();
+        userMsg.put("role", "user");
+        userMsg.put("content", user.toString());
 
         // Free-text output: no response_format and no token caps (reasoning-model safe).
         try {
@@ -366,6 +390,12 @@ public class OpenAiProvider implements AiProvider {
         if (request.bookTitle() != null && !request.bookTitle().isBlank()) {
             user.append("Book: ").append(request.bookTitle().trim()).append("\n\n");
         }
+        if (request.userGuidance() != null && !request.userGuidance().isBlank()) {
+            user.append("Additional guidance from the author for this generation only — follow it, but it ")
+                .append("is not material to summarize:\n\n")
+                .append(request.userGuidance().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
         user.append("Chapter summaries (in reading order):\n\n")
             .append(nullToBlank(request.chapterSummaries()));
 
@@ -400,6 +430,12 @@ public class OpenAiProvider implements AiProvider {
               .append(request.priorContext().strip()).append("\n\n")
               .append("----------------------------------------\n\n");
             sb.append("Review the following ").append(unit).append(".\n\n");
+        }
+        if (request.userGuidance() != null && !request.userGuidance().isBlank()) {
+            sb.append("Additional guidance from the author for this review only — follow it, but it is ")
+              .append("not material to review:\n\n")
+              .append(request.userGuidance().strip()).append("\n\n")
+              .append("----------------------------------------\n\n");
         }
 
         sb.append(heading).append(": ").append(nullToBlank(request.unitLabel()));

@@ -13,10 +13,14 @@ package com.richardsand.novelkms.ai;
  * @param model        model identifier, e.g. {@code "gpt-5.4"}
  * @param chapterLabel display label for the chapter, e.g. {@code "Chapter 7"} or a title
  * @param chapterText  plain-text body of the chapter (HTML stripped, scenes joined)
+ * @param userGuidance optional one-time author note for this generation only,
+ *                     appended to the user message as a clearly-fenced
+ *                     addendum. Null/blank when not supplied.
  */
 public record SummaryRequest(
         String apiKey,
         String model,
         String chapterLabel,
-        String chapterText) {
+        String chapterText,
+        String userGuidance) {
 }

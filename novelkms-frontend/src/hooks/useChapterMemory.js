@@ -35,8 +35,12 @@ function refresh(qc, chapterId, bookId) {
 export function useGenerateChapterMemory() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ chapterId, credentialId, model }) =>
-			chapterMemoryApi.generate(chapterId, { credentialId: credentialId ?? null, model: model ?? null }),
+		mutationFn: ({ chapterId, credentialId, model, userGuidance }) =>
+			chapterMemoryApi.generate(chapterId, {
+				credentialId: credentialId ?? null,
+				model: model ?? null,
+				userGuidance: userGuidance ?? null,
+			}),
 		onSuccess: (doc, { chapterId, bookId }) => {
 			if (doc) qc.setQueryData(CHAPTER_MEMORY_KEYS.doc(chapterId), doc)
 			refresh(qc, chapterId, bookId)

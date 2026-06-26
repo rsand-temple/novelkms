@@ -53,6 +53,19 @@ export default function ChapterMemoryEditor({ chapterId, bookId, credentialId = 
 	const [errorMsg, setErrorMsg] = useState(null)
 	const [gateOpen, setGateOpen] = useState(false)
 
+	// One-time guidance for the next generation, pre-filled from whatever was
+	// used last time (stored on the document itself) so the author can tweak and
+	// re-run without retyping. Re-derived on chapter switch and once the doc
+	// finishes loading — never auto-cleared after a successful run, since the
+	// whole point is to let guidance be repeated or refined across runs.
+	const [guidance, setGuidance] = useState('')
+	const [guidanceInitKey, setGuidanceInitKey] = useState(null)
+	const currentInitKey = `${chapterId}:${isLoading ? 'loading' : 'loaded'}`
+	if (currentInitKey !== guidanceInitKey) {
+		setGuidanceInitKey(currentInitKey)
+		setGuidance(memory?.userGuidance ?? '')
+	}
+
 	const hasCredentials = credentials.length > 0
 	const state = status.find(s => s.chapterId === chapterId)?.state
 	const flagged = flaggedPreceding(status, chapterId)
@@ -62,7 +75,7 @@ export default function ChapterMemoryEditor({ chapterId, bookId, credentialId = 
 		setErrorMsg(null)
 		setEditing(false)
 		generate(
-			{ chapterId, bookId, credentialId },
+			{ chapterId, bookId, credentialId, userGuidance: guidance.trim() || null },
 			{ onError: (e) => setErrorMsg(errMessage(e)) },
 		)
 	}
@@ -129,6 +142,28 @@ export default function ChapterMemoryEditor({ chapterId, bookId, credentialId = 
 			)}
 
 			{errorMsg && <Alert severity="error" sx={{ mb: 1 }}>{errorMsg}</Alert>}
+
+			{hasCredentials && (
+				<Box sx={{ mb: 1.5 }}>
+					<TextField
+						label="Guidance for this generation (optional)"
+						placeholder="e.g. the letter in this chapter is canonically a forgery"
+						value={guidance}
+						onChange={(e) => setGuidance(e.target.value)}
+						fullWidth
+						multiline
+						minRows={2}
+						maxRows={6}
+						size="small"
+						disabled={busy}
+					/>
+					{guidance.trim() && (
+						<Button size="small" sx={{ mt: 0.5 }} onClick={() => setGuidance('')} disabled={busy}>
+							Clear guidance
+						</Button>
+					)}
+				</Box>
+			)}
 
 			{!memory ? (
 				<Box sx={{ mt: 1 }}>

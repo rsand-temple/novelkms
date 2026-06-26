@@ -114,7 +114,7 @@ public class AiReviewService {
     /** Immutable description of what is being reviewed, resolved before execution. */
     private record ReviewTarget(UUID chapterId, UUID sceneId, UUID bookId,
                                 String scopeWord, String unitLabel, String subtitle, String text,
-                                String priorContext, String referenceContext) {}
+                                String priorContext, String referenceContext, String userGuidance) {}
 
     /**
      * Runs a chapter review and returns the resulting artifact (COMPLETED or
@@ -123,9 +123,10 @@ public class AiReviewService {
      *
      * @param credentialId  optional explicit credential; null = the user's default
      * @param modelOverride optional model override; null/blank = credential or provider default
+     * @param userGuidance  optional one-time author note for this run only; null/blank = none
      */
     public AiReview runChapterReview(UUID userId, UUID chapterId, UUID credentialId,
-            String modelOverride) throws SQLException {
+            String modelOverride, String userGuidance) throws SQLException {
         logger.info("Starting AI chapter review: userId={}, chapterId={}, credentialId={}, modelOverride={}", userId, chapterId, credentialId, modelOverride);
         Chapter chapter = chapterDao.findById(chapterId)
                 .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
@@ -146,7 +147,7 @@ public class AiReviewService {
         logger.debug("AI chapter review context assembled: chapterId={}, textChars={}, priorContextChars={}", chapterId, chapterText.length(), priorContext == null ? 0 : priorContext.length());
         ReviewTarget target = new ReviewTarget(chapterId, null, bookId,
                 "chapter", chapterLabel(chapter), chapter.getSubtitle(), chapterText,
-                priorContext, null);
+                priorContext, null, blankToNull(userGuidance));
         return execute(userId, target, credentialId, modelOverride);
     }
 
@@ -155,9 +156,11 @@ public class AiReviewService {
      * ownership has already been enforced by the tenant filter for the
      * {@code scenes/{id}} path segment. The review is filed under the scene's
      * parent chapter so it appears in that chapter's AI workflow.
+     *
+     * @param userGuidance optional one-time author note for this run only; null/blank = none
      */
     public AiReview runSceneReview(UUID userId, UUID sceneId, UUID credentialId,
-            String modelOverride) throws SQLException {
+            String modelOverride, String userGuidance) throws SQLException {
         logger.info("Starting AI scene review: userId={}, sceneId={}, credentialId={}, modelOverride={}", userId, sceneId, credentialId, modelOverride);
         Scene scene = sceneDao.findById(sceneId)
                 .orElseThrow(() -> new ReviewException(404, "not_found", "Scene not found."));
@@ -183,7 +186,7 @@ public class AiReviewService {
 
         logger.debug("AI scene review context assembled: sceneId={}, chapterId={}, textChars={}", sceneId, chapterId, sceneText.length());
         ReviewTarget target = new ReviewTarget(chapterId, sceneId, bookId,
-                "scene", sceneLabel(scene), null, sceneText, null, null);
+                "scene", sceneLabel(scene), null, sceneText, null, null, blankToNull(userGuidance));
         return execute(userId, target, credentialId, modelOverride);
     }
 
@@ -214,7 +217,7 @@ public class AiReviewService {
 
         UUID reviewId = reviewDao.createPending(userId, projectId, target.bookId(),
                 target.chapterId(), target.sceneId(), provider.providerKey(), model,
-                form.scope(), form.instructions());
+                form.scope(), form.instructions(), target.userGuidance());
         logger.info("Created pending AI review: reviewId={}, scope={}, chapterId={}, sceneId={}, provider={}, model={}", reviewId, target.scopeWord(), target.chapterId(), target.sceneId(), provider.providerKey(), model);
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
@@ -227,7 +230,7 @@ public class AiReviewService {
         ReviewRequest request = new ReviewRequest(
                 apiKey, model, target.scopeWord(), target.unitLabel(), target.subtitle(),
                 target.text(), DEFAULT_CATEGORIES, form.instructions(),
-                target.priorContext(), target.referenceContext());
+                target.priorContext(), target.referenceContext(), target.userGuidance());
 
         try {
             ReviewResult                        result = provider.review(request);
@@ -253,9 +256,12 @@ public class AiReviewService {
      * resolved memory template from the chapter's prose, then stores it (one
      * document per chapter, overwriting). Chapter ownership is enforced upstream
      * by the tenant filter (chapters/{id}).
+     *
+     * @param userGuidance optional one-time author note for this generation only;
+     *                     null/blank = none
      */
     public ChapterMemory generateChapterMemory(UUID userId, UUID chapterId, UUID credentialId,
-            String modelOverride) throws SQLException {
+            String modelOverride, String userGuidance) throws SQLException {
         Chapter chapter = chapterDao.findById(chapterId)
                 .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
 
@@ -287,10 +293,11 @@ public class AiReviewService {
             throw new ReviewException(409, "no_ai_credential", "Stored API key could not be read.");
         }
 
-        MemoryRequest req = new MemoryRequest(apiKey, model, chapterLabel(chapter), chapterText, template);
+        String note = blankToNull(userGuidance);
+        MemoryRequest req = new MemoryRequest(apiKey, model, chapterLabel(chapter), chapterText, template, note);
         try {
             MemoryResult result = provider.generateMemory(req);
-            chapterMemoryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model);
+            chapterMemoryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model, note);
         } catch (AiProviderException e) {
             logger.warn("Memory generation for chapter {} failed: {}", chapterId, e.getMessage());
             throw new ReviewException(502, "memory_provider_error", e.getMessage());
@@ -406,9 +413,12 @@ public class AiReviewService {
      * Generates (or regenerates) the summary for a chapter from its prose, then
      * stores it (one summary per chapter, overwriting). Chapter ownership is
      * enforced upstream by the tenant filter (chapters/{id}).
+     *
+     * @param userGuidance optional one-time author note for this generation only;
+     *                     null/blank = none
      */
     public ChapterSummary generateChapterSummary(UUID userId, UUID chapterId, UUID credentialId,
-            String modelOverride) throws SQLException {
+            String modelOverride, String userGuidance) throws SQLException {
         Chapter chapter = chapterDao.findById(chapterId)
                 .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
 
@@ -437,10 +447,11 @@ public class AiReviewService {
             throw new ReviewException(409, "no_ai_credential", "Stored API key could not be read.");
         }
 
-        SummaryRequest req = new SummaryRequest(apiKey, model, chapterLabel(chapter), chapterText);
+        String note = blankToNull(userGuidance);
+        SummaryRequest req = new SummaryRequest(apiKey, model, chapterLabel(chapter), chapterText, note);
         try {
             SummaryResult result = provider.generateChapterSummary(req);
-            chapterSummaryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model);
+            chapterSummaryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model, note);
         } catch (AiProviderException e) {
             logger.warn("Chapter-summary generation for chapter {} failed: {}", chapterId, e.getMessage());
             throw new ReviewException(502, "summary_provider_error", e.getMessage());
@@ -506,9 +517,12 @@ public class AiReviewService {
      * summary yet (the frontend's pre-generation dialog is expected to offer to
      * generate the missing ones first). Book ownership is enforced upstream
      * (books/{id}).
+     *
+     * @param userGuidance optional one-time author note for this generation only;
+     *                     null/blank = none
      */
     public BookSummary generateBookSummary(UUID userId, UUID bookId, UUID credentialId,
-            String modelOverride) throws SQLException {
+            String modelOverride, String userGuidance) throws SQLException {
         Book book = bookDao.findById(bookId)
                 .orElseThrow(() -> new ReviewException(404, "not_found", "Book not found."));
 
@@ -531,13 +545,14 @@ public class AiReviewService {
             throw new ReviewException(409, "no_ai_credential", "Stored API key could not be read.");
         }
 
+        String note = blankToNull(userGuidance);
         BookSummaryRequest req = new BookSummaryRequest(
-                apiKey, model, book.getTitle(), aggregate, BOOK_SUMMARY_MAX_WORDS);
+                apiKey, model, book.getTitle(), aggregate, BOOK_SUMMARY_MAX_WORDS, note);
         try {
             SummaryResult result    = provider.generateBookSummary(req);
             int           wordCount = countWords(result.content());
             bookSummaryDao.upsertGenerated(bookId, result.content(), wordCount,
-                    result.promptVersion(), model);
+                    result.promptVersion(), model, note);
         } catch (AiProviderException e) {
             logger.warn("Book-summary generation for book {} failed: {}", bookId, e.getMessage());
             throw new ReviewException(502, "summary_provider_error", e.getMessage());
@@ -784,6 +799,19 @@ public class AiReviewService {
                 return value.trim();
         }
         return "";
+    }
+
+    /**
+     * Normalizes an optional one-time author-guidance string: blank/whitespace-only
+     * becomes null (no guidance supplied), otherwise the trimmed text. Keeps a
+     * blank request body and "no guidance" indistinguishable downstream — both as
+     * the {@code null} stored on the artifact and as the absent block in the
+     * provider prompt.
+     */
+    private static String blankToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private static String truncate(String value, int max) {

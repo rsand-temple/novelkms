@@ -56,6 +56,15 @@ public class ChapterSummary {
     @JsonProperty
     private String model;
 
+    /**
+     * One-time author guidance supplied when this summary was last generated,
+     * or null. Just an addendum sent with that one generation call, kept here
+     * as provenance and as the pre-fill source for the next regeneration's
+     * guidance field.
+     */
+    @JsonProperty
+    private String userGuidance;
+
     @JsonProperty
     private Instant generatedAt;
 

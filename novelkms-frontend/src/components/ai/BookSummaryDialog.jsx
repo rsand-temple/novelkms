@@ -71,6 +71,18 @@ export default function BookSummaryDialog({ open, onClose, bookId, title }) {
 	const [errorMsg, setErrorMsg] = useState(null)
 	const [gateOpen, setGateOpen] = useState(false)
 
+	// One-time guidance for the next generation, pre-filled from whatever was
+	// used last time (stored on the book summary itself) so the author can tweak
+	// and re-run without retyping. Re-derived on book switch and once the
+	// summary finishes loading — never auto-cleared after a successful run.
+	const [guidance, setGuidance] = useState('')
+	const [guidanceInitKey, setGuidanceInitKey] = useState(null)
+	const currentInitKey = `${bookId}:${bookLoading ? 'loading' : 'loaded'}`
+	if (currentInitKey !== guidanceInitKey) {
+		setGuidanceInitKey(currentInitKey)
+		setGuidance(book?.userGuidance ?? '')
+	}
+
 	const flagged = flaggedChapters(rows)
 	const busy = generating || saving
 
@@ -78,7 +90,7 @@ export default function BookSummaryDialog({ open, onClose, bookId, title }) {
 		setErrorMsg(null)
 		setEditing(false)
 		generate(
-			{ bookId, credentialId: defaultCredentialId },
+			{ bookId, credentialId: defaultCredentialId, userGuidance: guidance.trim() || null },
 			{ onError: (e) => setErrorMsg(errMessage(e)) },
 		)
 	}
@@ -158,6 +170,28 @@ export default function BookSummaryDialog({ open, onClose, bookId, title }) {
 				)}
 
 				{errorMsg && <Alert severity="error" sx={{ mb: 1 }}>{errorMsg}</Alert>}
+
+				{hasCredentials && (
+					<Box sx={{ mb: 1.5 }}>
+						<TextField
+							label="Guidance for this generation (optional)"
+							placeholder="e.g. emphasize the reveal in Chapter 12 as the emotional climax"
+							value={guidance}
+							onChange={(e) => setGuidance(e.target.value)}
+							fullWidth
+							multiline
+							minRows={2}
+							maxRows={6}
+							size="small"
+							disabled={busy}
+						/>
+						{guidance.trim() && (
+							<Button size="small" sx={{ mt: 0.5 }} onClick={() => setGuidance('')} disabled={busy}>
+								Clear guidance
+							</Button>
+						)}
+					</Box>
+				)}
 
 				{bookLoading ? (
 					<Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>

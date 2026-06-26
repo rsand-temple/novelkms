@@ -66,6 +66,7 @@ public class ChapterMemoryDao {
                 .source(rs.getString("source"))
                 .promptVersion(rs.getString("prompt_version"))
                 .model(rs.getString("model"))
+                .userGuidance(rs.getString("user_guidance"))
                 .generatedAt(instant(rs, "generated_at"))
                 .createdAt(instant(rs, "created_at"))
                 .updatedAt(instant(rs, "updated_at"))
@@ -87,38 +88,41 @@ public class ChapterMemoryDao {
 
     /**
      * Inserts or overwrites the chapter's AI-generated memory document, refreshing
-     * {@code generatedAt}. Sets {@code source = 'AI'}.
+     * {@code generatedAt}. Sets {@code source = 'AI'}. {@code userGuidance} is the
+     * optional one-time author note supplied for this generation (null when none).
      */
-    public void upsertGenerated(UUID chapterId, String content, String promptVersion, String model)
-            throws SQLException {
+    public void upsertGenerated(UUID chapterId, String content, String promptVersion, String model,
+            String userGuidance) throws SQLException {
         Instant now = Instant.now();
         if (findByChapter(chapterId).isPresent()) {
             try (Connection c = ds.getConnection();
                     PreparedStatement p = c.prepareStatement(
                             "UPDATE chapter_memory SET content=?, source='AI', prompt_version=?, model=?,"
-                                    + " generated_at=?, updated_at=? WHERE chapter_id=?")) {
+                                    + " user_guidance=?, generated_at=?, updated_at=? WHERE chapter_id=?")) {
                 p.setString(1, content);
                 p.setString(2, promptVersion);
                 p.setString(3, model);
-                p.setTimestamp(4, Timestamp.from(now));
+                p.setString(4, userGuidance);
                 p.setTimestamp(5, Timestamp.from(now));
-                p.setObject(6, chapterId);
+                p.setTimestamp(6, Timestamp.from(now));
+                p.setObject(7, chapterId);
                 p.executeUpdate();
             }
         } else {
             try (Connection c = ds.getConnection();
                     PreparedStatement p = c.prepareStatement(
                             "INSERT INTO chapter_memory(id, chapter_id, content, source, prompt_version, model,"
-                                    + " generated_at, created_at, updated_at)"
-                                    + " VALUES (?,?,?,'AI',?,?,?,?,?)")) {
+                                    + " user_guidance, generated_at, created_at, updated_at)"
+                                    + " VALUES (?,?,?,'AI',?,?,?,?,?,?)")) {
                 p.setObject(1, UUID.randomUUID());
                 p.setObject(2, chapterId);
                 p.setString(3, content);
                 p.setString(4, promptVersion);
                 p.setString(5, model);
-                p.setTimestamp(6, Timestamp.from(now));
+                p.setString(6, userGuidance);
                 p.setTimestamp(7, Timestamp.from(now));
                 p.setTimestamp(8, Timestamp.from(now));
+                p.setTimestamp(9, Timestamp.from(now));
                 p.executeUpdate();
             }
         }

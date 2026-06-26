@@ -54,12 +54,15 @@ public class ChapterMemoryResource {
         this.service = service;
     }
 
-    /** Body for POST: optional explicit credential and model override. */
+    /** Body for POST: optional explicit credential, model override, and one-time guidance. */
     public static class GenerateRequest {
         @JsonProperty
         public UUID credentialId;
         @JsonProperty
         public String model;
+        /** Optional one-time author note for this generation only; null/blank = none. */
+        @JsonProperty
+        public String userGuidance;
     }
 
     /** Body for PUT: the edited document text. */
@@ -74,8 +77,9 @@ public class ChapterMemoryResource {
         UUID   userId       = CurrentUser.id(request);
         UUID   credentialId = body == null ? null : body.credentialId;
         String model        = body == null ? null : body.model;
+        String userGuidance = body == null ? null : body.userGuidance;
         try {
-            ChapterMemory memory = service.generateChapterMemory(userId, chapterId, credentialId, model);
+            ChapterMemory memory = service.generateChapterMemory(userId, chapterId, credentialId, model, userGuidance);
             return Response.ok(memory).build();
         } catch (ReviewException e) {
             return error(e.status(), e.code(), e.getMessage());

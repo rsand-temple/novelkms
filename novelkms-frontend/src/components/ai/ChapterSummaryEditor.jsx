@@ -49,6 +49,18 @@ export default function ChapterSummaryEditor({ chapterId, bookId, credentialId =
 	const [text, setText] = useState('')
 	const [errorMsg, setErrorMsg] = useState(null)
 
+	// One-time guidance for the next generation, pre-filled from whatever was
+	// used last time (stored on the summary itself) so the author can tweak and
+	// re-run without retyping. Re-derived on chapter switch and once the summary
+	// finishes loading — never auto-cleared after a successful run.
+	const [guidance, setGuidance] = useState('')
+	const [guidanceInitKey, setGuidanceInitKey] = useState(null)
+	const currentInitKey = `${chapterId}:${isLoading ? 'loading' : 'loaded'}`
+	if (currentInitKey !== guidanceInitKey) {
+		setGuidanceInitKey(currentInitKey)
+		setGuidance(summary?.userGuidance ?? '')
+	}
+
 	const hasCredentials = credentials.length > 0
 	const state = rows.find(s => s.chapterId === chapterId)?.state
 	const busy = generating || saving
@@ -57,7 +69,7 @@ export default function ChapterSummaryEditor({ chapterId, bookId, credentialId =
 		setErrorMsg(null)
 		setEditing(false)
 		generate(
-			{ chapterId, bookId, credentialId },
+			{ chapterId, bookId, credentialId, userGuidance: guidance.trim() || null },
 			{ onError: (e) => setErrorMsg(errMessage(e)) },
 		)
 	}
@@ -110,6 +122,28 @@ export default function ChapterSummaryEditor({ chapterId, bookId, credentialId =
 			)}
 
 			{errorMsg && <Alert severity="error" sx={{ mb: 1 }}>{errorMsg}</Alert>}
+
+			{hasCredentials && (
+				<Box sx={{ mb: 1.5 }}>
+					<TextField
+						label="Guidance for this generation (optional)"
+						placeholder="e.g. the letter in this chapter is canonically a forgery"
+						value={guidance}
+						onChange={(e) => setGuidance(e.target.value)}
+						fullWidth
+						multiline
+						minRows={2}
+						maxRows={6}
+						size="small"
+						disabled={busy}
+					/>
+					{guidance.trim() && (
+						<Button size="small" sx={{ mt: 0.5 }} onClick={() => setGuidance('')} disabled={busy}>
+							Clear guidance
+						</Button>
+					)}
+				</Box>
+			)}
 
 			{!summary ? (
 				<Box sx={{ mt: 1 }}>

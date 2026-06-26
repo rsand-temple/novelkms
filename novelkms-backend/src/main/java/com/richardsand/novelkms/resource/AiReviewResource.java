@@ -75,6 +75,9 @@ public class AiReviewResource {
         public UUID   credentialId;
         @JsonProperty
         public String model;
+        /** Optional one-time author note for this run only; null/blank = none. */
+        @JsonProperty
+        public String userGuidance;
     }
 
     public static class StatusRequest {
@@ -96,8 +99,9 @@ public class AiReviewResource {
         UUID   userId       = CurrentUser.id(request);
         UUID   credentialId = body == null ? null : body.credentialId;
         String model        = body == null ? null : body.model;
+        String userGuidance = body == null ? null : body.userGuidance;
         try {
-            AiReview review = service.runChapterReview(userId, chapterId, credentialId, model);
+            AiReview review = service.runChapterReview(userId, chapterId, credentialId, model, userGuidance);
             return Response.ok(review).build();
         } catch (ReviewException e) {
             logger.warn("Chapter AI review rejected for chapterId={}: status={} code={} message={}", chapterId, e.status(), e.code(), e.getMessage());
@@ -117,8 +121,9 @@ public class AiReviewResource {
         UUID   userId       = CurrentUser.id(request);
         UUID   credentialId = body == null ? null : body.credentialId;
         String model        = body == null ? null : body.model;
+        String userGuidance = body == null ? null : body.userGuidance;
         try {
-            AiReview review = service.runSceneReview(userId, sceneId, credentialId, model);
+            AiReview review = service.runSceneReview(userId, sceneId, credentialId, model, userGuidance);
             return Response.ok(review).build();
         } catch (ReviewException e) {
             logger.warn("Scene AI review rejected for sceneId={}: status={} code={} message={}", sceneId, e.status(), e.code(), e.getMessage());

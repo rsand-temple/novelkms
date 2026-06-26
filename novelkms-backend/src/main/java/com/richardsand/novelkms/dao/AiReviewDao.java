@@ -30,7 +30,8 @@ public class AiReviewDao {
 
     private static final String REVIEW_COLUMNS =
             "id, user_id, project_id, book_id, chapter_id, scene_id, provider, model, status, "
-            + "submitted_at, completed_at, prompt_version, error_message, form_scope, form_instructions";
+            + "submitted_at, completed_at, prompt_version, error_message, form_scope, form_instructions, "
+            + "user_guidance";
 
     /** DAO-local carrier so this layer does not depend on the {@code ai} package. */
     public record NewRecommendation(String category, String severity, String location, String recommendation,
@@ -62,6 +63,7 @@ public class AiReviewDao {
                 .errorMessage(rs.getString("error_message"))
                 .formScope(rs.getString("form_scope"))
                 .formInstructions(rs.getString("form_instructions"))
+                .userGuidance(rs.getString("user_guidance"))
                 .build();
     }
 
@@ -87,17 +89,19 @@ public class AiReviewDao {
     /**
      * Inserts a PENDING review row and returns its id. {@code sceneId} is null
      * for a chapter review and set for a scene review; {@code chapterId} is the
-     * (parent) chapter in both cases.
+     * (parent) chapter in both cases. {@code userGuidance} is the optional
+     * one-time author note for this run (null when none was supplied).
      */
     public UUID createPending(UUID userId, UUID projectId, UUID bookId, UUID chapterId, UUID sceneId,
-                              String provider, String model, String formScope, String formInstructions)
+                              String provider, String model, String formScope, String formInstructions,
+                              String userGuidance)
             throws SQLException {
         UUID id = UUID.randomUUID();
         Instant now = Instant.now();
         String sql = "INSERT INTO ai_review "
                 + "(id, user_id, project_id, book_id, chapter_id, scene_id, provider, model, status, "
-                + " submitted_at, created_at, form_scope, form_instructions) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?)";
+                + " submitted_at, created_at, form_scope, form_instructions, user_guidance) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?)";
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
             ps.setObject(2, userId);
@@ -111,6 +115,7 @@ public class AiReviewDao {
             ps.setTimestamp(10, Timestamp.from(now));
             ps.setString(11, formScope);
             ps.setString(12, formInstructions);
+            ps.setString(13, userGuidance);
             ps.executeUpdate();
         }
         return id;

@@ -14,7 +14,9 @@ export const summaryApi = {
 		client.get(`/ai/summary/chapters/${chapterId}`)
 			.then(r => r.data)
 			.catch(err => { if (err?.response?.status === 404) return null; throw err }),
-	// (Re)generates via the provider. body: { credentialId?: uuid|null, model?: string|null }
+	// (Re)generates via the provider.
+	// body: { credentialId?: uuid|null, model?: string|null, userGuidance?: string|null }
+	// userGuidance is a one-time author note for this generation only.
 	generateChapter: (chapterId, body) =>
 		client.post(`/ai/summary/chapters/${chapterId}`, body ?? {}).then(r => r.data),
 	// Saves an author edit (marks the summary EDITED).
@@ -39,6 +41,7 @@ export const summaryApi = {
 			.then(r => r.data)
 			.catch(err => { if (err?.response?.status === 404) return null; throw err }),
 	// (Re)generates the book summary from the chapter summaries.
+	// body: { credentialId?: uuid|null, model?: string|null, userGuidance?: string|null }
 	generateBook: (bookId, body) =>
 		client.post(`/ai/summary/books/${bookId}`, body ?? {}).then(r => r.data),
 	// Saves an author edit (marks the summary EDITED; re-counts words).
