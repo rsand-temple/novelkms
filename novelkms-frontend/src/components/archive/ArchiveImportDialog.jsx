@@ -14,7 +14,7 @@ import {
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import { useImportKmsArchive, useValidateKmsArchive } from '../../hooks/useKmsArchive'
+import { useImportKmsArchive, useValidateKmsArchive } from '../../hooks/useArchive'
 
 function plural(count, label) {
 	return `${count.toLocaleString()} ${label}${count === 1 ? '' : 's'}`

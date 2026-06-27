@@ -42,10 +42,12 @@ export default function TrashFooter({ selection, setSelection }) {
 				</ListItemIcon>
 				<ListItemText
 					primary="Trash"
-					primaryTypographyProps={{
-						fontSize: '0.8rem',
-						fontWeight: 500,
-						color: 'text.secondary',
+					slotProps={{
+						primary: {
+							fontSize: '0.8rem',
+							fontWeight: 500,
+							color: 'text.secondary',
+						},
 					}}
 				/>
 			</ListItemButton>

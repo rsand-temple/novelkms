@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import {
 	Box, AppBar, Toolbar, Typography, Button, Menu, MenuItem,
 	IconButton, Tooltip, Divider,
+	Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@mui/material'
 import DescriptionIcon from '@mui/icons-material/Description'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
@@ -22,8 +23,8 @@ import ExportDialog from './components/nav/dialogs/ExportDialog'
 import SettingsDialog from './components/settings/SettingsDialog'
 import EditorSettingsDialog from './components/settings/EditorSettingsDialog'
 import UserMenu from './components/nav/UserMenu'
-import KmsArchiveImportDialog from './components/archive/KmsArchiveImportDialog'
-import { kmsArchiveApi } from './api/kmsArchive'
+import ArchiveImportDialog from './components/archive/ArchiveImportDialog'
+import { archiveApi } from './api/archive'
 import { LogoMark } from './components/branding/Logo'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
@@ -178,6 +179,7 @@ export default function App() {
 	const [importAnchor, setImportAnchor] = useState(null)
 	const [exportAnchor, setExportAnchor] = useState(null)
 	const [exportDialog, setExportDialog] = useState({ open: false, url: null, suggestedName: '' })
+	const [projectExportConfirmOpen, setProjectExportConfirmOpen] = useState(false)
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
 	const [kmsImportDialogOpen, setKmsImportDialogOpen] = useState(false)
 	const [settings, setSettings] = useState({ open: false, tab: 'document' })
@@ -338,6 +340,17 @@ export default function App() {
 		exportApi.download(url)
 	}
 
+	const openProjectExportConfirm = () => {
+		setExportAnchor(null)
+		setProjectExportConfirmOpen(true)
+	}
+
+	const confirmProjectExport = () => {
+		setProjectExportConfirmOpen(false)
+		if (!selection.projectId) return
+		archiveApi.downloadProject(selection.projectId)
+	}
+
 	const openImportDialog = () => {
 		setImportAnchor(null)
 		setImportDialogOpen(true)
@@ -419,7 +432,7 @@ export default function App() {
 							</Button>
 							<Menu anchorEl={exportAnchor} open={!!exportAnchor} onClose={() => setExportAnchor(null)}>
 								{selection.projectId && (
-									<MenuItem onClick={() => { setExportAnchor(null); kmsArchiveApi.downloadProject(selection.projectId) }}>
+									<MenuItem onClick={openProjectExportConfirm}>
 										Project archive (.json)
 									</MenuItem>
 								)}
@@ -558,19 +571,23 @@ export default function App() {
 										actions={
 											<>
 												<Tooltip title="All projects">
-													<IconButton
-														size="small"
-														aria-label="Show all projects"
-														onClick={() => setSelection(EMPTY_SELECTION)}
-														disabled={!selection.projectId}
-													>
-														<FolderOpenOutlinedIcon fontSize="small" />
-													</IconButton>
+													<span>
+														<IconButton
+															size="small"
+															aria-label="Show all projects"
+															onClick={() => setSelection(EMPTY_SELECTION)}
+															disabled={!selection.projectId}
+														>
+															<FolderOpenOutlinedIcon fontSize="small" />
+														</IconButton>
+													</span>
 												</Tooltip>
 												<Tooltip title="Collapse manuscript panel">
-													<IconButton size="small" onClick={() => setNavCollapsed(true)}>
-														<ChevronLeftIcon fontSize="small" />
-													</IconButton>
+													<span>
+														<IconButton size="small" onClick={() => setNavCollapsed(true)}>
+															<ChevronLeftIcon fontSize="small" />
+														</IconButton>
+													</span>
 												</Tooltip>
 											</>
 										}
@@ -706,11 +723,13 @@ export default function App() {
 							)}
 						</Box>
 
+						<span>
 						<ResizeHandle
 							side="left"
 							disabled={navCollapsed}
 							onMouseDown={(event) => handleResizeMouseDown(event, 'nav')}
 						/>
+						</span>
 
 						<Box sx={{
 							flex: 1,
@@ -744,11 +763,13 @@ export default function App() {
 							)}
 						</Box>
 
+						<span>
 						<ResizeHandle
 							side="right"
 							disabled={propsCollapsed}
 							onMouseDown={(event) => handleResizeMouseDown(event, 'props')}
 						/>
+						</span>
 
 						<Box sx={{
 							width: propsCollapsed ? COLLAPSED_PANEL_WIDTH : propsWidth,
@@ -874,8 +895,43 @@ export default function App() {
 						url={exportDialog.url}
 						suggestedName={exportDialog.suggestedName}
 					/>
-					
-					<KmsArchiveImportDialog
+
+					<Dialog
+						open={projectExportConfirmOpen}
+						onClose={() => setProjectExportConfirmOpen(false)}
+						maxWidth="sm"
+						fullWidth
+					>
+						<DialogTitle>Export project data?</DialogTitle>
+						<DialogContent dividers>
+							<DialogContentText component="div">
+								<Typography paragraph variant="body2">
+									This will download a JSON export containing the selected project&apos;s
+									NovelKMS data, including manuscript structure, books, parts, chapters,
+									scenes, Codex entries, editor/page settings, templates, AI review
+									artifacts, memory documents, summaries, and related project metadata.
+								</Typography>
+								<Typography paragraph variant="body2">
+									&nbsp;
+								</Typography>
+								<Typography paragraph variant="body2">
+									This export is intended for portability and re-import into NovelKMS.
+									It will not include your login account, OAuth provider secrets, AI API
+									keys, or backup archives.
+								</Typography>
+							</DialogContentText>
+						</DialogContent>
+						<DialogActions>
+							<Button onClick={() => setProjectExportConfirmOpen(false)}>
+								Cancel
+							</Button>
+							<Button variant="contained" onClick={confirmProjectExport}>
+								Export JSON
+							</Button>
+						</DialogActions>
+					</Dialog>
+
+					<ArchiveImportDialog
 						open={kmsImportDialogOpen}
 						onClose={() => setKmsImportDialogOpen(false)}
 						onImported={handleKmsImportSuccess}

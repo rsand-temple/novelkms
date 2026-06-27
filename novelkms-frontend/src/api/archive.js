@@ -1,6 +1,6 @@
 import api from './client'
 
-export const kmsArchiveApi = {
+export const archiveApi = {
 	projectArchiveUrl: (projectId) => `/api/export/projects/${projectId}/kms`,
 
 	downloadProject(projectId) {

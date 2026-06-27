@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
 	Alert,
 	Button,
@@ -46,27 +46,46 @@ export default function ExportDialog({
 	fileDescription = 'Word Document',
 	accept = DEFAULT_ACCEPT,
 }) {
+	const resetKey = open
+		? `${url || ''}|${suggestedName || 'export'}|${extension || 'docx'}`
+		: 'closed'
 
-	const [filename,   setFilename]   = useState('')
-	const [timestamp,  setTimestamp]  = useState('')
+	return (
+		<ExportDialogInner
+			key={resetKey}
+			open={open}
+			onClose={onClose}
+			url={url}
+			suggestedName={suggestedName}
+			extension={extension}
+			dialogTitle={dialogTitle}
+			fileDescription={fileDescription}
+			accept={accept}
+		/>
+	)
+}
+
+function exportTimestamp() {
+	const now = new Date()
+	const pad = (n) => String(n).padStart(2, '0')
+	return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+		`-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+}
+
+function ExportDialogInner({
+	open,
+	onClose,
+	url,
+	suggestedName,
+	extension = 'docx',
+	dialogTitle = 'Export as Word (.docx)',
+	fileDescription = 'Word Document',
+	accept = DEFAULT_ACCEPT,
+}) {
+	const [filename,   setFilename]   = useState(() => suggestedName || 'export')
+	const [timestamp]                 = useState(() => exportTimestamp())
 	const [exporting,  setExporting]  = useState(false)
 	const [error,      setError]      = useState(null)
-
-	// Reset every time the dialog opens with a new suggestion.
-	// Timestamp is locked at open-time so it doesn't tick while the user types.
-	useEffect(() => {
-		if (open) {
-			setFilename(suggestedName || 'export')
-			setError(null)
-			setExporting(false)
-			const now = new Date()
-			const pad = (n) => String(n).padStart(2, '0')
-			setTimestamp(
-				`${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
-				`-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-			)
-		}
-	}, [open, suggestedName])
 
 	// True when the browser can show a native "Save As" picker
 	const hasSavePicker = typeof window !== 'undefined' && 'showSaveFilePicker' in window
