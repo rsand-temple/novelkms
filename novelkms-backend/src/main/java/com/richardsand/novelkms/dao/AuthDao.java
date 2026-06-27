@@ -16,9 +16,14 @@ import com.richardsand.novelkms.model.AppUser;
 import com.richardsand.novelkms.utils.EmailNormalizer;
 
 public class AuthDao {
-    public record OAuthState(String stateHash, String provider, String returnPath, Instant expiresAt) {}
-    public record PendingRegistration(UUID id, String tokenHash, OAuthProfile profile, Instant expiresAt) {}
-    public record SessionUser(AppUser user, Instant expiresAt) {}
+    public record OAuthState(String stateHash, String provider, String returnPath, Instant expiresAt) {
+    }
+
+    public record PendingRegistration(UUID id, String tokenHash, OAuthProfile profile, Instant expiresAt) {
+    }
+
+    public record SessionUser(AppUser user, Instant expiresAt) {
+    }
 
     private final DataSource dataSource;
 
@@ -84,7 +89,7 @@ public class AuthDao {
 
     public boolean normalizedEmailExists(String normalizedEmail) throws SQLException {
         try (Connection c = dataSource.getConnection();
-             PreparedStatement ps = c.prepareStatement("SELECT 1 FROM app_user WHERE normalized_email = ?")) {
+                PreparedStatement ps = c.prepareStatement("SELECT 1 FROM app_user WHERE normalized_email = ?")) {
             ps.setString(1, normalizedEmail);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
@@ -96,7 +101,7 @@ public class AuthDao {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try (PreparedStatement user = c.prepareStatement("UPDATE app_user SET last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-                 PreparedStatement identity = c.prepareStatement("UPDATE user_identity SET last_login_at = CURRENT_TIMESTAMP WHERE provider = ? AND provider_subject = ?")) {
+                    PreparedStatement identity = c.prepareStatement("UPDATE user_identity SET last_login_at = CURRENT_TIMESTAMP WHERE provider = ? AND provider_subject = ?")) {
                 user.setObject(1, userId);
                 user.executeUpdate();
                 identity.setString(1, provider);
@@ -113,14 +118,103 @@ public class AuthDao {
     }
 
     public UUID createPendingRegistration(String tokenHash, OAuthProfile profile, Instant expiresAt) throws SQLException {
-        UUID id = UUID.randomUUID();
-        String sql = """
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                UUID id = updatePendingRegistration(c, tokenHash, profile, expiresAt);
+                if (id != null) {
+                    c.commit();
+                    return id;
+                }
+
+                id = UUID.randomUUID();
+                try {
+                    insertPendingRegistration(c, id, tokenHash, profile, expiresAt);
+                    c.commit();
+                    return id;
+                } catch (SQLException e) {
+                    if (!isUniqueViolation(e)) {
+                        throw e;
+                    }
+
+                    // Another request created the pending row between our UPDATE and INSERT.
+                    // Refresh that row instead of failing the login flow.
+                    id = updatePendingRegistration(c, tokenHash, profile, expiresAt);
+                    if (id == null) {
+                        throw e;
+                    }
+
+                    c.commit();
+                    return id;
+                }
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
+
+    private UUID updatePendingRegistration(Connection c, String tokenHash, OAuthProfile profile, Instant expiresAt) throws SQLException {
+        String updateSql = """
+                UPDATE pending_registration
+                   SET token_hash = ?,
+                       email_address = ?,
+                       email_verified = ?,
+                       suggested_first_name = ?,
+                       suggested_last_name = ?,
+                       expires_at = ?,
+                       consumed_at = NULL
+                 WHERE provider = ?
+                   AND provider_subject = ?
+                """;
+
+        try (PreparedStatement ps = c.prepareStatement(updateSql)) {
+            ps.setString(1, tokenHash);
+            ps.setString(2, profile.email());
+            ps.setBoolean(3, profile.emailVerified());
+            ps.setString(4, profile.firstName());
+            ps.setString(5, profile.lastName());
+            ps.setTimestamp(6, Timestamp.from(expiresAt));
+            ps.setString(7, profile.provider());
+            ps.setString(8, profile.subject());
+
+            int updated = ps.executeUpdate();
+            if (updated == 0) {
+                return null;
+            }
+        }
+
+        String selectSql = """
+                SELECT id
+                  FROM pending_registration
+                 WHERE provider = ?
+                   AND provider_subject = ?
+                """;
+
+        try (PreparedStatement ps = c.prepareStatement(selectSql)) {
+            ps.setString(1, profile.provider());
+            ps.setString(2, profile.subject());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new SQLException("Pending registration was updated but could not be re-read");
+                }
+                return (UUID) rs.getObject("id");
+            }
+        }
+    }
+
+    private void insertPendingRegistration(Connection c, UUID id, String tokenHash, OAuthProfile profile, Instant expiresAt) throws SQLException {
+        String insertSql = """
                 INSERT INTO pending_registration
                     (id, token_hash, provider, provider_subject, email_address, email_verified,
                      suggested_first_name, suggested_last_name, expires_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+
+        try (PreparedStatement ps = c.prepareStatement(insertSql)) {
             ps.setObject(1, id);
             ps.setString(2, tokenHash);
             ps.setString(3, profile.provider());
@@ -132,7 +226,15 @@ public class AuthDao {
             ps.setTimestamp(9, Timestamp.from(expiresAt));
             ps.executeUpdate();
         }
-        return id;
+    }
+
+    private static boolean isUniqueViolation(SQLException e) {
+        for (SQLException x = e; x != null; x = x.getNextException()) {
+            if ("23505".equals(x.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Optional<PendingRegistration> findPendingRegistration(String tokenHash) throws SQLException {
@@ -145,9 +247,11 @@ public class AuthDao {
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, tokenHash);
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return Optional.empty();
+                if (!rs.next())
+                    return Optional.empty();
                 Instant expiresAt = rs.getTimestamp("expires_at").toInstant();
-                if (!expiresAt.isAfter(Instant.now())) return Optional.empty();
+                if (!expiresAt.isAfter(Instant.now()))
+                    return Optional.empty();
                 OAuthProfile profile = new OAuthProfile(
                         rs.getString("provider"), rs.getString("provider_subject"), rs.getString("email_address"),
                         rs.getBoolean("email_verified"), rs.getString("suggested_first_name"), rs.getString("suggested_last_name"));
@@ -157,10 +261,10 @@ public class AuthDao {
     }
 
     public AppUser register(PendingRegistration pending, String firstName, String lastName, String displayName, String mobileNumber) throws SQLException {
-        String normalizedEmail = EmailNormalizer.normalize(pending.profile().email());
-        UUID userId = UUID.randomUUID();
-        UUID identityId = UUID.randomUUID();
-        Instant now = Instant.now();
+        String  normalizedEmail = EmailNormalizer.normalize(pending.profile().email());
+        UUID    userId          = UUID.randomUUID();
+        UUID    identityId      = UUID.randomUUID();
+        Instant now             = Instant.now();
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
@@ -200,7 +304,8 @@ public class AuthDao {
                 }
                 try (PreparedStatement consume = c.prepareStatement("UPDATE pending_registration SET consumed_at = CURRENT_TIMESTAMP WHERE id = ? AND consumed_at IS NULL")) {
                     consume.setObject(1, pending.id());
-                    if (consume.executeUpdate() != 1) throw new SQLException("Registration was already consumed");
+                    if (consume.executeUpdate() != 1)
+                        throw new SQLException("Registration was already consumed");
                 }
                 c.commit();
             } catch (SQLException e) {
@@ -238,7 +343,8 @@ public class AuthDao {
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, tokenHash);
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return Optional.empty();
+                if (!rs.next())
+                    return Optional.empty();
                 return Optional.of(new SessionUser(mapUser(rs), rs.getTimestamp("expires_at").toInstant()));
             }
         }
@@ -252,7 +358,8 @@ public class AuthDao {
     }
 
     public void revokeSession(String tokenHash) throws SQLException {
-        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement("UPDATE user_session SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = ? AND revoked_at IS NULL")) {
+        try (Connection c = dataSource.getConnection();
+                PreparedStatement ps = c.prepareStatement("UPDATE user_session SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = ? AND revoked_at IS NULL")) {
             ps.setString(1, tokenHash);
             ps.executeUpdate();
         }
