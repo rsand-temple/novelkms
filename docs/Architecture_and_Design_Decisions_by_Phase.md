@@ -80,6 +80,23 @@ Aggregate editing preserves scene IDs and saves each scene independently. Protec
 - Highlights are transient decorations, not stored marks.
 - Search text nodes, not raw HTML.
 
+### HTTP response code convention
+
+NovelKMS now reserves `404 Not Found` for configuration/routing errors rather than ordinary data absence. If a valid endpoint is reached but the requested entity does not exist, resources should return a non-404 response.
+
+General convention:
+
+- `204 No Content` means the request was valid, but there is no entity/body to return.
+- `400 Bad Request` is used when the client needs a response body describing an invalid request or data-domain problem.
+- `404 Not Found` should indicate a misconfigured route, missing frontend/API wiring, or an endpoint that should not exist from the client’s perspective.
+
+DELETE convention:
+
+- `200 OK` means the target existed and the delete/soft-delete operation succeeded.
+- `204 No Content` means the target did not exist, but the delete request is idempotently complete.
+
+This keeps frontend behavior simple: missing data is not treated as an app/config failure, and DELETE calls can treat both `200` and `204` as successful terminal outcomes.
+
 ## Phase 1 — Key implementation lessons
 
 - H2 and PostgreSQL migrations sometimes require dialect-specific SQL.
