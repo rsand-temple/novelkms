@@ -441,7 +441,7 @@ public class AiReviewService {
 
         String chapterText = assembleChapterText(chapterId);
         if (chapterText.isBlank()) {
-            throw new ReviewException(Status.PRECONDITION_REQUIRED, "empty_chapter",
+            throw new ReviewException(Status.BAD_REQUEST, "empty_chapter",
                     "This chapter has no text to summarize yet.");
         }
 
@@ -478,7 +478,7 @@ public class AiReviewService {
     /** Saves an author edit to an existing chapter summary (marks it EDITED). */
     public ChapterSummary editChapterSummary(UUID chapterId, String content) throws SQLException {
         if (!chapterSummaryDao.updateEdited(chapterId, content)) {
-            throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_found",
+            throw new ReviewException(Status.BAD_REQUEST, "not_found",
                     "This chapter has no summary to edit. Generate one first.");
         }
         return chapterSummaryDao.findByChapter(chapterId).orElseThrow();
@@ -581,7 +581,7 @@ public class AiReviewService {
         // content is authored HTML from the nav editor; word count must be taken
         // from the plain text, not the raw markup, or tags inflate the count.
         if (!bookSummaryDao.updateEdited(bookId, content, countWords(htmlToPlainText(content)))) {
-            throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_found",
+            throw new ReviewException(Status.BAD_REQUEST, "not_found",
                     "This book has no summary to edit. Generate one first.");
         }
         return bookSummaryDao.findByBook(bookId).orElseThrow();
@@ -679,7 +679,7 @@ public class AiReviewService {
             }
         }
         if (rec == null) {
-            throw new ReviewException(Status.PRECONDITION_REQUIRED, "recommendation_not_found", "Recommendation not found.");
+            throw new ReviewException(Status.BAD_REQUEST, "recommendation_not_found", "Recommendation not found.");
         }
         if (rec.getPromotedSceneId() != null) {
             return review; // already promoted — idempotent

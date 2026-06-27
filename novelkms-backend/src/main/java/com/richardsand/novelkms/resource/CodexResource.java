@@ -136,7 +136,7 @@ public class CodexResource {
         try {
             return codexDao.findByBookId(bookId)
                     .map(cx -> Response.ok(cx).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.noContent().build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -182,8 +182,8 @@ public class CodexResource {
         logger.info("CodexResource.deleteCodex invoked: id={}", id);
         try {
             return codexDao.delete(id)
-                    ? Response.noContent().build()
-                    : Response.status(Response.Status.NOT_FOUND).build();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -216,7 +216,7 @@ public class CodexResource {
         try {
             Optional<Codex> codex = codexDao.findById(codexId);
             if (codex.isEmpty()) {
-                return Response.status(Response.Status.NOT_FOUND)
+                return Response.status(Response.Status.BAD_REQUEST)
                         .entity("Codex not found").build();
             }
             Chapter chapter = chapterDao.createCodexChapter(codexId, req.codexCategory, req.title);

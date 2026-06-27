@@ -69,7 +69,7 @@ public class ImportResource {
             logger.info("DOCX import requested: projectId={}, filename={}, bookTitle={}", projectId, filename, bookTitle);
             if (!access.ownsProject(CurrentUser.id(request), projectId)) {
                 logger.warn("DOCX import rejected: project not owned or not found projectId={}", projectId);
-                return Response.status(Response.Status.NOT_FOUND).build();
+                return Response.status(Response.Status.BAD_REQUEST).build();
             }
             ImportService.ImportResult result = importService.importDocx(
                     projectId, bookTitle, filename, fileStream);

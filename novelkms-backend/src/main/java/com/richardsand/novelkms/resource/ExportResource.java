@@ -55,7 +55,7 @@ public class ExportResource {
             ExportMeta meta = exportService.exportBook(bookId);
             return download(meta.bytes(), meta.filename(), DOCX_MIME);
         } catch (IllegalArgumentException e) {
-            return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         } catch (Exception e) {
             logger.error("Book DOCX export failed for bookId={}: {}", bookId, e.getMessage(), e);
             return serverError(e);
@@ -71,7 +71,7 @@ public class ExportResource {
             EpubExportService.ExportMeta meta = epubExportService.exportBook(bookId);
             return download(meta.bytes(), meta.filename(), EPUB_MIME);
         } catch (IllegalArgumentException e) {
-            return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         } catch (Exception e) {
             logger.error("Book EPUB export failed for bookId={}: {}", bookId, e.getMessage(), e);
             return serverError(e);
@@ -91,7 +91,7 @@ public class ExportResource {
             ExportMeta meta = exportService.exportPart(partId);
             return download(meta.bytes(), meta.filename(), DOCX_MIME);
         } catch (IllegalArgumentException e) {
-            return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         } catch (Exception e) {
             logger.error("Part export failed for partId={}: {}", partId, e.getMessage(), e);
             return serverError(e);
@@ -111,7 +111,7 @@ public class ExportResource {
             ExportMeta meta = exportService.exportChapter(chapterId);
             return download(meta.bytes(), meta.filename(), DOCX_MIME);
         } catch (IllegalArgumentException e) {
-            return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         } catch (Exception e) {
             logger.error("Chapter export failed for chapterId={}: {}", chapterId, e.getMessage(), e);
             return serverError(e);
@@ -131,7 +131,7 @@ public class ExportResource {
             ExportMeta meta = exportService.exportScene(sceneId);
             return download(meta.bytes(), meta.filename(), DOCX_MIME);
         } catch (IllegalArgumentException e) {
-            return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         } catch (Exception e) {
             logger.error("Scene export failed for sceneId={}: {}", sceneId, e.getMessage(), e);
             return serverError(e);

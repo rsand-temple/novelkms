@@ -35,7 +35,7 @@ import jakarta.ws.rs.core.Response.Status;
  * resource runs.
  * <ul>
  *   <li>{@code POST   /ai/summary/chapters/{chapterId}} — (re)generate a chapter summary.</li>
- *   <li>{@code GET    /ai/summary/chapters/{chapterId}} — fetch it (or 404).</li>
+ *   <li>{@code GET    /ai/summary/chapters/{chapterId}} — fetch it (or 400).</li>
  *   <li>{@code PUT    /ai/summary/chapters/{chapterId}} — save an author edit.</li>
  *   <li>{@code DELETE /ai/summary/chapters/{chapterId}} — clear it.</li>
  *   <li>{@code GET    /books/{bookId}/chapter-summaries} — aggregated, read-only,
@@ -43,7 +43,7 @@ import jakarta.ws.rs.core.Response.Status;
  *       and the pre-book-summary coverage warning).</li>
  *   <li>{@code POST   /ai/summary/books/{bookId}} — (re)generate the book summary
  *       from the chapter summaries.</li>
- *   <li>{@code GET    /ai/summary/books/{bookId}} — fetch it (or 404).</li>
+ *   <li>{@code GET    /ai/summary/books/{bookId}} — fetch it (or 400).</li>
  *   <li>{@code PUT    /ai/summary/books/{bookId}} — save an author edit.</li>
  *   <li>{@code DELETE /ai/summary/books/{bookId}} — clear it.</li>
  *   <li>{@code GET    /books/{bookId}/book-summary-status} — book-summary card

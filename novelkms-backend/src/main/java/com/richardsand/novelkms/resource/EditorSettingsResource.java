@@ -147,8 +147,8 @@ public class EditorSettingsResource {
     public Response deleteBook(@PathParam("id") UUID bookId) {
         logger.info("EditorSettingsResource.deleteBook invoked: bookId={}", bookId);
         return run(() -> dao.deleteBook(bookId)
-                ? Response.noContent().build()
-                : Response.status(404).build());
+                ? Response.ok().build()
+                : Response.noContent().build());
     }
 
     private Response run(Call c) {

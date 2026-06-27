@@ -20,6 +20,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 /**
  * Memory-document template editing — the section structure the AI fills in when
@@ -72,16 +73,12 @@ public class MemoryTemplateResource {
         }
     }
 
-    private UUID u() {
-        return CurrentUser.id(request);
-    }
-
     // ── Global (user) ─────────────────────────────────────────────────────────
 
     @GET
     @Path("/memory-template/global")
     public Response getGlobal() {
-        return run(() -> Response.ok(new View(dao.resolveGlobal(u()))).build());
+        return run(() -> Response.ok(new View(dao.resolveGlobal(CurrentUser.id(request)))).build());
     }
 
     @PUT
@@ -89,8 +86,8 @@ public class MemoryTemplateResource {
     public Response putGlobal(TemplateRequest body) {
         if (isBlank(body)) return blankError();
         return run(() -> {
-            dao.upsertGlobal(u(), body.content.trim());
-            return Response.ok(new View(dao.resolveGlobal(u()))).build();
+            dao.upsertGlobal(CurrentUser.id(request), body.content.trim());
+            return Response.ok(new View(dao.resolveGlobal(CurrentUser.id(request)))).build();
         });
     }
 
@@ -98,8 +95,8 @@ public class MemoryTemplateResource {
     @Path("/memory-template/global")
     public Response deleteGlobal() {
         return run(() -> {
-            dao.deleteGlobal(u());
-            return Response.ok(new View(dao.resolveGlobal(u()))).build();
+            dao.deleteGlobal(CurrentUser.id(request));
+            return Response.ok(new View(dao.resolveGlobal(CurrentUser.id(request)))).build();
         });
     }
 
@@ -108,7 +105,7 @@ public class MemoryTemplateResource {
     @GET
     @Path("/projects/{id}/memory-template")
     public Response getProject(@PathParam("id") UUID projectId) {
-        return run(() -> Response.ok(new View(dao.resolveForProject(u(), projectId))).build());
+        return run(() -> Response.ok(new View(dao.resolveForProject(CurrentUser.id(request), projectId))).build());
     }
 
     @PUT
@@ -117,7 +114,7 @@ public class MemoryTemplateResource {
         if (isBlank(body)) return blankError();
         return run(() -> {
             dao.setProject(projectId, body.content.trim());
-            return Response.ok(new View(dao.resolveForProject(u(), projectId))).build();
+            return Response.ok(new View(dao.resolveForProject(CurrentUser.id(request), projectId))).build();
         });
     }
 
@@ -126,7 +123,7 @@ public class MemoryTemplateResource {
     public Response deleteProject(@PathParam("id") UUID projectId) {
         return run(() -> {
             dao.clearProject(projectId);
-            return Response.ok(new View(dao.resolveForProject(u(), projectId))).build();
+            return Response.ok(new View(dao.resolveForProject(CurrentUser.id(request), projectId))).build();
         });
     }
 
@@ -135,7 +132,7 @@ public class MemoryTemplateResource {
     @GET
     @Path("/books/{id}/memory-template")
     public Response getBook(@PathParam("id") UUID bookId) {
-        return run(() -> Response.ok(new View(dao.resolveForBook(u(), bookId))).build());
+        return run(() -> Response.ok(new View(dao.resolveForBook(CurrentUser.id(request), bookId))).build());
     }
 
     @PUT
@@ -144,7 +141,7 @@ public class MemoryTemplateResource {
         if (isBlank(body)) return blankError();
         return run(() -> {
             dao.setBook(bookId, body.content.trim());
-            return Response.ok(new View(dao.resolveForBook(u(), bookId))).build();
+            return Response.ok(new View(dao.resolveForBook(CurrentUser.id(request), bookId))).build();
         });
     }
 
@@ -153,7 +150,7 @@ public class MemoryTemplateResource {
     public Response deleteBook(@PathParam("id") UUID bookId) {
         return run(() -> {
             dao.clearBook(bookId);
-            return Response.ok(new View(dao.resolveForBook(u(), bookId))).build();
+            return Response.ok(new View(dao.resolveForBook(CurrentUser.id(request), bookId))).build();
         });
     }
 
@@ -164,7 +161,7 @@ public class MemoryTemplateResource {
     }
 
     private static Response blankError() {
-        return Response.status(400)
+        return Response.status(Status.BAD_REQUEST)
                 .entity(java.util.Map.of("error", "bad_request",
                         "message", "content must not be blank; use DELETE to remove an override."))
                 .build();

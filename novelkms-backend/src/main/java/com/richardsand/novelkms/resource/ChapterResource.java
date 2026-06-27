@@ -122,7 +122,7 @@ public class ChapterResource {
         try {
             return chapterDao.findById(id)
                     .map(ch -> Response.ok(ch).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.status(Response.Status.BAD_REQUEST).build());
         } catch (SQLException e) {
             return serverError(e);
         }

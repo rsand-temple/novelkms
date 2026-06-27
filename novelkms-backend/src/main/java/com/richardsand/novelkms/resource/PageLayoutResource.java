@@ -93,8 +93,8 @@ public class PageLayoutResource {
     public Response deleteProject(@PathParam("id") UUID projectId) {
         logger.info("PageLayoutResource.deleteProject invoked: projectId={}", projectId);
         return run(() -> dao.deleteProject(projectId)
-                ? Response.noContent().build()
-                : Response.status(404).build());
+                ? Response.ok().build()
+                : Response.noContent().build());
     }
 
     // ── Book override ─────────────────────────────────────────────────────────
@@ -118,8 +118,8 @@ public class PageLayoutResource {
     public Response deleteBook(@PathParam("id") UUID bookId) {
         logger.info("PageLayoutResource.deleteBook invoked: bookId={}", bookId);
         return run(() -> dao.deleteBook(bookId)
-                ? Response.noContent().build()
-                : Response.status(404).build());
+                ? Response.ok().build()
+                : Response.noContent().build());
     }
 
     private Response run(Call c) {

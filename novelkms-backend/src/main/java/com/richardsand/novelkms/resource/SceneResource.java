@@ -91,7 +91,7 @@ public class SceneResource {
         try {
             return sceneDao.findById(id)
                     .map(s -> Response.ok(s).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.noContent().build());
         } catch (SQLException sqle) {
             return serverError(sqle);
         }
@@ -123,7 +123,7 @@ public class SceneResource {
         try {
             return sceneDao.update(id, req.title, req.notes)
                     .map(s -> Response.ok(s).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.noContent().build());
         } catch (SQLException sqle) {
             return serverError(sqle);
         }
@@ -149,7 +149,7 @@ public class SceneResource {
         try {
             return sceneDao.saveContent(id, req.content, req.wordCount)
                     .map(s -> Response.ok(s).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.noContent().build());
         } catch (SQLException sqle) {
             return serverError(sqle);
         }
@@ -161,8 +161,8 @@ public class SceneResource {
         logger.info("SceneResource.deleteScene invoked: id={}", id);
         try {
             return trashService.trashScene(CurrentUser.id(request), id).isPresent()
-                    ? Response.noContent().build()
-                    : Response.status(Response.Status.NOT_FOUND).build();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (SQLException sqle) {
             return serverError(sqle);
         }

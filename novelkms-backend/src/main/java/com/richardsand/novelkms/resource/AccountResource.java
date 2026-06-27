@@ -51,7 +51,7 @@ public class AccountResource {
         try {
             return accountDao.getAccount(id)
                     .map(b -> Response.ok(b).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.status(Response.Status.BAD_REQUEST).build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -67,7 +67,7 @@ public class AccountResource {
         try {
             return accountDao.updateAccount(id, uar.firstname, uar.lastname, uar.displayname, uar.mobile)
                     .map(b -> Response.ok(b).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.status(Response.Status.BAD_REQUEST).build());
         } catch (SQLException e) {
             return serverError(e);
         }

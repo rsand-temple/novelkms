@@ -114,7 +114,7 @@ public class PartResource {
         try {
             return partDao.findById(id)
                     .map(p -> Response.ok(p).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.noContent().build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -135,7 +135,7 @@ public class PartResource {
         try {
             return partDao.update(id, title, req.subtitle, req.notes)
                     .map(p -> Response.ok(p).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.noContent().build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -147,8 +147,8 @@ public class PartResource {
         logger.info("PartResource.deletePart invoked: id={}", id);
         try {
             return partDao.delete(id)
-                    ? Response.noContent().build()
-                    : Response.status(Response.Status.NOT_FOUND).build();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -220,7 +220,7 @@ public class PartResource {
         try {
             Optional<Part> part = partDao.findById(partId);
             if (part.isEmpty()) {
-                return Response.status(Response.Status.NOT_FOUND)
+                return Response.status(Response.Status.BAD_REQUEST)
                         .entity("Part not found").build();
             }
             Chapter chapter = chapterDao.create(part.get().getBookId(), partId, req.title, null, req.notes);
@@ -240,7 +240,7 @@ public class PartResource {
         }
         try {
             chapterDao.reorderInPart(partId, req.ids);
-            return Response.noContent().build();
+            return Response.ok().build();
         } catch (SQLException e) {
             return serverError(e);
         }

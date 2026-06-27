@@ -90,8 +90,8 @@ public class UserPreferenceResource {
     public Response delete(@PathParam("key") String rawKey) {
         String k = key(rawKey);
         return run(() -> dao.delete(u(), k)
-                ? Response.noContent().build()
-                : Response.status(404).build());
+                ? Response.ok().build()
+                : Response.noContent().build());
     }
 
     private Response run(Call c) {

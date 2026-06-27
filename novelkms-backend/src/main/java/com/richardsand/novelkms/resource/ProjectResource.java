@@ -81,7 +81,7 @@ public class ProjectResource {
         try {
             return projectDao.findByIdForUser(id, CurrentUser.id(request))
                     .map(p -> Response.ok(p).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.noContent().build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -123,7 +123,7 @@ public class ProjectResource {
         try {
             return projectDao.updateForUser(CurrentUser.id(request), project)
                     .map(p -> Response.ok(p).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.noContent().build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -149,8 +149,8 @@ public class ProjectResource {
                                   @Context ContainerRequestContext request) {
         try {
             return trashService.trashProject(CurrentUser.id(request), id).isPresent()
-                    ? Response.noContent().build()
-                    : Response.status(Response.Status.NOT_FOUND).build();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (SQLException e) {
             return serverError(e);
         }

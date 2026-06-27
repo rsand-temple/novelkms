@@ -101,7 +101,7 @@ public class StyleResource {
     @Path("/projects/{id}/styles/{key}")
     public Response delProject(@PathParam("id") UUID p, @PathParam("key") String k) {
         logger.info("StyleResource.delProject invoked: id={}, key={}", p, k);
-        return run(() -> dao.deleteProject(p, k(k)) ? Response.noContent().build() : Response.status(404).build());
+        return run(() -> dao.deleteProject(p, k(k)) ? Response.ok().build() : Response.noContent().build());
     }
 
     @GET
@@ -130,7 +130,7 @@ public class StyleResource {
     @Path("/books/{id}/styles/{key}")
     public Response delBook(@PathParam("id") UUID b, @PathParam("key") String k) {
         logger.info("StyleResource.delBook invoked: id={}, key={}", b, k);
-        return run(() -> dao.deleteBook(b, k(k)) ? Response.noContent().build() : Response.status(404).build());
+        return run(() -> dao.deleteBook(b, k(k)) ? Response.ok().build() : Response.noContent().build());
     }
 
     private void need(DefinitionRequest r) {
