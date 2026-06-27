@@ -334,9 +334,16 @@ export default function EditorPanel({
 	const aiDocGenerating = isMemoryDoc ? generatingMemory : isChapterSummaryDoc ? generatingChapterSummary : isBookSummaryDoc ? generatingBookSummary : false;
 
 	// Preceding-chapter gating (memory only) / coverage gating (book summary only).
-	const aiDocFlaggedPreceding = isMemoryDoc ? flaggedPreceding(memoryStatusRows, chapterId) : [];
-	const aiDocFlaggedChapters = isBookSummaryDoc ? flaggedChapters(bookSummaryChapterRows) : [];
+	const aiDocFlaggedPreceding = useMemo(
+		() => isMemoryDoc ? flaggedPreceding(memoryStatusRows, chapterId) : [],
+		[isMemoryDoc, memoryStatusRows, chapterId]
+	);
 
+	const aiDocFlaggedChapters = useMemo(
+		() => isBookSummaryDoc ? flaggedChapters(bookSummaryChapterRows) : [],
+		[isBookSummaryDoc, bookSummaryChapterRows]
+	);
+	
 	const aiDocStatusState = isMemoryDoc
 		? memoryStatusRows.find(s => s.chapterId === chapterId)?.state
 		: isChapterSummaryDoc

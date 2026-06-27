@@ -20,11 +20,15 @@ export default function AccountDialog({ open, onClose }) {
 	const initialKey = `${account?.email ?? 'none'}:${open ? 'open' : 'closed'}`
 
 	const [draftKey, setDraftKey] = useState(initialKey)
+	const [firstName, setFirstName] = useState('')
+	const [lastName, setLastName] = useState('')
 	const [displayName, setDisplayName] = useState('')
 	const [mobile, setMobile] = useState('')
 
 	if (draftKey !== initialKey && account) {
 		setDraftKey(initialKey)
+		setFirstName(account.first_name ?? '')
+		setLastName(account.last_name ?? '')
 		setDisplayName(account.display_name ?? '')
 		setMobile(account.mobile_number ?? '')
 	}
@@ -32,16 +36,18 @@ export default function AccountDialog({ open, onClose }) {
 	const canSave = useMemo(() => {
 		if (!account) return false
 
-		return displayName.trim() !== (account.display_name ?? '') ||
+		return firstName.trim() !== (account.first_name ?? '') ||
+			lastName.trim() !== (account.last_name ?? '') ||
+			displayName.trim() !== (account.display_name ?? '') ||
 			mobile.trim() !== (account.mobile_number ?? '')
-	}, [account, displayName, mobile])
+	}, [account, firstName, lastName, displayName, mobile])
 
 	async function handleSave() {
 		if (!account) return
 
 		await updateMutation.mutateAsync({
-			firstname: account.first_name ?? '',
-			lastname: account.last_name ?? '',
+			firstname: firstName.trim(),
+			lastname: lastName.trim(),
 			displayname: displayName.trim(),
 			mobile: mobile.trim(),
 		})
@@ -56,11 +62,21 @@ export default function AccountDialog({ open, onClose }) {
 			<DialogContent>
 				<Box sx={{ display: 'grid', gap: 2, mt: 1 }}>
 					{accountQuery.isError && (
-						<Alert severity="error">Unable to load account information.</Alert>
+						<Alert severity="error">
+							Unable to load account information.
+							{accountQuery.error?.response?.status
+								? ` Server returned ${accountQuery.error.response.status}.`
+								: ''}
+						</Alert>
 					)}
 
 					{updateMutation.isError && (
-						<Alert severity="error">Unable to save account information.</Alert>
+						<Alert severity="error">
+							Unable to save account information.
+							{updateMutation.error?.response?.status
+								? ` Server returned ${updateMutation.error.response.status}.`
+								: ''}
+						</Alert>
 					)}
 
 					<TextField
@@ -68,6 +84,20 @@ export default function AccountDialog({ open, onClose }) {
 						value={account?.email ?? ''}
 						disabled
 						helperText="Email cannot be changed yet."
+						fullWidth
+					/>
+
+					<TextField
+						label="First name"
+						value={firstName}
+						onChange={(event) => setFirstName(event.target.value)}
+						fullWidth
+					/>
+
+					<TextField
+						label="Last name"
+						value={lastName}
+						onChange={(event) => setLastName(event.target.value)}
 						fullWidth
 					/>
 

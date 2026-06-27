@@ -12,23 +12,31 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
 import AccountDialog from './dialogs/AccountDialog'
-import { useLogout } from '../../hooks/useAccount'
+import { useAuth } from '../../auth/AuthContext'
 
-export default function UserMenu({ user, onLoggedOut }) {
+export default function UserMenu() {
 	const [anchorEl, setAnchorEl] = useState(null)
 	const [accountOpen, setAccountOpen] = useState(false)
-	const logoutMutation = useLogout()
+	const [loggingOut, setLoggingOut] = useState(false)
+	const auth = useAuth()
 
 	const open = Boolean(anchorEl)
 
-	const initials = user?.name
-		? user.name.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase()
+	const user = auth.user
+	const displayName = user?.displayName ?? user?.display_name ?? user?.name ?? ''
+	const initials = displayName
+		? displayName.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase()
 		: null
 
 	async function handleLogout() {
 		setAnchorEl(null)
-		await logoutMutation.mutateAsync()
-		onLoggedOut?.()
+		setLoggingOut(true)
+
+		try {
+			await auth.logout()
+		} finally {
+			setLoggingOut(false)
+		}
 	}
 
 	return (
@@ -68,7 +76,7 @@ export default function UserMenu({ user, onLoggedOut }) {
 
 				<Divider />
 
-				<MenuItem onClick={handleLogout} disabled={logoutMutation.isPending}>
+				<MenuItem onClick={handleLogout} disabled={loggingOut}>
 					<ListItemIcon>
 						<LogoutIcon fontSize="small" />
 					</ListItemIcon>
