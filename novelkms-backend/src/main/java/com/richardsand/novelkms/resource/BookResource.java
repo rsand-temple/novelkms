@@ -167,8 +167,8 @@ public class BookResource {
         logger.info("BookResource.deleteBook invoked: id={}", id);
         try {
             return trashService.trashBook(CurrentUser.id(request), id).isPresent()
-                    ? Response.noContent().build()
-                    : Response.status(Response.Status.NO_CONTENT).build();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -261,8 +261,8 @@ public class BookResource {
         logger.info("BookResource.deleteCoverImage invoked: id={}", id);
         try {
             return bookDao.deleteCoverImage(id)
-                    ? Response.noContent().build()
-                    : Response.status(Response.Status.NOT_FOUND).build();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (SQLException e) {
             return serverError(e);
         }

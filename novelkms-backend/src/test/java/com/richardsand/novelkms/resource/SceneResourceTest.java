@@ -25,6 +25,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 @ExtendWith(DropwizardExtensionsSupport.class)
 class SceneResourceTest extends NovelKmsTestBase {
@@ -56,7 +57,7 @@ class SceneResourceTest extends NovelKmsTestBase {
         Response r = RESOURCES.target("/chapters/" + testChapter.getId() + "/scenes")
                 .request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         List<Scene> scenes = r.readEntity(new GenericType<>() {});
         assertEquals(0, scenes.size());
     }
@@ -69,7 +70,7 @@ class SceneResourceTest extends NovelKmsTestBase {
         Response r = RESOURCES.target("/chapters/" + testChapter.getId() + "/scenes")
                 .request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         List<Scene> scenes = r.readEntity(new GenericType<>() {});
         assertEquals(2, scenes.size());
     }
@@ -84,7 +85,7 @@ class SceneResourceTest extends NovelKmsTestBase {
 
         Response r = RESOURCES.target("/scenes/" + s.getId()).request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Scene found = r.readEntity(Scene.class);
         assertEquals("My Scene", found.getTitle());
         assertEquals("my notes", found.getNotes());
@@ -93,10 +94,10 @@ class SceneResourceTest extends NovelKmsTestBase {
     }
 
     @Test
-    void getScene_unknownId_returns404() {
+    void getScene_unknownId_returnsNoContent() {
         Response r = RESOURCES.target("/scenes/" + UUID.randomUUID()).request().get();
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     // -------------------------------------------------------------------------
@@ -109,7 +110,7 @@ class SceneResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("title", "New Scene", "notes", "opening scene")));
 
-        assertEquals(201, r.getStatus());
+        assertEquals(Status.CREATED.getStatusCode(), r.getStatus());
         Scene created = r.readEntity(Scene.class);
         assertNotNull(created.getId());
         assertEquals("New Scene", created.getTitle());
@@ -124,7 +125,7 @@ class SceneResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("notes", "No title")));
 
-        assertEquals(400, r.getStatus());
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
     }
 
     // -------------------------------------------------------------------------
@@ -139,19 +140,19 @@ class SceneResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "New Title", "notes", "Updated")));
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Scene updated = r.readEntity(Scene.class);
         assertEquals("New Title", updated.getTitle());
         assertEquals("Updated", updated.getNotes());
     }
 
     @Test
-    void updateScene_unknownId_returns404() {
+    void updateScene_unknownId_returnsNoContent() {
         Response r = RESOURCES.target("/scenes/" + UUID.randomUUID())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "Ghost")));
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     // -------------------------------------------------------------------------
@@ -167,21 +168,21 @@ class SceneResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("content", tiptapJson, "wordCount", 15)));
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Scene saved = r.readEntity(Scene.class);
         assertEquals(tiptapJson, saved.getContent());
         assertEquals(15, saved.getWordCount());
     }
 
     @Test
-    void saveContent_unknownId_returns404() {
+    void saveContent_unknownId_returnsNoContent() {
         String json = "{\"type\":\"doc\"}";
 
         Response r = RESOURCES.target("/scenes/" + UUID.randomUUID() + "/content")
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("content", json, "wordCount", 0)));
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     @Test
@@ -202,18 +203,18 @@ class SceneResourceTest extends NovelKmsTestBase {
     // -------------------------------------------------------------------------
 
     @Test
-    void deleteScene_knownId_returns204() throws SQLException {
+    void deleteScene_knownId_returnsOk() throws SQLException {
         Scene s = sceneDao.create(testChapter.getId(), "To Delete", null);
 
         Response r = RESOURCES.target("/scenes/" + s.getId()).request().delete();
 
-        assertEquals(204, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
     }
 
     @Test
-    void deleteScene_unknownId_returns404() {
+    void deleteScene_unknownId_returnsNoContent() {
         Response r = RESOURCES.target("/scenes/" + UUID.randomUUID()).request().delete();
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 }

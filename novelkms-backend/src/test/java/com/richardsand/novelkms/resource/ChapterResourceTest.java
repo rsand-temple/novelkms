@@ -25,6 +25,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 @ExtendWith(DropwizardExtensionsSupport.class)
 class ChapterResourceTest extends NovelKmsTestBase {
@@ -54,7 +55,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
         Response r = RESOURCES.target("/books/" + testBook.getId() + "/chapters")
                 .request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         List<Chapter> chapters = r.readEntity(new GenericType<>() {
         });
         assertEquals(0, chapters.size());
@@ -68,7 +69,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
         Response r = RESOURCES.target("/books/" + testBook.getId() + "/chapters")
                 .request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         List<Chapter> chapters = r.readEntity(new GenericType<>() {
         });
         assertEquals(2, chapters.size());
@@ -79,12 +80,12 @@ class ChapterResourceTest extends NovelKmsTestBase {
     // -------------------------------------------------------------------------
 
     @Test
-    void getChapter_knownId_returns200() throws SQLException {
+    void getChapter_knownId_returnsOK() throws SQLException {
         Chapter ch = chapterDao.create(testBook.getId(), null, "My Chapter", null, "notes");
 
         Response r = RESOURCES.target("/chapters/" + ch.getId()).request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Chapter found = r.readEntity(Chapter.class);
         assertEquals("My Chapter", found.getTitle());
         assertEquals("notes", found.getNotes());
@@ -92,10 +93,10 @@ class ChapterResourceTest extends NovelKmsTestBase {
     }
 
     @Test
-    void getChapter_unknownId_returns404() {
+    void getChapter_unknownId_returnsNoContent() {
         Response r = RESOURCES.target("/chapters/" + UUID.randomUUID()).request().get();
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     // -------------------------------------------------------------------------
@@ -108,7 +109,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("title", "New Chapter")));
 
-        assertEquals(201, r.getStatus());
+        assertEquals(Status.CREATED.getStatusCode(), r.getStatus());
         Chapter created = r.readEntity(Chapter.class);
         assertNotNull(created.getId());
         assertEquals("New Chapter", created.getTitle());
@@ -122,7 +123,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("notes", "No title")));
 
-        assertEquals(400, r.getStatus());
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
     }
 
     // -------------------------------------------------------------------------
@@ -140,21 +141,21 @@ class ChapterResourceTest extends NovelKmsTestBase {
                         "notes", "New notes",
                         "resetsNumbering", false)));
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Chapter updated = r.readEntity(Chapter.class);
         assertEquals("New Title", updated.getTitle());
         assertEquals("New notes", updated.getNotes());
     }
 
     @Test
-    void updateChapter_unknownId_returns404() {
+    void updateChapter_unknownId_returnsNoContent() {
         Response r = RESOURCES.target("/chapters/" + UUID.randomUUID())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of(
                         "title", "Ghost",
                         "resetsNumbering", false)));
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     @Test
@@ -168,7 +169,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "New Title", "notes", "New notes")));
 
-        assertEquals(400, r.getStatus());
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
     }
 
     @Test
@@ -183,7 +184,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
                         "title", "",
                         "resetsNumbering", false)));
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Chapter updated = r.readEntity(Chapter.class);
         assertEquals("", updated.getTitle());
     }
@@ -198,7 +199,7 @@ class ChapterResourceTest extends NovelKmsTestBase {
                         "title", "Old Title",
                         "resetsNumbering", true)));
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Chapter updated = r.readEntity(Chapter.class);
         assertTrue(updated.isResetsNumbering());
     }
@@ -208,18 +209,18 @@ class ChapterResourceTest extends NovelKmsTestBase {
     // -------------------------------------------------------------------------
 
     @Test
-    void deleteChapter_knownId_returns204() throws SQLException {
+    void deleteChapter_knownId_returnsOk() throws SQLException {
         Chapter ch = chapterDao.create(testBook.getId(), null, "To Delete", null, null);
 
         Response r = RESOURCES.target("/chapters/" + ch.getId()).request().delete();
 
-        assertEquals(204, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
     }
 
     @Test
-    void deleteChapter_unknownId_returns404() {
+    void deleteChapter_unknownId_returnsNoContent() {
         Response r = RESOURCES.target("/chapters/" + UUID.randomUUID()).request().delete();
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 }

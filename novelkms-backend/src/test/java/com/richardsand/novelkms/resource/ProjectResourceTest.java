@@ -22,6 +22,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 @ExtendWith(DropwizardExtensionsSupport.class)
 class ProjectResourceTest extends NovelKmsTestBase {
@@ -41,7 +42,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
     void listProjects_empty_returns200AndEmptyArray() {
         Response r = RESOURCES.target("/projects").request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         List<Project> projects = r.readEntity(new GenericType<>() {});
         assertTrue(projects.isEmpty());
     }
@@ -54,7 +55,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
 
         Response r = RESOURCES.target("/projects").request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         List<Project> projects = r.readEntity(new GenericType<>() {});
         assertEquals(2, projects.size());
         assertTrue(projects.stream()
@@ -67,14 +68,14 @@ class ProjectResourceTest extends NovelKmsTestBase {
 
         Response r = RESOURCES.target("/projects/" + p.getId()).request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Project found = r.readEntity(Project.class);
         assertEquals(p.getId(), found.getId());
         assertEquals("The Alone Man", found.getTitle());
     }
 
     @Test
-    void getProject_ownedByAnotherUser_returns404() throws SQLException {
+    void getProject_ownedByAnotherUser_returnsNoContent() throws SQLException {
         Project p = createTestProject(
                 OTHER_USER_ID,
                 "Private Project",
@@ -82,13 +83,13 @@ class ProjectResourceTest extends NovelKmsTestBase {
 
         Response r = RESOURCES.target("/projects/" + p.getId()).request().get();
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     @Test
-    void getProject_unknownId_returns404() {
+    void getProject_unknownId_returnsNoContent() {
         Response r = RESOURCES.target("/projects/" + UUID.randomUUID()).request().get();
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     @Test
@@ -99,7 +100,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
                         "title", "New Project",
                         "description", "A description")));
 
-        assertEquals(201, r.getStatus());
+        assertEquals(Status.CREATED.getStatusCode(), r.getStatus());
         Project created = r.readEntity(Project.class);
         assertNotNull(created.getId());
         assertEquals("New Project", created.getTitle());
@@ -113,7 +114,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("description", "No title")));
 
-        assertEquals(400, r.getStatus());
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
     }
 
     @Test
@@ -122,7 +123,7 @@ class ProjectResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("title", "   ")));
 
-        assertEquals(400, r.getStatus());
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
     }
 
     @Test
@@ -135,30 +136,30 @@ class ProjectResourceTest extends NovelKmsTestBase {
                         "title", "Updated Title",
                         "description", "Updated desc")));
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Project updated = r.readEntity(Project.class);
         assertEquals("Updated Title", updated.getTitle());
         assertEquals("Updated desc", updated.getDescription());
     }
 
     @Test
-    void updateProject_ownedByAnotherUser_returns404() throws SQLException {
+    void updateProject_ownedByAnotherUser_returnsNoContent() throws SQLException {
         Project p = createTestProject(OTHER_USER_ID, "Private", null);
 
         Response r = RESOURCES.target("/projects/" + p.getId())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "Attempted Change")));
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     @Test
-    void updateProject_unknownId_returns404() {
+    void updateProject_unknownId_returnsNoContent() {
         Response r = RESOURCES.target("/projects/" + UUID.randomUUID())
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "Ghost")));
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     @Test
@@ -169,40 +170,40 @@ class ProjectResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("description", "No title")));
 
-        assertEquals(400, r.getStatus());
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
     }
 
     @Test
-    void deleteProject_knownId_returns204() throws SQLException {
+    void deleteProject_knownId_returnsOk() throws SQLException {
         Project p = createTestProject("To Delete", null);
 
         Response r = RESOURCES.target("/projects/" + p.getId())
                 .request()
                 .delete();
 
-        assertEquals(204, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
     }
 
     @Test
-    void deleteProject_ownedByAnotherUser_returns404() throws SQLException {
+    void deleteProject_ownedByAnotherUser_returnsNoContent() throws SQLException {
         Project p = createTestProject(OTHER_USER_ID, "Do Not Delete", null);
 
         Response r = RESOURCES.target("/projects/" + p.getId())
                 .request()
                 .delete();
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
         assertTrue(projectDao.findByIdForUser(
                 p.getId(),
                 OTHER_USER_ID).isPresent());
     }
 
     @Test
-    void deleteProject_unknownId_returns404() {
+    void deleteProject_unknownId_returnsNoContent() {
         Response r = RESOURCES.target("/projects/" + UUID.randomUUID())
                 .request()
                 .delete();
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 }

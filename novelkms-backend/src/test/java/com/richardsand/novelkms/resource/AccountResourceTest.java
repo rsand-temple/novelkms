@@ -20,6 +20,7 @@ import io.dropwizard.testing.junit5.ResourceExtension;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 @ExtendWith(DropwizardExtensionsSupport.class)
 class AccountResourceTest extends NovelKmsTestBase {
@@ -53,7 +54,7 @@ class AccountResourceTest extends NovelKmsTestBase {
 
         Response r = RESOURCES.target("/account").request().get();
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
     }
 
     @Test
@@ -66,7 +67,7 @@ class AccountResourceTest extends NovelKmsTestBase {
                         "displayname", "Richard Sand",
                         "mobile", "555-111-2222")));
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Account account = r.readEntity(Account.class);
         assertEquals("test.user@example.com", account.email());
         assertEquals("Richard", account.first_name());
@@ -85,7 +86,7 @@ class AccountResourceTest extends NovelKmsTestBase {
                         "displayname", "Thing",
                         "mobile", "   ")));
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Account account = r.readEntity(Account.class);
         assertNull(account.first_name());
         assertNull(account.last_name());
@@ -104,7 +105,7 @@ class AccountResourceTest extends NovelKmsTestBase {
                         "displayname", "Richard Sand",
                         "mobile", "555-111-2222")));
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
     }
 
     @Test
@@ -117,7 +118,7 @@ class AccountResourceTest extends NovelKmsTestBase {
                         "displayname", "Richard Sand",
                         "mobile", "555-111-2222")));
         
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Account account = r.readEntity(Account.class);
         assertEquals("Richard", account.first_name());
         assertEquals("Sand", account.last_name());

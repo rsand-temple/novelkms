@@ -122,7 +122,7 @@ public class ChapterResource {
         try {
             return chapterDao.findById(id)
                     .map(ch -> Response.ok(ch).build())
-                    .orElse(Response.status(Response.Status.BAD_REQUEST).build());
+                    .orElse(Response.noContent().build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -163,7 +163,7 @@ public class ChapterResource {
         try {
             return chapterDao.update(id, title, req.subtitle, req.notes, req.resetsNumbering)
                     .map(ch -> Response.ok(ch).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.noContent().build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -201,8 +201,8 @@ public class ChapterResource {
         logger.info("ChapterResource.deleteChapter invoked: id={}", id);
         try {
             return trashService.trashChapter(CurrentUser.id(request), id).isPresent()
-                    ? Response.noContent().build()
-                    : Response.status(Response.Status.NOT_FOUND).build();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (SQLException e) {
             return serverError(e);
         }

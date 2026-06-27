@@ -22,6 +22,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 @ExtendWith(DropwizardExtensionsSupport.class)
 class BookResourceTest extends NovelKmsTestBase {
@@ -49,7 +50,7 @@ class BookResourceTest extends NovelKmsTestBase {
         Response r = RESOURCES.target("/projects/" + testProject.getId() + "/books")
                 .request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         List<Book> books = r.readEntity(new GenericType<>() {});
         assertEquals(0, books.size());
     }
@@ -62,7 +63,7 @@ class BookResourceTest extends NovelKmsTestBase {
         Response r = RESOURCES.target("/projects/" + testProject.getId() + "/books")
                 .request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         List<Book> books = r.readEntity(new GenericType<>() {});
         assertEquals(2, books.size());
     }
@@ -77,7 +78,7 @@ class BookResourceTest extends NovelKmsTestBase {
 
         Response r = RESOURCES.target("/books/" + b.getId()).request().get();
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Book found = r.readEntity(Book.class);
         assertEquals("My Book", found.getTitle());
         assertEquals("Sub", found.getSubtitle());
@@ -87,7 +88,7 @@ class BookResourceTest extends NovelKmsTestBase {
     void getBook_unknownId_returns404() {
         Response r = RESOURCES.target("/books/" + UUID.randomUUID()).request().get();
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     // -------------------------------------------------------------------------
@@ -100,7 +101,7 @@ class BookResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("title", "New Book", "subtitle", "A Subtitle")));
 
-        assertEquals(201, r.getStatus());
+        assertEquals(Status.CREATED.getStatusCode(), r.getStatus());
         Book created = r.readEntity(Book.class);
         assertNotNull(created.getId());
         assertEquals("New Book", created.getTitle());
@@ -114,7 +115,7 @@ class BookResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(Map.of("subtitle", "No title")));
 
-        assertEquals(400, r.getStatus());
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
     }
 
     // -------------------------------------------------------------------------
@@ -129,7 +130,7 @@ class BookResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "New Title", "notes", "Updated notes")));
 
-        assertEquals(200, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
         Book updated = r.readEntity(Book.class);
         assertEquals("New Title", updated.getTitle());
         assertEquals("Updated notes", updated.getNotes());
@@ -141,7 +142,7 @@ class BookResourceTest extends NovelKmsTestBase {
                 .request(MediaType.APPLICATION_JSON)
                 .put(Entity.json(Map.of("title", "Ghost")));
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 
     // -------------------------------------------------------------------------
@@ -149,18 +150,18 @@ class BookResourceTest extends NovelKmsTestBase {
     // -------------------------------------------------------------------------
 
     @Test
-    void deleteBook_knownId_returns204() throws SQLException {
+    void deleteBook_knownId_returnsOK() throws SQLException {
         Book b = bookDao.create(testProject.getId(), "To Delete", null, null, null);
 
         Response r = RESOURCES.target("/books/" + b.getId()).request().delete();
 
-        assertEquals(204, r.getStatus());
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
     }
 
     @Test
-    void deleteBook_unknownId_returns404() {
+    void deleteBook_unknownId_returnsNoContent() {
         Response r = RESOURCES.target("/books/" + UUID.randomUUID()).request().delete();
 
-        assertEquals(404, r.getStatus());
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
     }
 }
