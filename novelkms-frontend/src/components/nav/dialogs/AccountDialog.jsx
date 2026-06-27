@@ -17,28 +17,35 @@ export default function AccountDialog({ open, onClose }) {
 
 	const account = accountQuery.data
 
-	const initialKey = `${account?.id ?? 'none'}:${open ? 'open' : 'closed'}`
+	const initialKey = `${account?.email ?? 'none'}:${open ? 'open' : 'closed'}`
 
 	const [draftKey, setDraftKey] = useState(initialKey)
-	const [name, setName] = useState('')
-	const [phone, setPhone] = useState('')
+	const [displayName, setDisplayName] = useState('')
+	const [mobile, setMobile] = useState('')
 
 	if (draftKey !== initialKey && account) {
 		setDraftKey(initialKey)
-		setName(account.name ?? '')
-		setPhone(account.phone ?? '')
+		setDisplayName(account.display_name ?? '')
+		setMobile(account.mobile_number ?? '')
 	}
 
 	const canSave = useMemo(() => {
 		if (!account) return false
-		return name.trim() !== (account.name ?? '') || phone.trim() !== (account.phone ?? '')
-	}, [account, name, phone])
+
+		return displayName.trim() !== (account.display_name ?? '') ||
+			mobile.trim() !== (account.mobile_number ?? '')
+	}, [account, displayName, mobile])
 
 	async function handleSave() {
+		if (!account) return
+
 		await updateMutation.mutateAsync({
-			name: name.trim(),
-			phone: phone.trim(),
+			firstname: account.first_name ?? '',
+			lastname: account.last_name ?? '',
+			displayname: displayName.trim(),
+			mobile: mobile.trim(),
 		})
+
 		onClose()
 	}
 
@@ -65,16 +72,16 @@ export default function AccountDialog({ open, onClose }) {
 					/>
 
 					<TextField
-						label="Name"
-						value={name}
-						onChange={(event) => setName(event.target.value)}
+						label="Display name"
+						value={displayName}
+						onChange={(event) => setDisplayName(event.target.value)}
 						fullWidth
 					/>
 
 					<TextField
-						label="Phone"
-						value={phone}
-						onChange={(event) => setPhone(event.target.value)}
+						label="Mobile phone"
+						value={mobile}
+						onChange={(event) => setMobile(event.target.value)}
 						fullWidth
 					/>
 				</Box>
@@ -85,7 +92,7 @@ export default function AccountDialog({ open, onClose }) {
 				<Button
 					variant="contained"
 					onClick={handleSave}
-					disabled={!canSave || updateMutation.isPending}
+					disabled={!canSave || accountQuery.isLoading || updateMutation.isPending}
 				>
 					Save
 				</Button>

@@ -21,6 +21,7 @@ import com.richardsand.novelkms.auth.OAuthService;
 import com.richardsand.novelkms.auth.SecretCipher;
 import com.richardsand.novelkms.auth.SessionService;
 import com.richardsand.novelkms.auth.TenantAuthorizationFilter;
+import com.richardsand.novelkms.dao.AccountDao;
 import com.richardsand.novelkms.dao.AiCredentialDao;
 import com.richardsand.novelkms.dao.AiFormInstructionsDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
@@ -46,6 +47,7 @@ import com.richardsand.novelkms.dao.UserPreferenceDao;
 import com.richardsand.novelkms.dao.UserStyleDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
 import com.richardsand.novelkms.dropwizard.web.SpaFallbackFilter;
+import com.richardsand.novelkms.resource.AccountResource;
 import com.richardsand.novelkms.resource.AiCredentialResource;
 import com.richardsand.novelkms.resource.AiFormInstructionsResource;
 import com.richardsand.novelkms.resource.AiReviewResource;
@@ -142,6 +144,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 .migrate();
 
         // DAOs
+        AccountDao            accountDao            = new AccountDao(ds);
         AiFormInstructionsDao aiFormInstructionsDao = new AiFormInstructionsDao(ds);
         AiReviewDao           aiReviewDao           = new AiReviewDao(ds);
         AuthDao               authDao               = new AuthDao(ds);
@@ -201,6 +204,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         });
 
         // Resources
+        env.jersey().register(AccountResource.class);
         env.jersey().register(AiFormInstructionsResource.class);
         env.jersey().register(AiReviewResource.class);
         env.jersey().register(AiCredentialResource.class);
@@ -228,12 +232,12 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(UserPreferenceResource.class);
 
         // SPA fallback
-        // The filter is mapped only to the REQUEST dispatcher type 
+        // The filter is mapped only to the REQUEST dispatcher type
         // so the internal forward to /index.html is not re-processed by this same filter.
         env.servlets()
                 .addFilter("spa-fallback", new SpaFallbackFilter())
                 .addMappingForUrlPatterns(EnumSet.of(DispatcherType.REQUEST), true, "/*");
-        
+
         // Object Mapper
         ObjectMapper mapper = env.getObjectMapper();
         mapper.findAndRegisterModules();
@@ -243,6 +247,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(new AbstractBinder() {
             @Override
             protected void configure() {
+                bind(accountDao).to(AccountDao.class);
                 bind(aiCredentialDao).to(AiCredentialDao.class);
                 bind(aiFormInstructionsDao).to(AiFormInstructionsDao.class);
                 bind(aiReviewDao).to(AiReviewDao.class);

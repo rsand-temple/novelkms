@@ -21,6 +21,7 @@ import ImportDialog from './components/nav/dialogs/ImportDialog'
 import ExportDialog from './components/nav/dialogs/ExportDialog'
 import SettingsDialog from './components/settings/SettingsDialog'
 import EditorSettingsDialog from './components/settings/EditorSettingsDialog'
+import UserMenu from './components/nav/UserMenu'
 import KmsArchiveImportDialog from './components/archive/KmsArchiveImportDialog'
 import { kmsArchiveApi } from './api/kmsArchive'
 import { LogoMark } from './components/branding/Logo'
@@ -507,6 +508,7 @@ export default function App() {
 									Global Defaults…
 								</MenuItem>
 							</Menu>
+							<UserMenu />
 						</Toolbar>
 					</AppBar>
 

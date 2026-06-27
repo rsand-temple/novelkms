@@ -12,7 +12,7 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
 import AccountDialog from './dialogs/AccountDialog'
-import { useLogout } from '../hooks/useAccount'
+import { useLogout } from '../../hooks/useAccount'
 
 export default function UserMenu({ user, onLoggedOut }) {
 	const [anchorEl, setAnchorEl] = useState(null)

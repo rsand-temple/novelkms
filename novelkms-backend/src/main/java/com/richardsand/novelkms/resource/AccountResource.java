@@ -14,7 +14,6 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
@@ -47,7 +46,7 @@ public class AccountResource {
         return getAccount(id);
     }
     
-    private Response getAccount(@PathParam("id") UUID id) {
+    private Response getAccount(UUID id) {
         logger.debug("getAccount invoked: id={}", id);
         try {
             return accountDao.getAccount(id)
