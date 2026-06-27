@@ -2,6 +2,7 @@ package com.richardsand.novelkms;
 
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.EnumSet;
 import java.util.Map;
 
 import org.apache.commons.dbcp2.BasicDataSource;
@@ -44,6 +45,7 @@ import com.richardsand.novelkms.dao.TrashDao;
 import com.richardsand.novelkms.dao.UserPreferenceDao;
 import com.richardsand.novelkms.dao.UserStyleDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
+import com.richardsand.novelkms.dropwizard.web.SpaFallbackFilter;
 import com.richardsand.novelkms.resource.AiCredentialResource;
 import com.richardsand.novelkms.resource.AiFormInstructionsResource;
 import com.richardsand.novelkms.resource.AiReviewResource;
@@ -78,6 +80,7 @@ import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
 import io.dropwizard.lifecycle.Managed;
+import jakarta.servlet.DispatcherType;
 
 public class NovelKmsServer extends Application<NovelKmsConfig> {
     private static final Logger   logger     = LoggerFactory.getLogger(NovelKmsServer.class);
@@ -185,6 +188,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 chapterSummaryDao, bookSummaryDao,
                 codexDao, codexCategoryDao, aiProviders);
 
+        // Manage lifecycle
         env.lifecycle().manage(new Managed() {
             @Override
             public void start() {
@@ -196,6 +200,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
             }
         });
 
+        // Resources
         env.jersey().register(AiFormInstructionsResource.class);
         env.jersey().register(AiReviewResource.class);
         env.jersey().register(AiCredentialResource.class);
@@ -222,6 +227,13 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(TrashResource.class);
         env.jersey().register(UserPreferenceResource.class);
 
+        // SPA fallback
+        // The filter is mapped only to the REQUEST dispatcher type 
+        // so the internal forward to /index.html is not re-processed by this same filter.
+        env.servlets()
+                .addFilter("spa-fallback", new SpaFallbackFilter())
+                .addMappingForUrlPatterns(EnumSet.of(DispatcherType.REQUEST), true, "/*");
+        
         // Object Mapper
         ObjectMapper mapper = env.getObjectMapper();
         mapper.findAndRegisterModules();
