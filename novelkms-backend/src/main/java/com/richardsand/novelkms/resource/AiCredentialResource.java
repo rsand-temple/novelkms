@@ -25,6 +25,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 /**
  * Per-user AI provider credentials. The API key is write-only: it is accepted on
@@ -78,14 +79,14 @@ public class AiCredentialResource {
     public Response create(CreateRequest body) {
         logger.info("AiCredentialResource.create invoked: provider={}", body == null ? null : body.provider);
         if (body == null || isBlank(body.apiKey)) {
-            return error(400, "missing_api_key", "An API key is required.");
+            return error(Status.BAD_REQUEST, "missing_api_key", "An API key is required.");
         }
         String provider = normalize(body.provider, "OPENAI");
         if (!SUPPORTED_PROVIDERS.contains(provider)) {
-            return error(400, "unsupported_provider", "Provider " + provider + " is not supported yet.");
+            return error(Status.BAD_REQUEST, "unsupported_provider", "Provider " + provider + " is not supported yet.");
         }
         String label = isBlank(body.label) ? "Default" : body.label.trim();
-        return run(() -> Response.status(201)
+        return run(() -> Response.status(Status.CREATED)
                 .entity(dao.create(CurrentUser.id(request), provider, label,
                         body.apiKey.trim(), trimOrNull(body.defaultModel), body.makeDefault))
                 .build());
@@ -95,12 +96,12 @@ public class AiCredentialResource {
     @Path("/ai/credentials/{id}")
     public Response update(@PathParam("id") UUID id, UpdateRequest body) {
         logger.info("AiCredentialResource.update invoked: id={}", id);
-        if (body == null) return error(400, "bad_request", "Request body is required.");
+        if (body == null) return error(Status.BAD_REQUEST, "bad_request", "Request body is required.");
         String label = isBlank(body.label) ? "Default" : body.label.trim();
         return run(() -> dao.update(id, CurrentUser.id(request), label,
                         body.apiKey, trimOrNull(body.defaultModel))
                 .map(updated -> Response.ok(updated).build())
-                .orElseGet(() -> notFound()));
+                .orElseGet(() -> noContent()));
     }
 
     @DELETE
@@ -108,7 +109,7 @@ public class AiCredentialResource {
     public Response delete(@PathParam("id") UUID id) {
         logger.info("AiCredentialResource.delete invoked: id={}", id);
         return run(() -> dao.delete(id, CurrentUser.id(request))
-                ? Response.noContent().build() : notFound());
+                ? Response.noContent().build() : noContent());
     }
 
     @POST
@@ -117,14 +118,14 @@ public class AiCredentialResource {
         logger.info("AiCredentialResource.makeDefault invoked: id={}", id);
         return run(() -> dao.setDefault(id, CurrentUser.id(request))
                 .map(c -> Response.ok(c).build())
-                .orElseGet(() -> notFound()));
+                .orElseGet(() -> noContent()));
     }
 
-    private static Response notFound() {
-        return Response.status(404).entity(Map.of("error", "not_found")).build();
+    private static Response noContent() {
+        return Response.status(Status.NO_CONTENT).build();
     }
 
-    private static Response error(int status, String code, String message) {
+    private static Response error(Status status, String code, String message) {
         return Response.status(status).entity(Map.of("error", code, "message", message)).build();
     }
 

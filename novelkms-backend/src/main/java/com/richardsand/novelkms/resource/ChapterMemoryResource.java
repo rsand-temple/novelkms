@@ -23,6 +23,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 /**
  * Chapter memory-document endpoints.
@@ -81,8 +82,8 @@ public class ChapterMemoryResource {
         try {
             ChapterMemory memory = service.generateChapterMemory(userId, chapterId, credentialId, model, userGuidance);
             return Response.ok(memory).build();
-        } catch (ReviewException e) {
-            return error(e.status(), e.code(), e.getMessage());
+        } catch (ReviewException re) {
+            return error(re.status(), re.code(), re.getMessage());
         } catch (SQLException e) {
             return serverError();
         }
@@ -94,7 +95,7 @@ public class ChapterMemoryResource {
         try {
             return service.getChapterMemory(chapterId)
                     .map(memory -> Response.ok(memory).build())
-                    .orElseGet(() -> notFound());
+                    .orElseGet(() -> Response.noContent().build());
         } catch (SQLException e) {
             return serverError();
         }
@@ -104,13 +105,13 @@ public class ChapterMemoryResource {
     @Path("/ai/memory/chapters/{chapterId}")
     public Response edit(@PathParam("chapterId") UUID chapterId, EditRequest body) {
         if (body == null || body.content == null || body.content.isBlank()) {
-            return error(400, "bad_request", "content must not be blank; use DELETE to clear the document.");
+            return error(Status.BAD_REQUEST, "bad_request", "content must not be blank; use DELETE to clear the document.");
         }
         try {
             ChapterMemory memory = service.editChapterMemory(chapterId, body.content.strip());
             return Response.ok(memory).build();
-        } catch (ReviewException e) {
-            return error(e.status(), e.code(), e.getMessage());
+        } catch (ReviewException re) {
+            return error(re.status(), re.code(), re.getMessage());
         } catch (SQLException e) {
             return serverError();
         }
@@ -121,8 +122,8 @@ public class ChapterMemoryResource {
     public Response clear(@PathParam("chapterId") UUID chapterId) {
         try {
             return service.deleteChapterMemory(chapterId)
-                    ? Response.noContent().build()
-                    : notFound();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (SQLException e) {
             return serverError();
         }
@@ -140,11 +141,7 @@ public class ChapterMemoryResource {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static Response notFound() {
-        return Response.status(404).entity(Map.of("error", "not_found")).build();
-    }
-
-    private static Response error(int status, String code, String message) {
+    private static Response error(Status status, String code, String message) {
         return Response.status(status).entity(Map.of("error", code, "message", message)).build();
     }
 

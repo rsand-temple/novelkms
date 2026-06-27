@@ -1,5 +1,7 @@
 package com.richardsand.novelkms.ai;
 
+import jakarta.ws.rs.core.Response.Status;
+
 /**
  * A configuration or precondition failure during review orchestration that the
  * resource layer should translate into a specific HTTP response (e.g. no
@@ -9,16 +11,21 @@ package com.richardsand.novelkms.ai;
  */
 public class ReviewException extends RuntimeException {
     private static final long serialVersionUID = -7924295589556151928L;
-    private final int    status;
-    private final String code;
+    private final Status      status;
+    private final String      code;
 
-    public ReviewException(int status, String code, String message) {
+    public ReviewException(Status status, String code, String message) {
         super(message);
         this.status = status;
         this.code = code;
     }
 
-    public int status() {
+    public ReviewException(Status status) {
+        this.status = status;
+        this.code = null;
+    }
+
+    public Status status() {
         return status;
     }
 

@@ -20,6 +20,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 /**
  * AI review <em>form</em> instructions — the editorial persona/constraints the
@@ -180,7 +181,7 @@ public class AiFormInstructionsResource {
     }
 
     private static Response blankError() {
-        return Response.status(400)
+        return Response.status(Status.BAD_REQUEST)
                 .entity(java.util.Map.of("error", "bad_request",
                         "message", "instructions must not be blank; use DELETE to remove an override."))
                 .build();

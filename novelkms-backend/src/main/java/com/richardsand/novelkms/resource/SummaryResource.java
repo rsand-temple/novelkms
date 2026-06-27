@@ -24,6 +24,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 /**
  * Chapter-summary and book-summary endpoints — a separate AI artifact family
@@ -93,8 +94,8 @@ public class SummaryResource {
         try {
             ChapterSummary summary = service.generateChapterSummary(userId, chapterId, credentialId, model, userGuidance);
             return Response.ok(summary).build();
-        } catch (ReviewException e) {
-            return error(e.status(), e.code(), e.getMessage());
+        } catch (ReviewException re) {
+            return error(re.status(), re.code(), re.getMessage());
         } catch (SQLException e) {
             return serverError();
         }
@@ -106,7 +107,7 @@ public class SummaryResource {
         try {
             return service.getChapterSummary(chapterId)
                     .map(summary -> Response.ok(summary).build())
-                    .orElseGet(() -> notFound());
+                    .orElseGet(() -> Response.noContent().build());
         } catch (SQLException e) {
             return serverError();
         }
@@ -116,7 +117,7 @@ public class SummaryResource {
     @Path("/ai/summary/chapters/{chapterId}")
     public Response editChapter(@PathParam("chapterId") UUID chapterId, EditRequest body) {
         if (body == null || body.content == null || body.content.isBlank()) {
-            return error(400, "bad_request", "content must not be blank; use DELETE to clear the summary.");
+            return error(Status.BAD_REQUEST, "bad_request", "content must not be blank; use DELETE to clear the summary.");
         }
         try {
             ChapterSummary summary = service.editChapterSummary(chapterId, body.content.strip());
@@ -133,8 +134,8 @@ public class SummaryResource {
     public Response clearChapter(@PathParam("chapterId") UUID chapterId) {
         try {
             return service.deleteChapterSummary(chapterId)
-                    ? Response.noContent().build()
-                    : notFound();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (SQLException e) {
             return serverError();
         }
@@ -175,7 +176,7 @@ public class SummaryResource {
         try {
             return service.getBookSummary(bookId)
                     .map(summary -> Response.ok(summary).build())
-                    .orElseGet(() -> notFound());
+                    .orElseGet(() -> Response.noContent().build());
         } catch (SQLException e) {
             return serverError();
         }
@@ -185,7 +186,7 @@ public class SummaryResource {
     @Path("/ai/summary/books/{bookId}")
     public Response editBook(@PathParam("bookId") UUID bookId, EditRequest body) {
         if (body == null || body.content == null || body.content.isBlank()) {
-            return error(400, "bad_request", "content must not be blank; use DELETE to clear the summary.");
+            return error(Status.BAD_REQUEST, "bad_request", "content must not be blank; use DELETE to clear the summary.");
         }
         try {
             BookSummary summary = service.editBookSummary(bookId, body.content.strip());
@@ -202,8 +203,8 @@ public class SummaryResource {
     public Response clearBook(@PathParam("bookId") UUID bookId) {
         try {
             return service.deleteBookSummary(bookId)
-                    ? Response.noContent().build()
-                    : notFound();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (SQLException e) {
             return serverError();
         }
@@ -221,11 +222,8 @@ public class SummaryResource {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static Response notFound() {
-        return Response.status(404).entity(Map.of("error", "not_found")).build();
-    }
 
-    private static Response error(int status, String code, String message) {
+    private static Response error(Status status, String code, String message) {
         return Response.status(status).entity(Map.of("error", code, "message", message)).build();
     }
 

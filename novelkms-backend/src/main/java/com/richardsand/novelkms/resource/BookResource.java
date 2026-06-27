@@ -122,7 +122,7 @@ public class BookResource {
         try {
             return bookDao.findById(id)
                     .map(b -> Response.ok(b).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.status(Response.Status.NO_CONTENT).build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -155,7 +155,7 @@ public class BookResource {
         try {
             return bookDao.update(id, req.title, req.subtitle, req.shortTitle, req.notes)
                     .map(b -> Response.ok(b).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.status(Response.Status.NO_CONTENT).build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -168,7 +168,7 @@ public class BookResource {
         try {
             return trashService.trashBook(CurrentUser.id(request), id).isPresent()
                     ? Response.noContent().build()
-                    : Response.status(Response.Status.NOT_FOUND).build();
+                    : Response.status(Response.Status.NO_CONTENT).build();
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -222,7 +222,7 @@ public class BookResource {
                                     "public, max-age=" + CACHE_MAX_AGE_SECONDS
                                             + ", no-transform, immutable")
                             .build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(Response.status(Response.Status.NO_CONTENT).build());
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -244,8 +244,8 @@ public class BookResource {
             byte[]  bytes = Base64.getDecoder().decode(req.imageData);
             boolean found = bookDao.setCoverImage(id, bytes, req.mimeType);
             return found
-                    ? Response.noContent().build()
-                    : Response.status(Response.Status.NOT_FOUND).build();
+                    ? Response.ok().build()
+                    : Response.noContent().build();
         } catch (IllegalArgumentException e) {
             logger.warn("Invalid cover image upload for bookId={}: {}", id, e.getMessage());
             return Response.status(Response.Status.BAD_REQUEST)

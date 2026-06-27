@@ -51,6 +51,8 @@ import com.richardsand.novelkms.model.Codex;
 import com.richardsand.novelkms.model.CodexCategory;
 import com.richardsand.novelkms.model.Scene;
 
+import jakarta.ws.rs.core.Response.Status;
+
 /**
  * Orchestrates a synchronous review: assembles the text to review (a whole
  * chapter's scenes, or a single scene), resolves the user's AI credential and
@@ -60,7 +62,8 @@ import com.richardsand.novelkms.model.Scene;
  * (so it groups under the chapter's AI workflow) and the scene in
  * {@code sceneId}.
  *
- * <p>Configuration problems (no credential, non-manuscript target, empty target,
+ * <p>
+ * Configuration problems (no credential, non-manuscript target, empty target,
  * unsupported provider) are signalled via {@link ReviewException}; a provider
  * call failure is recorded as a FAILED review and returned normally so it
  * appears in history.
@@ -113,8 +116,9 @@ public class AiReviewService {
 
     /** Immutable description of what is being reviewed, resolved before execution. */
     private record ReviewTarget(UUID chapterId, UUID sceneId, UUID bookId,
-                                String scopeWord, String unitLabel, String subtitle, String text,
-                                String priorContext, String referenceContext, String userGuidance) {}
+            String scopeWord, String unitLabel, String subtitle, String text,
+            String priorContext, String referenceContext, String userGuidance) {
+    }
 
     /**
      * Runs a chapter review and returns the resulting artifact (COMPLETED or
@@ -129,17 +133,17 @@ public class AiReviewService {
             String modelOverride, String userGuidance) throws SQLException {
         logger.info("Starting AI chapter review: userId={}, chapterId={}, credentialId={}, modelOverride={}", userId, chapterId, credentialId, modelOverride);
         Chapter chapter = chapterDao.findById(chapterId)
-                .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
+                .orElseThrow(() -> new ReviewException(Status.PRECONDITION_REQUIRED, "not_found", "Chapter not found."));
 
         UUID bookId = chapter.getBookId();
         if (bookId == null) {
-            throw new ReviewException(400, "not_manuscript",
+            throw new ReviewException(Status.BAD_REQUEST, "not_manuscript",
                     "AI review is only available for manuscript chapters.");
         }
 
         String chapterText = assembleChapterText(chapterId);
         if (chapterText.isBlank()) {
-            throw new ReviewException(400, "empty_chapter",
+            throw new ReviewException(Status.BAD_REQUEST, "empty_chapter",
                     "This chapter has no text to review yet.");
         }
 
@@ -163,24 +167,24 @@ public class AiReviewService {
             String modelOverride, String userGuidance) throws SQLException {
         logger.info("Starting AI scene review: userId={}, sceneId={}, credentialId={}, modelOverride={}", userId, sceneId, credentialId, modelOverride);
         Scene scene = sceneDao.findById(sceneId)
-                .orElseThrow(() -> new ReviewException(404, "not_found", "Scene not found."));
+                .orElseThrow(() -> new ReviewException(Status.PRECONDITION_REQUIRED, "not_found", "Scene not found."));
 
-        UUID chapterId = scene.getChapterId();
-        Chapter chapter = chapterId == null ? null : chapterDao.findById(chapterId).orElse(null);
+        UUID    chapterId = scene.getChapterId();
+        Chapter chapter   = chapterId == null ? null : chapterDao.findById(chapterId).orElse(null);
         if (chapter == null) {
-            throw new ReviewException(404, "not_found", "The scene's chapter was not found.");
+            throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_found", "The scene's chapter was not found.");
         }
 
         UUID bookId = chapter.getBookId();
         if (bookId == null) {
             // A codex entry is stored as a scene under a codex (book_id null) chapter.
-            throw new ReviewException(400, "not_manuscript",
+            throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_manuscript",
                     "AI review is only available for manuscript scenes.");
         }
 
         String sceneText = htmlToPlainText(scene.getContent());
         if (sceneText.isBlank()) {
-            throw new ReviewException(400, "empty_scene",
+            throw new ReviewException(Status.BAD_REQUEST, "empty_scene",
                     "This scene has no text to review yet.");
         }
 
@@ -200,7 +204,7 @@ public class AiReviewService {
         AiCredential credential = resolveCredential(userId, credentialId);
         AiProvider   provider   = providers.get(credential.getProvider());
         if (provider == null) {
-            throw new ReviewException(400, "unsupported_provider",
+            throw new ReviewException(Status.BAD_REQUEST, "unsupported_provider",
                     "Provider " + credential.getProvider() + " is not supported yet.");
         }
 
@@ -209,8 +213,7 @@ public class AiReviewService {
 
         // Resolve the editorial "form" block (book -> project -> user -> system)
         // and record it on the review as immutable provenance.
-        AiFormInstructionsDao.Resolved form =
-                formInstructionsDao.resolveForReview(userId, projectId, target.bookId());
+        AiFormInstructionsDao.Resolved form = formInstructionsDao.resolveForReview(userId, projectId, target.bookId());
 
         logger.debug("Resolved AI review execution context: userId={}, projectId={}, bookId={}, chapterId={}, sceneId={}, provider={}, model={}, formScope={}",
                 userId, projectId, target.bookId(), target.chapterId(), target.sceneId(), provider.providerKey(), model, form.scope());
@@ -218,7 +221,8 @@ public class AiReviewService {
         UUID reviewId = reviewDao.createPending(userId, projectId, target.bookId(),
                 target.chapterId(), target.sceneId(), provider.providerKey(), model,
                 form.scope(), form.instructions(), target.userGuidance());
-        logger.info("Created pending AI review: reviewId={}, scope={}, chapterId={}, sceneId={}, provider={}, model={}", reviewId, target.scopeWord(), target.chapterId(), target.sceneId(), provider.providerKey(), model);
+        logger.info("Created pending AI review: reviewId={}, scope={}, chapterId={}, sceneId={}, provider={}, model={}", reviewId, target.scopeWord(), target.chapterId(), target.sceneId(),
+                provider.providerKey(), model);
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
@@ -263,24 +267,24 @@ public class AiReviewService {
     public ChapterMemory generateChapterMemory(UUID userId, UUID chapterId, UUID credentialId,
             String modelOverride, String userGuidance) throws SQLException {
         Chapter chapter = chapterDao.findById(chapterId)
-                .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
+                .orElseThrow(() -> new ReviewException(Status.PRECONDITION_REQUIRED, "not_found", "Chapter not found."));
 
         UUID bookId = chapter.getBookId();
         if (bookId == null) {
-            throw new ReviewException(400, "not_manuscript",
+            throw new ReviewException(Status.BAD_REQUEST, "not_manuscript",
                     "Memory documents are only available for manuscript chapters.");
         }
 
         String chapterText = assembleChapterText(chapterId);
         if (chapterText.isBlank()) {
-            throw new ReviewException(400, "empty_chapter",
+            throw new ReviewException(Status.PRECONDITION_REQUIRED, "empty_chapter",
                     "This chapter has no text to summarize yet.");
         }
 
         AiCredential credential = resolveCredential(userId, credentialId);
         AiProvider   provider   = providers.get(credential.getProvider());
         if (provider == null) {
-            throw new ReviewException(400, "unsupported_provider",
+            throw new ReviewException(Status.BAD_REQUEST, "unsupported_provider",
                     "Provider " + credential.getProvider() + " is not supported yet.");
         }
         String model     = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
@@ -290,17 +294,17 @@ public class AiReviewService {
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
-            throw new ReviewException(409, "no_ai_credential", "Stored API key could not be read.");
+            throw new ReviewException(Status.CONFLICT, "no_ai_credential", "Stored API key could not be read.");
         }
 
-        String note = blankToNull(userGuidance);
-        MemoryRequest req = new MemoryRequest(apiKey, model, chapterLabel(chapter), chapterText, template, note);
+        String        note = blankToNull(userGuidance);
+        MemoryRequest req  = new MemoryRequest(apiKey, model, chapterLabel(chapter), chapterText, template, note);
         try {
             MemoryResult result = provider.generateMemory(req);
             chapterMemoryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model, note);
         } catch (AiProviderException e) {
-            logger.warn("Memory generation for chapter {} failed: {}", chapterId, e.getMessage());
-            throw new ReviewException(502, "memory_provider_error", e.getMessage());
+            logger.error("Memory generation for chapter {} failed: {}", chapterId, e.getMessage());
+            throw new ReviewException(Status.INTERNAL_SERVER_ERROR, "memory_provider_error", e.getMessage());
         }
         return chapterMemoryDao.findByChapter(chapterId).orElseThrow();
     }
@@ -313,7 +317,7 @@ public class AiReviewService {
     /** Saves an author edit to an existing memory document (marks it EDITED). */
     public ChapterMemory editChapterMemory(UUID chapterId, String content) throws SQLException {
         if (!chapterMemoryDao.updateEdited(chapterId, content)) {
-            throw new ReviewException(404, "not_found",
+            throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_found",
                     "This chapter has no memory document to edit. Generate one first.");
         }
         return chapterMemoryDao.findByChapter(chapterId).orElseThrow();
@@ -330,9 +334,9 @@ public class AiReviewService {
      * upstream by the tenant filter (books/{id}).
      */
     public List<ChapterMemoryStatus> bookMemoryStatus(UUID bookId) throws SQLException {
-        List<ChapterMemoryDao.Row> rows = chapterMemoryDao.bookChapterMemory(bookId);
-        List<ChapterMemoryStatus> result = new ArrayList<>();
-        Instant maxEarlierGenerated = null;
+        List<ChapterMemoryDao.Row> rows                = chapterMemoryDao.bookChapterMemory(bookId);
+        List<ChapterMemoryStatus>  result              = new ArrayList<>();
+        Instant                    maxEarlierGenerated = null;
         for (ChapterMemoryDao.Row row : rows) {
             String state = stateFor(row, maxEarlierGenerated);
             result.add(new ChapterMemoryStatus(
@@ -373,8 +377,8 @@ public class AiReviewService {
      * if there are none. Chapters without a document are skipped.
      */
     private String assemblePriorContext(UUID bookId, UUID chapterId) throws SQLException {
-        List<ChapterMemoryDao.Row> rows = chapterMemoryDao.bookChapterMemory(bookId);
-        int targetSeq = Integer.MAX_VALUE;
+        List<ChapterMemoryDao.Row> rows      = chapterMemoryDao.bookChapterMemory(bookId);
+        int                        targetSeq = Integer.MAX_VALUE;
         for (ChapterMemoryDao.Row row : rows) {
             if (row.chapterId().equals(chapterId)) {
                 targetSeq = row.seq();
@@ -383,13 +387,15 @@ public class AiReviewService {
         }
         StringBuilder sb = new StringBuilder();
         for (ChapterMemoryDao.Row row : rows) {
-            if (row.seq() >= targetSeq) continue;
+            if (row.seq() >= targetSeq)
+                continue;
             // Memory-document content is authored HTML (rich text via the nav
             // editor); strip it to plain text before it goes into the prompt, the
             // same treatment scene content already gets. htmlToPlainText() falls
             // back to raw text for legacy plain-text documents predating this.
             String plainContent = htmlToPlainText(row.content());
-            if (plainContent.isBlank()) continue;
+            if (plainContent.isBlank())
+                continue;
             String title = (row.title() == null || row.title().isBlank())
                     ? "Chapter " + row.chapterNumber()
                     : row.title().trim();
@@ -425,41 +431,41 @@ public class AiReviewService {
     public ChapterSummary generateChapterSummary(UUID userId, UUID chapterId, UUID credentialId,
             String modelOverride, String userGuidance) throws SQLException {
         Chapter chapter = chapterDao.findById(chapterId)
-                .orElseThrow(() -> new ReviewException(404, "not_found", "Chapter not found."));
+                .orElseThrow(() -> new ReviewException(Status.PRECONDITION_REQUIRED, "not_found", "Chapter not found."));
 
         UUID bookId = chapter.getBookId();
         if (bookId == null) {
-            throw new ReviewException(400, "not_manuscript",
+            throw new ReviewException(Status.BAD_REQUEST, "not_manuscript",
                     "Summaries are only available for manuscript chapters.");
         }
 
         String chapterText = assembleChapterText(chapterId);
         if (chapterText.isBlank()) {
-            throw new ReviewException(400, "empty_chapter",
+            throw new ReviewException(Status.PRECONDITION_REQUIRED, "empty_chapter",
                     "This chapter has no text to summarize yet.");
         }
 
         AiCredential credential = resolveCredential(userId, credentialId);
         AiProvider   provider   = providers.get(credential.getProvider());
         if (provider == null) {
-            throw new ReviewException(400, "unsupported_provider",
+            throw new ReviewException(Status.BAD_REQUEST, "unsupported_provider",
                     "Provider " + credential.getProvider() + " is not supported yet.");
         }
         String model = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
-            throw new ReviewException(409, "no_ai_credential", "Stored API key could not be read.");
+            throw new ReviewException(Status.CONFLICT, "no_ai_credential", "Stored API key could not be read.");
         }
 
-        String note = blankToNull(userGuidance);
-        SummaryRequest req = new SummaryRequest(apiKey, model, chapterLabel(chapter), chapterText, note);
+        String         note = blankToNull(userGuidance);
+        SummaryRequest req  = new SummaryRequest(apiKey, model, chapterLabel(chapter), chapterText, note);
         try {
             SummaryResult result = provider.generateChapterSummary(req);
             chapterSummaryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model, note);
         } catch (AiProviderException e) {
-            logger.warn("Chapter-summary generation for chapter {} failed: {}", chapterId, e.getMessage());
-            throw new ReviewException(502, "summary_provider_error", e.getMessage());
+            logger.error("Chapter-summary generation for chapter {} failed: {}", chapterId, e.getMessage());
+            throw new ReviewException(Status.INTERNAL_SERVER_ERROR, "summary_provider_error", e.getMessage());
         }
         return chapterSummaryDao.findByChapter(chapterId).orElseThrow();
     }
@@ -472,7 +478,7 @@ public class AiReviewService {
     /** Saves an author edit to an existing chapter summary (marks it EDITED). */
     public ChapterSummary editChapterSummary(UUID chapterId, String content) throws SQLException {
         if (!chapterSummaryDao.updateEdited(chapterId, content)) {
-            throw new ReviewException(404, "not_found",
+            throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_found",
                     "This chapter has no summary to edit. Generate one first.");
         }
         return chapterSummaryDao.findByChapter(chapterId).orElseThrow();
@@ -490,8 +496,8 @@ public class AiReviewService {
      * Book ownership is enforced upstream by the tenant filter (books/{id}).
      */
     public List<ChapterSummaryStatus> bookChapterSummaries(UUID bookId) throws SQLException {
-        List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId);
-        List<ChapterSummaryStatus> result = new ArrayList<>();
+        List<ChapterSummaryDao.Row> rows   = chapterSummaryDao.bookChapterSummaries(bookId);
+        List<ChapterSummaryStatus>  result = new ArrayList<>();
         for (ChapterSummaryDao.Row row : rows) {
             result.add(new ChapterSummaryStatus(
                     row.chapterId(), row.chapterNumber(), row.title(),
@@ -529,29 +535,29 @@ public class AiReviewService {
     public BookSummary generateBookSummary(UUID userId, UUID bookId, UUID credentialId,
             String modelOverride, String userGuidance) throws SQLException {
         Book book = bookDao.findById(bookId)
-                .orElseThrow(() -> new ReviewException(404, "not_found", "Book not found."));
+                .orElseThrow(() -> new ReviewException(Status.NO_CONTENT, "not_found", "Book not found."));
 
         String aggregate = assembleChapterSummaries(bookId);
         if (aggregate == null || aggregate.isBlank()) {
-            throw new ReviewException(400, "no_chapter_summaries",
+            throw new ReviewException(Status.BAD_REQUEST, "no_chapter_summaries",
                     "No chapter summaries exist for this book yet. Generate chapter summaries first.");
         }
 
         AiCredential credential = resolveCredential(userId, credentialId);
         AiProvider   provider   = providers.get(credential.getProvider());
         if (provider == null) {
-            throw new ReviewException(400, "unsupported_provider",
+            throw new ReviewException(Status.BAD_REQUEST, "unsupported_provider",
                     "Provider " + credential.getProvider() + " is not supported yet.");
         }
         String model = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
-            throw new ReviewException(409, "no_ai_credential", "Stored API key could not be read.");
+            throw new ReviewException(Status.CONFLICT, "no_ai_credential", "Stored API key could not be read.");
         }
 
-        String note = blankToNull(userGuidance);
-        BookSummaryRequest req = new BookSummaryRequest(
+        String             note = blankToNull(userGuidance);
+        BookSummaryRequest req  = new BookSummaryRequest(
                 apiKey, model, book.getTitle(), aggregate, BOOK_SUMMARY_MAX_WORDS, note);
         try {
             SummaryResult result    = provider.generateBookSummary(req);
@@ -560,7 +566,7 @@ public class AiReviewService {
                     result.promptVersion(), model, note);
         } catch (AiProviderException e) {
             logger.warn("Book-summary generation for book {} failed: {}", bookId, e.getMessage());
-            throw new ReviewException(502, "summary_provider_error", e.getMessage());
+            throw new ReviewException(Status.INTERNAL_SERVER_ERROR, "summary_provider_error", e.getMessage());
         }
         return bookSummaryDao.findByBook(bookId).orElseThrow();
     }
@@ -575,7 +581,7 @@ public class AiReviewService {
         // content is authored HTML from the nav editor; word count must be taken
         // from the plain text, not the raw markup, or tags inflate the count.
         if (!bookSummaryDao.updateEdited(bookId, content, countWords(htmlToPlainText(content)))) {
-            throw new ReviewException(404, "not_found",
+            throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_found",
                     "This book has no summary to edit. Generate one first.");
         }
         return bookSummaryDao.findByBook(bookId).orElseThrow();
@@ -592,11 +598,11 @@ public class AiReviewService {
      * summary exists yet. Book ownership is enforced upstream (books/{id}).
      */
     public BookSummaryStatus bookSummaryStatus(UUID bookId) throws SQLException {
-        List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId);
-        int     chapterCount    = rows.size();
-        int     summarizedCount = 0;
-        int     staleCount      = 0;
-        Instant latestSummaryAt = null;
+        List<ChapterSummaryDao.Row> rows            = chapterSummaryDao.bookChapterSummaries(bookId);
+        int                         chapterCount    = rows.size();
+        int                         summarizedCount = 0;
+        int                         staleCount      = 0;
+        Instant                     latestSummaryAt = null;
         for (ChapterSummaryDao.Row row : rows) {
             if (row.hasDoc()) {
                 summarizedCount++;
@@ -611,14 +617,14 @@ public class AiReviewService {
         int missingCount = chapterCount - summarizedCount;
 
         Optional<BookSummary> summary = bookSummaryDao.findByBook(bookId);
-        boolean hasDoc = summary.isPresent();
-        boolean stale  = false;
+        boolean               hasDoc  = summary.isPresent();
+        boolean               stale   = false;
         if (hasDoc) {
             Instant generatedAt = summary.get().getGeneratedAt();
             stale = missingCount > 0
                     || staleCount > 0
                     || (latestSummaryAt != null && generatedAt != null
-                        && latestSummaryAt.isAfter(generatedAt));
+                            && latestSummaryAt.isAfter(generatedAt));
         }
 
         return new BookSummaryStatus(
@@ -639,27 +645,29 @@ public class AiReviewService {
      */
     private String assembleChapterSummaries(UUID bookId) throws SQLException {
         List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId);
-        StringBuilder sb = new StringBuilder();
+        StringBuilder               sb   = new StringBuilder();
         for (ChapterSummaryDao.Row row : rows) {
             // Chapter-summary content is authored HTML (rich text via the nav
             // editor); strip it to plain text before it goes into the book-summary
             // prompt, the same treatment scene content already gets.
             String plainContent = htmlToPlainText(row.content());
-            if (plainContent.isBlank()) continue;
+            if (plainContent.isBlank())
+                continue;
             String title = (row.title() == null || row.title().isBlank())
                     ? "Chapter " + row.chapterNumber()
                     : row.title().trim();
             sb.append("=== Chapter ").append(row.chapterNumber()).append(": ").append(title)
-              .append(" ===\n").append(plainContent).append("\n\n");
+                    .append(" ===\n").append(plainContent).append("\n\n");
         }
         String result = sb.toString().strip();
         return result.isEmpty() ? null : result;
     }
+
     public AiReview promoteRecommendation(UUID userId, UUID reviewId, UUID recId,
             String codexCategoryOverride,
             String codexTitleOverride) throws SQLException {
         AiReview review = reviewDao.findByIdForUser(reviewId, userId)
-                .orElseThrow(() -> new ReviewException(404, "not_found", "Review not found."));
+                .orElseThrow(() -> new ReviewException(Status.NO_CONTENT));
 
         AiReviewRecommendation rec = null;
         if (review.getRecommendations() != null) {
@@ -671,7 +679,7 @@ public class AiReviewService {
             }
         }
         if (rec == null) {
-            throw new ReviewException(404, "recommendation_not_found", "Recommendation not found.");
+            throw new ReviewException(Status.PRECONDITION_REQUIRED, "recommendation_not_found", "Recommendation not found.");
         }
         if (rec.getPromotedSceneId() != null) {
             return review; // already promoted — idempotent
@@ -679,7 +687,7 @@ public class AiReviewService {
 
         UUID projectId = review.getProjectId();
         if (projectId == null) {
-            throw new ReviewException(400, "no_project", "This review is not associated with a project.");
+            throw new ReviewException(Status.BAD_REQUEST, "no_project", "This review is not associated with a project.");
         }
 
         String category = resolveCodexCategory(firstNonBlank(codexCategoryOverride, rec.getCodexCategory()));
@@ -743,11 +751,11 @@ public class AiReviewService {
     private AiCredential resolveCredential(UUID userId, UUID credentialId) throws SQLException {
         if (credentialId != null) {
             return credentialDao.findById(credentialId, userId)
-                    .orElseThrow(() -> new ReviewException(404, "credential_not_found",
+                    .orElseThrow(() -> new ReviewException(Status.CONFLICT, "credential_not_found",
                             "The selected AI credential was not found."));
         }
         return credentialDao.findDefault(userId)
-                .orElseThrow(() -> new ReviewException(409, "no_ai_credential",
+                .orElseThrow(() -> new ReviewException(Status.CONFLICT, "no_ai_credential",
                         "No AI provider key is configured. Add one in Settings."));
     }
 
@@ -820,7 +828,8 @@ public class AiReviewService {
      * provider prompt.
      */
     private static String blankToNull(String value) {
-        if (value == null) return null;
+        if (value == null)
+            return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
     }

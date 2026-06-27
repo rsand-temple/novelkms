@@ -56,7 +56,7 @@ public class ArchiveResource {
         logger.info("User {} exporting project {}", userId, projectId);
         try {
             if (!access.ownsProject(userId, projectId)) {
-                return Response.status(Response.Status.NOT_FOUND).build();
+                return Response.status(Response.Status.NO_CONTENT).build();
             }
             ArchiveService.ExportMeta meta = archiveService.exportProject(userId, projectId);
             return Response.ok(meta.bytes(), ArchiveService.MIME_TYPE)
@@ -66,9 +66,9 @@ public class ArchiveResource {
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.NOT_FOUND).entity(e.getMessage()).build();
         } catch (Exception e) {
-            logger.error("KMS project export failed: projectId={}, error={}", projectId, e.getMessage(), e);
+            logger.error("NovelKMS project export failed: projectId={}, error={}", projectId, e.getMessage(), e);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("KMS export failed: " + e.getMessage())
+                    .entity("NovelKMS export failed: " + e.getMessage())
                     .build();
         }
     }

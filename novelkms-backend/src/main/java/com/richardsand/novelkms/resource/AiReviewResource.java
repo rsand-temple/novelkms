@@ -29,6 +29,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status;
 
 /**
  * AI review endpoints (chapter- and scene-scope).
@@ -142,7 +143,7 @@ public class AiReviewResource {
         logger.debug("AiReviewResource.getReview invoked: reviewId={}", reviewId);
         return run(() -> reviewDao.findByIdForUser(reviewId, CurrentUser.id(request))
                 .map(review -> Response.ok(review).build())
-                .orElseGet(() -> notFound()));
+                .orElseGet(() -> noContent()));
     }
 
     /**
@@ -156,7 +157,7 @@ public class AiReviewResource {
         logger.info("AiReviewResource.deleteReview invoked: reviewId={}", reviewId);
         return run(() -> trashService.trashReview(CurrentUser.id(request), reviewId).isPresent()
                 ? Response.noContent().build()
-                : notFound());
+                : noContent());
     }
 
     @POST
@@ -199,33 +200,33 @@ public class AiReviewResource {
             StatusRequest body) {
         logger.info("AiReviewResource.setRecommendationStatus invoked: reviewId={}, recId={}, status={}", reviewId, recId, body == null ? null : body.status);
         if (body == null || body.status == null) {
-            return error(400, "bad_request", "A status is required.");
+            return error(Status.BAD_REQUEST, "bad_request", "A status is required.");
         }
         String status = body.status.trim().toUpperCase();
         if (!VALID_STATUSES.contains(status)) {
-            return error(400, "invalid_status",
+            return error(Status.BAD_REQUEST, "invalid_status",
                     "status must be OPEN, DONE, DISMISSED, DEFERRED, DELETED, or PROMOTED.");
         }
         return run(() -> {
             UUID userId = CurrentUser.id(request);
             // Ownership: the review (and therefore its recommendations) must belong to the user.
             if (reviewDao.findByIdForUser(reviewId, userId).isEmpty()) {
-                return notFound();
+                return noContent();
             }
             if (!reviewDao.updateRecommendationStatus(recId, reviewId, status)) {
-                return notFound();
+                return noContent();
             }
             return reviewDao.findByIdForUser(reviewId, userId)
                     .map(review -> Response.ok(review).build())
-                    .orElseGet(() -> notFound());
+                    .orElseGet(() -> noContent());
         });
     }
 
-    private static Response notFound() {
-        return Response.status(404).entity(Map.of("error", "not_found")).build();
+    private static Response noContent() {
+        return Response.status(Status.NO_CONTENT).build();
     }
 
-    private static Response error(int status, String code, String message) {
+    private static Response error(Status status, String code, String message) {
         return Response.status(status).entity(Map.of("error", code, "message", message)).build();
     }
 
