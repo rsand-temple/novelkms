@@ -17,13 +17,13 @@ import { useNavContextMenu } from './NavContextMenuContext'
 import SceneItem from './SceneItem'
 
 const CATEGORY_ICONS = {
-    CHARACTER: PersonIcon,
-    VOICE:     RecordVoiceOverIcon,
-    PLOT:      TimelineIcon,
-    WORLD:     PublicIcon,
-    TIMELINE:  ScheduleIcon,
-    CANON:     VerifiedIcon,
-    NOTES:     StickyNote2Icon,
+	CHARACTER: PersonIcon,
+	VOICE: RecordVoiceOverIcon,
+	PLOT: TimelineIcon,
+	WORLD: PublicIcon,
+	TIMELINE: ScheduleIcon,
+	CANON: VerifiedIcon,
+	NOTES: StickyNote2Icon,
 }
 
 /**
@@ -36,77 +36,80 @@ const CATEGORY_ICONS = {
  * delete). Inline action buttons are intentionally absent.
  */
 export default function CodexCategoryItem({ codex, chapter, basePl, selection, setSelection }) {
-    const [open, setOpen] = useState(false)
-    const { data: entries } = useScenes(open ? chapter.id : null)
-    const { openContextMenu } = useNavContextMenu()
+	const [open, setOpen] = useState(false)
+	const { data: entries } = useScenes(open ? chapter.id : null)
+	const { openContextMenu } = useNavContextMenu()
 
-    const Icon = CATEGORY_ICONS[chapter.codexCategory] ?? FolderSpecialIcon
-    const label = chapter.title?.trim() ? chapter.title : 'Category'
+	const Icon = CATEGORY_ICONS[chapter.codexCategory] ?? FolderSpecialIcon
+	const label = chapter.title?.trim() ? chapter.title : 'Category'
 
-    const isSelected =
-        selection.codexId === codex.id &&
-        selection.chapterId === chapter.id &&
-        !selection.sceneId
+	const isSelected =
+		selection.codexId === codex.id &&
+		selection.chapterId === chapter.id &&
+		!selection.sceneId
 
-    const sceneContainerId = containerIds.scenes(String(chapter.id))
-    const entryIds = (entries ?? []).map(s => String(s.id))
+	const sceneContainerId = containerIds.scenes(String(chapter.id))
+	const entryIds = (entries ?? []).map(s => String(s.id))
 
-    const handleToggle = (e) => { e.stopPropagation(); setOpen(o => !o) }
+	const handleToggle = (e) => { e.stopPropagation(); setOpen(o => !o) }
 
-    const handleClick = () => {
-        if (!open) setOpen(true)
-        setSelection((prev) => ({
-            ...prev,
-            bookId:        null,
-            partId:        null,
-            chapterId:     chapter.id,
-            sceneId:       null,
-            codexId:       codex.id,
-            codexCategory: chapter.codexCategory ?? null,
-        }))
-    }
+	const handleClick = () => {
+		if (!open) setOpen(true)
+		setSelection((prev) => ({
+			...prev,
+			bookId: null,
+			partId: null,
+			chapterId: chapter.id,
+			sceneId: null,
+			codexId: codex.id,
+			codexCategory: chapter.codexCategory ?? null,
+		}))
+	}
 
-    const handleContextMenu = (e) => {
-        setSelection((prev) => ({
-            ...prev,
-            bookId: null, partId: null,
-            chapterId: chapter.id, sceneId: null,
-            codexId: codex.id, codexCategory: chapter.codexCategory ?? null,
-        }))
-        openContextMenu(e, 'codex-category', {
-            id:            chapter.id,
-            title:         label,
-            codexId:       codex.id,
-            codexCategory: chapter.codexCategory ?? null,
-            projectId:     selection.projectId,
-        })
-    }
+	const handleContextMenu = (e) => {
+		setSelection((prev) => ({
+			...prev,
+			bookId: null, partId: null,
+			chapterId: chapter.id, sceneId: null,
+			codexId: codex.id, codexCategory: chapter.codexCategory ?? null,
+		}))
+		openContextMenu(e, 'codex-category', {
+			id: chapter.id,
+			title: label,
+			codexId: codex.id,
+			codexCategory: chapter.codexCategory ?? null,
+			projectId: selection.projectId,
+		})
+	}
 
-    return (
-        <Box>
-            <ListItemButton selected={isSelected} onClick={handleClick} onContextMenu={handleContextMenu} sx={{ pl: basePl + 3 }}>
-                <ListItemIcon sx={{ minWidth: 28, cursor: 'pointer' }} onClick={handleToggle}>
-                    {open ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
-                </ListItemIcon>
-                <ListItemIcon sx={{ minWidth: 28 }}><Icon fontSize="small" /></ListItemIcon>
-                <ListItemText primary={label} slotProps={{ primary: { variant: 'body2' } }} />
-            </ListItemButton>
+	return (
+		<Box>
+			<ListItemButton selected={isSelected} onClick={handleClick} onContextMenu={handleContextMenu} sx={{ pl: basePl + 3 }}>
+				<ListItemIcon sx={{ minWidth: 28, cursor: 'pointer' }} onClick={handleToggle}>
+					{open ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
+				</ListItemIcon>
+				<ListItemIcon sx={{ minWidth: 28 }}><Icon fontSize="small" /></ListItemIcon>
+				<ListItemText primary={label} slotProps={{ primary: { variant: 'body2' } }} />
+			</ListItemButton>
 
-            <Collapse in={open} unmountOnExit>
-                <SortableContext id={sceneContainerId} items={entryIds} strategy={verticalListSortingStrategy}>
-                    {(entries ?? []).map((scene) => (
-                        <SceneItem
-                            key={scene.id}
-                            scene={scene}
-                            chapterId={chapter.id}
-                            partId={null}
-                            selection={selection}
-                            setSelection={setSelection}
-                            depth={1}
-                        />
-                    ))}
-                </SortableContext>
-            </Collapse>
-        </Box>
-    )
+			<Collapse in={open} unmountOnExit>
+				<SortableContext id={sceneContainerId} items={entryIds} strategy={verticalListSortingStrategy}>
+					{(entries ?? []).map((scene) => (
+						<SceneItem
+							key={scene.id}
+							scene={scene}
+							chapterId={chapter.id}
+							partId={null}
+							isCodexEntry={true}
+							codexId={codex.id}
+							codexCategory={chapter.codexCategory ?? null}
+							selection={selection}
+							setSelection={setSelection}
+							depth={1}
+						/>
+					))}
+				</SortableContext>
+			</Collapse>
+		</Box>
+	)
 }

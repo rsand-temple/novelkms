@@ -23,11 +23,21 @@ import { useSearch } from '../../search/SearchContext'
  * defaults to null for codex entries (which are not book-scoped); ChapterItem
  * passes its real bookId for manuscript scenes.
  */
-export default function SceneItem({ scene, chapterId, partId, bookId = null, selection, setSelection, depth = 0 }) {
+export default function SceneItem({
+	scene,
+	chapterId,
+	partId,
+	bookId = null,
+	isCodexEntry = false,
+	codexId = null,
+	codexCategory = null,
+	selection,
+	setSelection,
+	depth = 0,
+}) {
 	const isSelected = selection.sceneId === scene.id
 	const search = useSearch()
 	const matchCount = search.counts.scene[scene.id] ?? 0
-	const isCodexEntry = !!selection.codexId && selection.chapterId === chapterId
 
 	// ── Drop indicator ────────────────────────────────────────────────────────
 	const dragState = useDndState()
@@ -90,9 +100,9 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 			bookId,
 			partId: partId ?? null,
 			chapterId,
-			sceneId: isCodexEntry ? null : scene.id,
-			codexId: isCodexEntry ? prev.codexId : null,
-			codexCategory: isCodexEntry ? prev.codexCategory : null,
+			sceneId: scene.id,
+			codexId: isCodexEntry ? codexId : null,
+			codexCategory: isCodexEntry ? codexCategory : null,
 		}))
 	}
 
@@ -102,9 +112,9 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 			bookId,
 			partId: partId ?? null,
 			chapterId,
-			sceneId: isCodexEntry ? null : scene.id,
-			codexId: isCodexEntry ? prev.codexId : null,
-			codexCategory: isCodexEntry ? prev.codexCategory : null,
+			sceneId: scene.id,
+			codexId: isCodexEntry ? codexId : null,
+			codexCategory: isCodexEntry ? codexCategory : null,
 		}))
 		openContextMenu(e, 'scene', {
 			id: scene.id,
@@ -113,7 +123,7 @@ export default function SceneItem({ scene, chapterId, partId, bookId = null, sel
 			partId: partId ?? null,
 			bookId,
 			projectId: selection.projectId,
-			codexCategory: selection.codexId ? selection.codexCategory : null,
+			codexCategory: isCodexEntry ? codexCategory : null,
 		})
 	}
 
