@@ -15,21 +15,23 @@ server:
   rootPath: /api/*
   applicationConnectors:
     - type: http
+      bindHost: 127.0.0.1 # only bind to loopback
       port: 8080
   adminConnectors:
     - type: http
+      bindHost: 127.0.0.1 # only bind to loopback
       port: 8081
   requestLog:
     appenders:
       - type: console
         timeZone: America/New_York
-{% if LOGTOFILE == "true" %}
+#{% if LOGTOFILE == "true" %}
       - type: file
         timeZone: America/New_York
-        currentLogFilename: {{ LOGPATH | d('/logs', true)}}/novelkms-access.log
-        archivedLogFilenamePattern: {{ LOGPATH | d('/logs', true)}}/novelkms-access-%d.log.gz
+        currentLogFilename: "{{ LOGPATH | d('/logs', true)}}/novelkms-access.log"
+        archivedLogFilenamePattern: "{{ LOGPATH | d('/logs', true)}}/novelkms-access-%d.log.gz"
         archivedFileCount: 14
-{% endif %}
+#{% endif %}
 
 logging:
   level: DEBUG
@@ -41,17 +43,15 @@ logging:
   appenders:
     - type: console
       timeZone: America/New_York
-{% if LOGTOFILE == "true" %}
+#{% if LOGTOFILE == "true" %}
     - type: file
       timeZone: America/New_York
-      currentLogFilename: {{ LOGPATH | d('/logs', true)}}/novelkms.log
-      archivedLogFilenamePattern: {{ LOGPATH | d('/logs', true)}}/novelkms-%d.log.gz
+      currentLogFilename: "{{ LOGPATH | d('/logs', true)}}/novelkms.log"
+      archivedLogFilenamePattern: "{{ LOGPATH | d('/logs', true)}}/novelkms-%d.log.gz"
       archivedFileCount: 14
-{% endif %}
+#{% endif %}
   
 database:
-  #url: jdbc:postgresql://localhost:5432/postgres
-  #url: jdbc:h2:C:/dev/temp/novelkmsdb;MODE=PostgreSQL;AUTO_SERVER=TRUE
   url: {{DB_URL | d('jdbc:h2:C:/dev/temp/novelkmsdb;MODE=PostgreSQL;AUTO_SERVER=TRUE')}}
   adminUser: {{DB_USER | d('admin')}}
   adminPwd: {{DB_PASSWORD | d('admin123')}}
