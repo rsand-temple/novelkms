@@ -105,7 +105,7 @@ function ChapterForm({ chapter, chapterId }) {
 
 	return (
 		<Stack spacing={2} sx={{ p: 2 }}>
-			<Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+			<Stack direction="row" sx={{ mb: 1, alignItems: 'center' }}>
 				<Chip
 					label={`Chapter ${chapter.chapterNumber}`}
 					size="small" variant="outlined"
@@ -168,7 +168,7 @@ function PartForm({ part, partId, bookId }) {
 
 	return (
 		<Stack spacing={2} sx={{ p: 2 }}>
-			<Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+			<Stack direction="row" sx={{ mb: 1, alignItems: 'center' }}>
 				<Chip
 					label={`Part ${part.partNumber}`}
 					size="small" variant="outlined"
@@ -322,7 +322,7 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 				</Box>
 			)}
 
-			<Stack direction="row" spacing={1} alignItems="center">
+			<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
 				{/* Hidden file input; triggered by the Button label below. */}
 				<input
 					ref={fileInputRef}
@@ -392,7 +392,9 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 					<TextField
 						label="Width (in)" size="small" type="number" fullWidth
 						value={pageWidthIn} onChange={(e) => setPageWidthIn(e.target.value)}
-						inputProps={{ step: 0.125, min: 3, max: 12 }}
+						slotProps={{
+							htmlInput: { step: 0.125, min: 4, max: 18 },
+						}}
 					/>
 					<TextField
 						label="Height (in)" size="small" type="number" fullWidth
@@ -407,25 +409,33 @@ function BookForm({ book, bookId, projectId, selectTemplate }) {
 				<TextField
 					label="Top" size="small" type="number" fullWidth
 					value={pageMarginTopIn} onChange={(e) => setPageMarginTopIn(e.target.value)}
-					inputProps={{ step: 0.125, min: 0.25, max: 3 }}
+					slotProps={{
+						htmlInput: { step: 0.125, min: 0.25, max: 3 },
+					}}
 				/>
 				<TextField
 					label="Bottom" size="small" type="number" fullWidth
 					value={pageMarginBottomIn} onChange={(e) => setPageMarginBottomIn(e.target.value)}
-					inputProps={{ step: 0.125, min: 0.25, max: 3 }}
+					slotProps={{
+						htmlInput: { step: 0.125, min: 0.25, max: 3 },
+					}}
 				/>
 			</Stack>
 			<Stack direction="row" spacing={1}>
 				<TextField
 					label="Inner" size="small" type="number" fullWidth
 					value={pageMarginInnerIn} onChange={(e) => setPageMarginInnerIn(e.target.value)}
-					inputProps={{ step: 0.125, min: 0.25, max: 3 }}
+					slotProps={{
+						htmlInput: { step: 0.125, min: 0.25, max: 3 },
+					}}
 					helperText="Binding side"
 				/>
 				<TextField
 					label="Outer" size="small" type="number" fullWidth
 					value={pageMarginOuterIn} onChange={(e) => setPageMarginOuterIn(e.target.value)}
-					inputProps={{ step: 0.125, min: 0.25, max: 3 }}
+					slotProps={{
+						htmlInput: { step: 0.125, min: 0.25, max: 3 },
+					}}
 				/>
 			</Stack>
 

@@ -793,34 +793,42 @@ export default function EditorPanel({
 	useEffect(() => {
 		if (!editor) return;
 
+		let cancelled = false;
+		const setEditorContent = (html) => {
+			queueMicrotask(() => {
+				if (cancelled || editor.isDestroyed) return;
+				editor.commands.setContent(html, false);
+			});
+			return () => {
+				cancelled = true;
+			};
+		};
+
 		if (aiDocMode) {
 			if (aiDocLoading) return;
 			const parentId = isBookSummaryDoc ? bookId : chapterId;
 			const key = aiDocKey(aiDocType, parentId, aiDocCurrent);
 			if (loadedAiDocKeyRef.current === key) return;
-			editor.commands.setContent(aiDocCurrent?.content || '<p></p>', false);
 			prevSceneBreakIdsRef.current = [];
 			loadedAiDocKeyRef.current = key;
-			return;
+			return setEditorContent(aiDocCurrent?.content || '<p></p>');
 		}
 
 		if (templateMode) {
 			if (!template) return;
 			const key = templateKey(template);
 			if (loadedTemplateKeyRef.current === key) return;
-			editor.commands.setContent(template.content || '<p></p>', false);
 			prevSceneBreakIdsRef.current = [];
 			loadedTemplateKeyRef.current = key;
-			return;
+			return setEditorContent(template.content || '<p></p>');
 		}
 
 		if (singleSceneMode) {
 			if (!singleScene) return;
 			if (loadedSceneIdRef.current === sceneId) return;
-			editor.commands.setContent(singleScene.content || '<p></p>', false);
 			prevSceneBreakIdsRef.current = [];
 			loadedSceneIdRef.current = sceneId;
-			return;
+			return setEditorContent(singleScene.content || '<p></p>');
 		}
 
 		const contentScenes = aggregateDraftMode ? activeScenes : scenes;
@@ -840,15 +848,14 @@ export default function EditorPanel({
 			loadedChapterIdRef.current = scopeKey;
 			loadedSceneOrderRef.current = '';
 			prevSceneBreakIdsRef.current = [];
-			editor.commands.setContent('', false);
-			return;
+			return setEditorContent('');
 		}
 
 		const html = buildCombinedHTML(contentScenes, aggregateDraftMode ? draftDocument : null);
 		prevSceneBreakIdsRef.current = contentScenes.slice(1).map(s => s.id);
 		loadedChapterIdRef.current = scopeKey;
 		loadedSceneOrderRef.current = newOrder;
-		editor.commands.setContent(html, false);
+		return setEditorContent(html);
 	}, [editor, scenes, activeScenes, draftDocument, aggregateDraftMode, partDraftMode, partId, bookId, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template, aiDocMode, aiDocLoading, aiDocCurrent, aiDocType, isBookSummaryDoc]);
 
 	useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);

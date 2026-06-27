@@ -32,9 +32,9 @@ function sourceNote(editScope, srcScope, own) {
 	if (own) return `This ${owner} has its own instructions, overriding everything more general.`
 	const from =
 		srcScope === 'SYSTEM' ? 'the built-in default'
-		: srcScope === 'USER' ? 'your personal instructions'
-		: srcScope === 'PROJECT' ? 'this book’s project instructions'
-		: 'the inherited value'
+			: srcScope === 'USER' ? 'your personal instructions'
+				: srcScope === 'PROJECT' ? 'this book’s project instructions'
+					: 'the inherited value'
 	return `No ${owner} override — currently using ${from}. Saving creates a ${owner} override.`
 }
 
@@ -102,7 +102,7 @@ function Editor({ scope, id, initial }) {
 				disabled={busy}
 			/>
 
-			<Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 2 }}>
+			<Stack direction="row" spacing={1} sx={{ mt: 2, justifyContent: 'flex-end' }}>
 				{own && (
 					<Button color="warning" onClick={handleRemove} disabled={busy}>
 						{removing ? 'Working…' : removeLabel}

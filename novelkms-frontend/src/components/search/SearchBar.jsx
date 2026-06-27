@@ -26,8 +26,10 @@ export default function SearchBar() {
 			<Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
 				<TextField
 					inputRef={inputRef}
-					inputProps={{ 'data-nkms-search-input': true }}
 					size="small"
+					slotProps={{
+						htmlInput: { 'data-nkms-search-input': true },
+					}}
 					placeholder={`Find in ${scopeLabel}`}
 					value={search.query}
 					onChange={e => search.setQuery(e.target.value)}
