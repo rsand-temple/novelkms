@@ -241,8 +241,23 @@ Migration lessons:
 - Completed archives should be atomically moved into Dropbox after verification.
 - Restore tests are mandatory before backups can be trusted.
 
+
+### V28 — Stripe billing and subscription enforcement
+
+Stripe subscription support was added using Stripe-hosted Checkout and Customer Portal, with NovelKMS retaining a local entitlement table for authorization. Stripe remains the billing system of record; `user_subscription` is the app's access-control snapshot, and `stripe_webhook_event` provides webhook idempotency/audit. Detailed implementation notes live in `README.billing_and_subscriptions.md`.
+
+**Backend.** New billing config (`stripeSecretKey`, `stripeWebhookSecret`, `stripePriceId`, success/cancel URLs, `enforceSubscriptions` kill switch), `BillingService`, `BillingResource`, `StripeWebhookResource`, `UserSubscriptionDao`, and `StripeWebhookEventDao`. The webhook endpoint is public through both authentication and tenant-authorization filters. Checkout maps Stripe sessions to NovelKMS users through `client_reference_id` and subscription metadata.
+
+**Entitlements.** Access-granting statuses are `active`, `active_canceling`, `trialing`, and `family`; `past_due` can remain grace-access while still within `current_period_end`. `family` is a manual entitlement override and Stripe events must not demote it. Active scheduled cancellations are normalized to local status `active_canceling`, with `cancel_at`, period end, feedback, comment, reason, and cancellation request timestamp preserved.
+
+**Frontend.** Added billing API/hooks, a Settings → Billing tab, Stripe success/cancel return pages, and global handling for `402 subscription_required` so blocked users are routed to Billing instead of seeing generic failures.
+
 ## Current architectural watchlist
 
+- Add admin-only family access management and a support/debug billing view.
+- Add plan mapping from Stripe price IDs to friendly `plan_key` values.
+- Add tests for billing entitlement logic and Stripe webhook subscription parsing.
+- Consider a scheduled Stripe reconciliation job for local subscription state.
 - Finish/repair ePub export menu and endpoint wiring.
 - Move project/document settings out of localStorage.
 - Add style-editor UI.

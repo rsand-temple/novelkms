@@ -49,6 +49,16 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 
 ## Completed feature areas
 
+### Billing and subscriptions
+
+- Stripe-hosted Checkout creates subscriptions from authenticated NovelKMS sessions.
+- Stripe Customer Portal supports user-managed billing and cancellation.
+- Webhooks synchronize Stripe lifecycle events into local `user_subscription` state with `stripe_webhook_event` idempotency/audit.
+- Subscription enforcement is controlled by `billing.enforceSubscriptions`; blocked users receive `402 subscription_required` and the frontend routes them to Settings → Billing.
+- Current entitlement statuses include `active`, `active_canceling`, `trialing`, `past_due`, `canceled`, `unpaid`, `paused`, `incomplete`, `incomplete_expired`, `none`, and manual `family`.
+- Active scheduled cancellation is represented locally as `active_canceling`; cancellation date, feedback, comment, reason, and request timestamp are preserved.
+- Detailed billing implementation notes are in `README.billing_and_subscriptions.md`.
+
 ### Manuscript structure and editing
 
 - Project, book, part, chapter, and scene hierarchy.
@@ -78,7 +88,6 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 - DOCX export for book, part, chapter, and scene.
 - Markdown import/export remains planned.
 - ePub export is a current priority; verify current backend/menu wiring before marking complete.
-- **Portable KMS archive export/import is planned as a user-facing portability feature.** This is distinct from operator backup/restore: backups remain PostgreSQL dumps plus deployment/config state, while archive export/import is a versioned NovelKMS data contract intended to let an author take their creative/project data with them or move data between environments. V1 should focus on project-level export and import-as-new-project using a JSON file such as `novelkms-export-v1.json`. The archive should include manuscript hierarchy, scene HTML, book/project metadata, Codex, AI reviews and recommendations, memory documents, chapter/book summaries, document/page/AI settings, and relevant templates. It should exclude authentication state, sessions, OAuth links, password hashes, and raw AI API keys; imported AI credential metadata can be restored, but secrets must be re-entered. Normal import should create new local entity IDs and remap relationships from source IDs to target IDs. Merge/replace modes, all-user export, zipped `.nkms` packaging, and admin-only preserve-ID import can follow later.
 
 ### AI workflow
 
@@ -97,7 +106,6 @@ The immediate goal is still practical validation: determine whether NovelKMS man
   - Right-clicking a book → **View chapter summaries…** opens a dialog with the read-only aggregated chapter summaries (each with a per-chapter staleness chip) plus the book-summary panel (generate / regenerate / edit). 
   - Generating the book summary is gated by a coverage warning (`PreBookSummaryDialog`) when chapters are missing or stale, offering to fill the gaps first. Chapter summaries are created/edited/cleared from the chapter nav context menu.
 - **One-time author guidance (V26).** Every generation flow — chapter/scene review, memory document, chapter summary, book summary — now takes an optional free-text guidance note for that single run only (e.g. "the letter in this chapter is canonically a forgery"), separate from the persistent form/template overrides and from the still-future Codex-context increment. Stored as provenance on the resulting artifact; the UI field pre-fills from whatever guidance produced the current artifact and is never auto-cleared, so guidance can be repeated or refined across runs. Prompt versions bumped accordingly (`chapter-review-v6`, `memory-v2`, `chapter-summary-v2`,`book-summary-v2`).
-- **Memory/summary documents as nav-tree leaves (V27).** Each manuscript chapter gets two fixed bottom leaves — *Memory* and *Summary* — and each book gets a *Summary* leaf, italicized with a distinct icon from scenes. Selecting one opens the document for full rich-text editing in EditorPanel instead of a modal, with Generate/Regenerate (gated by a discard-content warning plus the existing continuity/coverage dialogs) and one-time guidance in the toolbar. Memory/summary storage moved from plain text to authored HTML to support markup; `AiReviewService` strips it back to plain text before feeding AI prompts. The ReviewRail Memory tab and book-summary aggregate dialog are kept as read-only "peek" surfaces with an "Edit in document" link; the old standalone nav dialogs (`MemoryDocDialog`, `ChapterSummaryDialog`) were removed.
 
 
 ### Codex and Trash
@@ -118,6 +126,7 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 
 ## Known issues / watchlist
 
+- Billing needs admin/support tooling for family access, plan mapping, webhook diagnostics, and eventual Stripe reconciliation.
 - ePub export menu/API wiring needs verification because the menu entry appears to have regressed.
 - Style-editor UI is deferred; styles exist but need full edit/override/reset UX.
 - Full-book TipTap performance should be profiled with large and image-heavy manuscripts.
@@ -131,9 +140,9 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 
 ## Near-term next actions
 
-1. Frontend Phase 2: book-aware editor render, remove old doc-settings popover, reduce global dialog to user-only, clean Properties panel to metadata + cover.
-2. Restore or finish ePub export in the menus and verify the backing endpoint.
-3. Add project-level portable KMS JSON export/import as import-as-new-project first; keep it distinct from database backup/restore.
+1. Add billing admin/support tooling: family access management, plan mapping, webhook diagnostics, and subscription reconciliation.
+2. Frontend Phase 2: book-aware editor render, remove old doc-settings popover, reduce global dialog to user-only, clean Properties panel to metadata + cover.
+3. Restore or finish ePub export in the menus and verify the backing endpoint.
 4. Add a Future/deferred AI findings view.
 5. Add style-editor UI.
 6. Begin enriching AI prompts with selected Codex/context data (Phase C per-chapter memory artifact).
