@@ -70,6 +70,7 @@ public class StripeWebhookResource {
     @Path("/billing/stripe/webhook")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response webhook(String payload, @HeaderParam("Stripe-Signature") String signatureHeader) {
+        logger.debug("Stripe webhook invoked");
         if (isBlank(webhookSecret)) {
             logger.error("Stripe webhook received but no webhook secret is configured");
             return error(Status.INTERNAL_SERVER_ERROR, "stripe_webhook_not_configured");

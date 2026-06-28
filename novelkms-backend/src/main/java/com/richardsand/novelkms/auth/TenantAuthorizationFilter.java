@@ -28,8 +28,12 @@ import jakarta.ws.rs.ext.Provider;
 @Provider
 @Priority(Priorities.AUTHORIZATION)
 public class TenantAuthorizationFilter implements ContainerRequestFilter {
-    private static final Set<String> PUBLIC_PREFIXES = Set.of("auth/", "healthcheck");
-    private static final Logger      logger          = LoggerFactory.getLogger(TenantAuthorizationFilter.class);
+    private static final Set<String> PUBLIC_PREFIXES = Set.of(
+            "auth/",
+            "healthcheck",
+            "billing/stripe/webhook");
+
+    private static final Logger logger = LoggerFactory.getLogger(TenantAuthorizationFilter.class);
 
     private final TenantAccessDao access;
     private final ObjectMapper    mapper;

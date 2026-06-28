@@ -20,6 +20,7 @@ import com.richardsand.novelkms.auth.AuthenticationFilter;
 import com.richardsand.novelkms.auth.OAuthService;
 import com.richardsand.novelkms.auth.SecretCipher;
 import com.richardsand.novelkms.auth.SessionService;
+import com.richardsand.novelkms.auth.SubscriptionAuthorizationFilter;
 import com.richardsand.novelkms.auth.TenantAuthorizationFilter;
 import com.richardsand.novelkms.dao.AccountDao;
 import com.richardsand.novelkms.dao.AiCredentialDao;
@@ -237,6 +238,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(SceneResource.class);
         env.jersey().register(StripeWebhookResource.class);
         env.jersey().register(StyleResource.class);
+        env.jersey().register(SubscriptionAuthorizationFilter.class);
         env.jersey().register(SummaryResource.class);
         env.jersey().register(TemplateResource.class);
         env.jersey().register(TenantAuthorizationFilter.class);

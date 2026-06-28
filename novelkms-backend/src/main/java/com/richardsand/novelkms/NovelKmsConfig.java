@@ -22,7 +22,7 @@ public class NovelKmsConfig extends Configuration {
         public String tokenUrl;
         public String userInfoUrl;
         public String scope;
-        public String tenant = null; // for MS
+        public String tenant = null;   // for MS
     }
 
     @Getter
@@ -48,14 +48,15 @@ public class NovelKmsConfig extends Configuration {
          */
         public String encryptionKey;
     }
-    
+
     @Getter
     public static class Billing {
-        public String stripeWebhookSecret;
-        public String stripeSecretKey;
-        public String stripePriceId;
-        public String successUrl;
-        public String cancelUrl;
+        public String  stripeWebhookSecret;
+        public String  stripeSecretKey;
+        public String  stripePriceId;
+        public String  successUrl;
+        public String  cancelUrl;
+        public boolean enforceSubscriptions = false;
     }
 
     @JsonProperty
@@ -66,7 +67,7 @@ public class NovelKmsConfig extends Configuration {
 
     @JsonProperty
     Security security;
-    
+
     @JsonProperty
     Billing billing;
 }
