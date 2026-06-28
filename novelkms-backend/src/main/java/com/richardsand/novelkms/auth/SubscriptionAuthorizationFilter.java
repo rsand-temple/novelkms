@@ -80,6 +80,7 @@ public class SubscriptionAuthorizationFilter implements ContainerRequestFilter {
             UserSubscription subscription = subscriptionDao.findByUserId(userId).orElse(null);
 
             if (subscription != null && subscription.hasAccess(Instant.now())) {
+                logger.debug("User {} has valid subscription for {}", userId, path);
                 return;
             }
 
