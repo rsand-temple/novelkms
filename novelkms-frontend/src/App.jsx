@@ -183,7 +183,7 @@ export default function App() {
 	const [projectExportConfirmOpen, setProjectExportConfirmOpen] = useState(false)
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
 	const [kmsImportDialogOpen, setKmsImportDialogOpen] = useState(false)
-	const [settings, setSettings] = useState({ open: false, tab: 'document' })
+	const [settings, setSettings] = useState({ open: false, tab: 'document', subscriptionRequired: false })
 	const [settingsMenuAnchor, setSettingsMenuAnchor] = useState(null)
 	const [ctxSettings, setCtxSettings] = useState({ open: false, scope: null })
 
@@ -224,7 +224,22 @@ export default function App() {
 	useEffect(() => {
 		window.localStorage.setItem('novelkms.propsCollapsed', String(propsCollapsed))
 	}, [propsCollapsed])
-	
+
+	useEffect(() => {
+		const handleSubscriptionRequired = () => {
+			setSettings({
+				open: true,
+				tab: 'billing',
+				subscriptionRequired: true,
+			})
+		}
+
+		window.addEventListener('novelkms:subscription-required', handleSubscriptionRequired)
+		return () => {
+			window.removeEventListener('novelkms:subscription-required', handleSubscriptionRequired)
+		}
+	}, [])
+
 	const path = window.location.pathname
 
 	if (path === '/billing/success') {
@@ -735,11 +750,11 @@ export default function App() {
 						</Box>
 
 						<span>
-						<ResizeHandle
-							side="left"
-							disabled={navCollapsed}
-							onMouseDown={(event) => handleResizeMouseDown(event, 'nav')}
-						/>
+							<ResizeHandle
+								side="left"
+								disabled={navCollapsed}
+								onMouseDown={(event) => handleResizeMouseDown(event, 'nav')}
+							/>
 						</span>
 
 						<Box sx={{
@@ -775,11 +790,11 @@ export default function App() {
 						</Box>
 
 						<span>
-						<ResizeHandle
-							side="right"
-							disabled={propsCollapsed}
-							onMouseDown={(event) => handleResizeMouseDown(event, 'props')}
-						/>
+							<ResizeHandle
+								side="right"
+								disabled={propsCollapsed}
+								onMouseDown={(event) => handleResizeMouseDown(event, 'props')}
+							/>
 						</span>
 
 						<Box sx={{
@@ -952,7 +967,8 @@ export default function App() {
 						open={settings.open}
 						initialTab={settings.tab}
 						projectId={selection.projectId}
-						onClose={() => setSettings(s => ({ ...s, open: false }))}
+						subscriptionRequired={settings.subscriptionRequired}
+						onClose={() => setSettings(s => ({ ...s, open: false, subscriptionRequired: false }))}
 					/>
 
 					<EditorSettingsDialog

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-	Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Tab, Tabs, Typography,
+	Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Tab, Tabs, Typography,
 } from '@mui/material'
 import SettingsIcon from '@mui/icons-material/Settings'
 import DocumentSettingsTab from './DocumentSettingsTab'
@@ -22,7 +22,7 @@ const TAB_CONTENT_HEIGHT = '55vh'
 // Inner content is mounted fresh whenever the dialog opens (see the `{open && …}`
 // guard below), so the active tab always starts at `initialTab` and each tab's
 // own state starts clean — no effect syncing needed.
-function SettingsContent({ initialTab, projectId }) {
+function SettingsContent({ initialTab, projectId, subscriptionRequired }) {
 	const [tab, setTab] = useState(initialTab ?? 'document')
 
 	return (
@@ -37,6 +37,12 @@ function SettingsContent({ initialTab, projectId }) {
 				<Tab value="billing" label="Billing" />
 				<Tab value="other" label="Other" />
 			</Tabs>
+
+			{tab === 'billing' && subscriptionRequired && (
+				<Alert severity="warning" sx={{ mb: 2 }}>
+					A subscription is required to continue using NovelKMS.
+				</Alert>
+			)}
 
 			<Box sx={{ height: TAB_CONTENT_HEIGHT, overflowY: 'auto', pr: 0.5 }}>
 				{tab === 'document' && <DocumentSettingsTab projectId={projectId} />}
@@ -74,7 +80,7 @@ function SettingsContent({ initialTab, projectId }) {
  *                                          per-project override panel.
  *   onClose     {() => void}
  */
-export default function SettingsDialog({ open, initialTab = 'document', projectId, onClose }) {
+export default function SettingsDialog({ open, initialTab = 'document', projectId, subscriptionRequired = false, onClose }) {
 	return (
 		<Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
 			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -83,7 +89,13 @@ export default function SettingsDialog({ open, initialTab = 'document', projectI
 			</DialogTitle>
 
 			<DialogContent dividers>
-				{open && <SettingsContent initialTab={initialTab} projectId={projectId} />}
+				{open && (
+					<SettingsContent
+						initialTab={initialTab}
+						projectId={projectId}
+						subscriptionRequired={subscriptionRequired}
+					/>
+				)}
 			</DialogContent>
 
 			<DialogActions>
