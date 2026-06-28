@@ -16,6 +16,10 @@ public record UserSubscription(
         Instant trialStart,
         Instant trialEnd,
         boolean cancelAtPeriodEnd,
+        Instant cancelAt,
+        String cancellationFeedback,
+        String cancellationComment,
+        String cancellationReason,
         Instant canceledAt,
         Instant lastPaymentSucceededAt,
         Instant lastPaymentFailedAt,
@@ -23,16 +27,13 @@ public record UserSubscription(
         Instant updatedAt) {
 
     public boolean hasAccess(Instant now) {
-        if ("active".equals(status) || "trialing".equals(status) || "family".equals(status)) {
+        if ("active".equals(status)
+                || "active_canceling".equals(status)
+                || "trialing".equals(status)
+                || "family".equals(status)) {
             return true;
         }
 
-        /*
-         * Optional grace behavior for failed renewals.
-         *
-         * The local row still records the real Stripe status, but the app may keep
-         * access until the paid-through period actually ends.
-         */
         if ("past_due".equals(status) && currentPeriodEnd != null && currentPeriodEnd.isAfter(now)) {
             return true;
         }

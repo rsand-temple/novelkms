@@ -144,6 +144,8 @@ public class StripeWebhookResource {
             String relatedCustomerId,
             String relatedSubscriptionId) throws SQLException {
 
+        logger.debug("Stripe message {} for {}: {}", eventType, relatedUserId, object);
+
         return switch (eventType) {
         case "checkout.session.completed" ->
             handleCheckoutSessionCompleted(object, relatedUserId, relatedCustomerId, relatedSubscriptionId);
@@ -210,6 +212,10 @@ public class StripeWebhookResource {
                 null,
                 false,
                 null,
+                null,
+                null,
+                null,
+                null,
                 Instant.now(),
                 null));
 
@@ -252,21 +258,30 @@ public class StripeWebhookResource {
             status = "canceled";
         }
 
+        boolean  scheduledToCancel   = scheduledToCancel(subscription);
+        String   localStatus         = localSubscriptionStatus(status, scheduledToCancel);
+        Instant  cancelAt            = unixInstant(subscription.path("cancel_at"));
+        JsonNode cancellationDetails = subscription.path("cancellation_details");
+
         PriceInfo price = firstPrice(subscription);
 
         subscriptionDao.upsertStripeSubscription(new StripeSubscriptionUpdate(
                 userId,
                 relatedCustomerId,
                 relatedSubscriptionId,
-                status,
+                localStatus,
                 price.planKey(),
                 price.priceId(),
                 price.productId(),
-                unixInstant(subscription.path("current_period_start")),
-                unixInstant(subscription.path("current_period_end")),
+                subscriptionPeriodStart(subscription),
+                subscriptionPeriodEnd(subscription),
                 unixInstant(subscription.path("trial_start")),
                 unixInstant(subscription.path("trial_end")),
-                bool(subscription, "cancel_at_period_end"),
+                scheduledToCancel,
+                cancelAt,
+                text(cancellationDetails, "feedback"),
+                text(cancellationDetails, "comment"),
+                text(cancellationDetails, "reason"),
                 unixInstant(subscription.path("canceled_at")),
                 null,
                 null));
@@ -481,6 +496,61 @@ public class StripeWebhookResource {
         } catch (IllegalArgumentException e) {
             return Optional.empty();
         }
+    }
+
+    private static Instant subscriptionPeriodStart(JsonNode subscription) {
+        Instant topLevel = unixInstant(subscription.path("current_period_start"));
+        if (topLevel != null) {
+            return topLevel;
+        }
+
+        return unixInstant(subscription
+                .path("items")
+                .path("data")
+                .path(0)
+                .path("current_period_start"));
+    }
+
+    private static Instant subscriptionPeriodEnd(JsonNode subscription) {
+        Instant topLevel = unixInstant(subscription.path("current_period_end"));
+        if (topLevel != null) {
+            return topLevel;
+        }
+
+        Instant itemLevel = unixInstant(subscription
+                .path("items")
+                .path("data")
+                .path(0)
+                .path("current_period_end"));
+
+        if (itemLevel != null) {
+            return itemLevel;
+        }
+
+        return unixInstant(subscription.path("cancel_at"));
+    }
+
+    private static String localSubscriptionStatus(String stripeStatus, boolean scheduledToCancel) {
+        if ("active".equals(stripeStatus) && scheduledToCancel) {
+            return "active_canceling";
+        }
+
+        return isBlank(stripeStatus) ? "canceled" : stripeStatus;
+    }
+
+    private static boolean scheduledToCancel(JsonNode subscription) {
+        if (bool(subscription, "cancel_at_period_end")) {
+            return true;
+        }
+
+        Instant cancelAt = unixInstant(subscription.path("cancel_at"));
+        Instant endedAt  = unixInstant(subscription.path("ended_at"));
+        String  status   = text(subscription, "status");
+
+        return cancelAt != null
+                && endedAt == null
+                && !"canceled".equals(status)
+                && !"incomplete_expired".equals(status);
     }
 
     private static boolean isBlank(String value) {

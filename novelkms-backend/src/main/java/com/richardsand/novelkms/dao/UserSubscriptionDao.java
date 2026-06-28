@@ -36,6 +36,10 @@ public class UserSubscriptionDao {
             Instant trialStart,
             Instant trialEnd,
             boolean cancelAtPeriodEnd,
+            Instant cancelAt,
+            String cancellationFeedback,
+            String cancellationComment,
+            String cancellationReason,
             Instant canceledAt,
             Instant lastPaymentSucceededAt,
             Instant lastPaymentFailedAt) {
@@ -45,7 +49,9 @@ public class UserSubscriptionDao {
             user_id, stripe_customer_id, stripe_subscription_id, status, plan_key,
             stripe_price_id, stripe_product_id,
             current_period_start, current_period_end, trial_start, trial_end,
-            cancel_at_period_end, canceled_at,
+            cancel_at_period_end, cancel_at,
+            cancellation_feedback, cancellation_comment, cancellation_reason,
+            canceled_at,
             last_payment_succeeded_at, last_payment_failed_at,
             created_at, updated_at
             """;
@@ -251,10 +257,12 @@ public class UserSubscriptionDao {
                     (user_id, stripe_customer_id, stripe_subscription_id, status, plan_key,
                      stripe_price_id, stripe_product_id,
                      current_period_start, current_period_end, trial_start, trial_end,
-                     cancel_at_period_end, canceled_at,
+                     cancel_at_period_end, cancel_at,
+                     cancellation_feedback, cancellation_comment, cancellation_reason,
+                     canceled_at,
                      last_payment_succeeded_at, last_payment_failed_at,
                      created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """;
 
         try (PreparedStatement ps = c.prepareStatement(sql)) {
@@ -289,6 +297,10 @@ public class UserSubscriptionDao {
                        trial_start = ?,
                        trial_end = ?,
                        cancel_at_period_end = ?,
+                       cancel_at = ?,
+                       cancellation_feedback = ?,
+                       cancellation_comment = ?,
+                       cancellation_reason = ?,
                        canceled_at = ?,
                        last_payment_succeeded_at = ?,
                        last_payment_failed_at = ?,
@@ -309,11 +321,20 @@ public class UserSubscriptionDao {
             ps.setTimestamp(i++, toTimestamp(update.trialStart()));
             ps.setTimestamp(i++, toTimestamp(update.trialEnd()));
             ps.setBoolean(i++, update.cancelAtPeriodEnd());
+            ps.setTimestamp(i++, toTimestamp(update.cancelAt()));
+            ps.setString(i++, blankToNull(update.cancellationFeedback()));
+            ps.setString(i++, blankToNull(update.cancellationComment()));
+            ps.setString(i++, blankToNull(update.cancellationReason()));
             ps.setTimestamp(i++, toTimestamp(update.canceledAt()));
             ps.setTimestamp(i++, toTimestamp(update.lastPaymentSucceededAt()));
             ps.setTimestamp(i++, toTimestamp(update.lastPaymentFailedAt()));
             ps.setObject(i++, update.userId());
-            ps.executeUpdate();
+
+            int updated = ps.executeUpdate();
+            if (updated != 1) {
+                throw new SQLException("Expected to update one user_subscription row for user_id "
+                        + update.userId() + " but updated " + updated);
+            }
         }
     }
 
@@ -336,6 +357,10 @@ public class UserSubscriptionDao {
         ps.setTimestamp(i++, toTimestamp(update.trialStart()));
         ps.setTimestamp(i++, toTimestamp(update.trialEnd()));
         ps.setBoolean(i++, update.cancelAtPeriodEnd());
+        ps.setTimestamp(i++, toTimestamp(update.cancelAt()));
+        ps.setString(i++, blankToNull(update.cancellationFeedback()));
+        ps.setString(i++, blankToNull(update.cancellationComment()));
+        ps.setString(i++, blankToNull(update.cancellationReason()));
         ps.setTimestamp(i++, toTimestamp(update.canceledAt()));
         ps.setTimestamp(i++, toTimestamp(update.lastPaymentSucceededAt()));
         ps.setTimestamp(i++, toTimestamp(update.lastPaymentFailedAt()));
@@ -365,6 +390,10 @@ public class UserSubscriptionDao {
                 toInstant(rs.getTimestamp("trial_start")),
                 toInstant(rs.getTimestamp("trial_end")),
                 rs.getBoolean("cancel_at_period_end"),
+                toInstant(rs.getTimestamp("cancel_at")),
+                rs.getString("cancellation_feedback"),
+                rs.getString("cancellation_comment"),
+                rs.getString("cancellation_reason"),
                 toInstant(rs.getTimestamp("canceled_at")),
                 toInstant(rs.getTimestamp("last_payment_succeeded_at")),
                 toInstant(rs.getTimestamp("last_payment_failed_at")),
