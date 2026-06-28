@@ -16,12 +16,23 @@ import jakarta.ws.rs.ext.Provider;
 @Provider
 @Priority(Priorities.AUTHENTICATION)
 public class AuthenticationFilter implements ContainerRequestFilter {
-    private static final Set<String> PUBLIC_PREFIXES = Set.of("auth/", "healthcheck");
-    private final SessionService sessions;
-    @Inject public AuthenticationFilter(SessionService sessions) { this.sessions = sessions; }
-    @Override public void filter(ContainerRequestContext request) throws IOException {
+    private static final Set<String> PUBLIC_PREFIXES = Set.of(
+            "auth/",
+            "healthcheck",
+            "billing/stripe/webhook");
+
+    private final SessionService     sessions;
+
+    @Inject
+    public AuthenticationFilter(SessionService sessions) {
+        this.sessions = sessions;
+    }
+
+    @Override
+    public void filter(ContainerRequestContext request) throws IOException {
         String path = request.getUriInfo().getPath();
-        if ("OPTIONS".equals(request.getMethod()) || PUBLIC_PREFIXES.stream().anyMatch(path::startsWith)) return;
+        if ("OPTIONS".equals(request.getMethod()) || PUBLIC_PREFIXES.stream().anyMatch(path::startsWith))
+            return;
         Cookie cookie = request.getCookies().get(AuthConstants.SESSION_COOKIE);
         try {
             var user = sessions.authenticate(cookie == null ? null : cookie.getValue());

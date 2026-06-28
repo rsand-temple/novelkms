@@ -39,6 +39,7 @@
 		<nimbus-jose-jwt.version>9.48</nimbus-jose-jwt.version>
 		<poi-ooxml.version>5.5.1</poi-ooxml.version>
 		<postgres.version>42.7.11</postgres.version>
+		<stripe-sdk.version>30.1.0</stripe-sdk.version>
 	</properties>
 
 	<build>
@@ -315,6 +316,13 @@
 			<groupId>org.glassfish.jersey.media</groupId>
 			<artifactId>jersey-media-multipart</artifactId>
 			<version>${jersey.version}</version>
+		</dependency>
+		
+		<!-- Billing -->
+		<dependency>
+			<groupId>com.stripe</groupId>
+			<artifactId>stripe-java</artifactId>
+			<version>${stripe-sdk.version}</version>
 		</dependency>
 
 		<!-- JUnit -->

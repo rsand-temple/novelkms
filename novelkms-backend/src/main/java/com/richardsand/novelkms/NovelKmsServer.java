@@ -40,11 +40,13 @@ import com.richardsand.novelkms.dao.PageLayoutDao;
 import com.richardsand.novelkms.dao.PartDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
+import com.richardsand.novelkms.dao.StripeWebhookEventDao;
 import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dao.TenantAccessDao;
 import com.richardsand.novelkms.dao.TrashDao;
 import com.richardsand.novelkms.dao.UserPreferenceDao;
 import com.richardsand.novelkms.dao.UserStyleDao;
+import com.richardsand.novelkms.dao.UserSubscriptionDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
 import com.richardsand.novelkms.dropwizard.web.SpaFallbackFilter;
 import com.richardsand.novelkms.resource.AccountResource;
@@ -53,6 +55,7 @@ import com.richardsand.novelkms.resource.AiFormInstructionsResource;
 import com.richardsand.novelkms.resource.AiReviewResource;
 import com.richardsand.novelkms.resource.ArchiveResource;
 import com.richardsand.novelkms.resource.AuthResource;
+import com.richardsand.novelkms.resource.BillingResource;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterMemoryResource;
 import com.richardsand.novelkms.resource.ChapterResource;
@@ -65,6 +68,7 @@ import com.richardsand.novelkms.resource.PageLayoutResource;
 import com.richardsand.novelkms.resource.PartResource;
 import com.richardsand.novelkms.resource.ProjectResource;
 import com.richardsand.novelkms.resource.SceneResource;
+import com.richardsand.novelkms.resource.StripeWebhookResource;
 import com.richardsand.novelkms.resource.StyleResource;
 import com.richardsand.novelkms.resource.SummaryResource;
 import com.richardsand.novelkms.resource.TemplateResource;
@@ -72,6 +76,7 @@ import com.richardsand.novelkms.resource.TrashResource;
 import com.richardsand.novelkms.resource.UserPreferenceResource;
 import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.ArchiveService;
+import com.richardsand.novelkms.service.BillingService;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
@@ -168,11 +173,16 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         UserPreferenceDao     userPreferenceDao     = new UserPreferenceDao(ds);
         UserStyleDao          userStyleDao          = new UserStyleDao(ds);
 
+        // Billing DAOs
+        UserSubscriptionDao   userSubscriptionDao   = new UserSubscriptionDao(ds);
+        StripeWebhookEventDao stripeWebhookEventDao = new StripeWebhookEventDao(ds);
+
         // Services
+        ArchiveService    archiveService    = new ArchiveService(archiveDao);
+        BillingService    billingService    = new BillingService(userSubscriptionDao, config);
         EpubExportService epubExportService = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
         ExportService     exportService     = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
         ImportService     importService     = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        ArchiveService    archiveService    = new ArchiveService(archiveDao);
         OAuthService      oauthService      = new OAuthService(config.getAuth(), authDao);
         SessionService    sessionService    = new SessionService(authDao, config.getAuth());
         TrashService      trashService      = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
@@ -211,6 +221,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(ArchiveResource.class);
         env.jersey().register(AuthenticationFilter.class);
         env.jersey().register(AuthResource.class);
+        env.jersey().register(BillingResource.class);
         env.jersey().register(BookResource.class);
         env.jersey().register(ChapterMemoryResource.class);
         env.jersey().register(ChapterResource.class);
@@ -224,6 +235,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(PartResource.class);
         env.jersey().register(ProjectResource.class);
         env.jersey().register(SceneResource.class);
+        env.jersey().register(StripeWebhookResource.class);
         env.jersey().register(StyleResource.class);
         env.jersey().register(SummaryResource.class);
         env.jersey().register(TemplateResource.class);
@@ -254,6 +266,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(aiReviewService).to(AiReviewService.class);
                 bind(archiveDao).to(ArchiveDao.class);
                 bind(authDao).to(AuthDao.class);
+                bind(billingService).to(BillingService.class);
                 bind(bookDao).to(BookDao.class);
                 bind(bookSummaryDao).to(BookSummaryDao.class);
                 bind(chapterDao).to(ChapterDao.class);
@@ -275,11 +288,13 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(projectDao).to(ProjectDao.class);
                 bind(sceneDao).to(SceneDao.class);
                 bind(sessionService).to(SessionService.class);
+                bind(stripeWebhookEventDao).to(StripeWebhookEventDao.class);
                 bind(templateDao).to(TemplateDao.class);
                 bind(tenantAccessDao).to(TenantAccessDao.class);
                 bind(trashDao).to(TrashDao.class);
                 bind(trashService).to(TrashService.class);
                 bind(userStyleDao).to(UserStyleDao.class);
+                bind(userSubscriptionDao).to(UserSubscriptionDao.class);
                 bind(userPreferenceDao).to(UserPreferenceDao.class);
             }
         });
