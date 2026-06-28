@@ -31,6 +31,7 @@ import { SearchProvider } from './search/SearchProvider'
 import { ReviewProvider } from './review/ReviewProvider'
 import { usePreferences } from './hooks/usePreferences'
 import { hydrateSkipDeleteConfirm } from './utils/deleteConfirmPrefs'
+import BillingReturnPage from './components/subscription/BillingReturnPage'
 
 /* eslint-disable no-undef */
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
@@ -223,6 +224,16 @@ export default function App() {
 	useEffect(() => {
 		window.localStorage.setItem('novelkms.propsCollapsed', String(propsCollapsed))
 	}, [propsCollapsed])
+	
+	const path = window.location.pathname
+
+	if (path === '/billing/success') {
+		return <BillingReturnPage result="success" />
+	}
+
+	if (path === '/billing/cancel') {
+		return <BillingReturnPage result="cancel" />
+	}
 
 	useEffect(() => {
 		const handleMouseMove = (event) => {

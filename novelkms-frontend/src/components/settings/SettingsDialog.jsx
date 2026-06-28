@@ -8,6 +8,7 @@ import OtherSettingsTab from './OtherSettingsTab'
 import AiCredentialsPanel from '../ai/AiCredentialsPanel'
 import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor'
 import MemoryTemplateEditor from '../ai/MemoryTemplateEditor'
+import BillingPanel from '../subscription/BillingPanel'
 
 // Fixed height for the tab body. MUI centers Dialog paper based on its
 // content height, so without a fixed height here the dialog grew/shrank and
@@ -33,6 +34,7 @@ function SettingsContent({ initialTab, projectId }) {
 			>
 				<Tab value="document" label="Document" />
 				<Tab value="ai" label="AI" />
+				<Tab value="billing" label="Billing" />
 				<Tab value="other" label="Other" />
 			</Tabs>
 
@@ -53,6 +55,7 @@ function SettingsContent({ initialTab, projectId }) {
 						<MemoryTemplateEditor scope="global" />
 					</>
 				)}
+				{tab === 'billing' && <BillingPanel />}
 				{tab === 'other' && <OtherSettingsTab />}
 			</Box>
 		</>
