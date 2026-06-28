@@ -55,6 +55,7 @@ public class BillingResource {
             String status,
             boolean hasAccess,
             boolean familyAccess,
+            boolean hasStripeCustomer,
             String planKey,
             String stripePriceId,
             String stripeProductId,
@@ -85,6 +86,7 @@ public class BillingResource {
             if (subscription == null) {
                 return Response.ok(new BillingStatusResponse(
                         "none",
+                        false,
                         false,
                         false,
                         null,
@@ -152,6 +154,7 @@ public class BillingResource {
                 subscription.status(),
                 subscription.hasAccess(now),
                 subscription.isFamilyAccess(),
+                subscription.stripeCustomerId() != null && !subscription.stripeCustomerId().isBlank(),
                 subscription.planKey(),
                 subscription.stripePriceId(),
                 subscription.stripeProductId(),
