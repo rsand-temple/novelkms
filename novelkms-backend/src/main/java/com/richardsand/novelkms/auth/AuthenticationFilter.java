@@ -19,7 +19,7 @@ public class AuthenticationFilter implements ContainerRequestFilter {
     private static final Set<String> PUBLIC_PREFIXES = Set.of(
             "auth/",
             "healthcheck",
-            "billing/stripe/webhook");
+            "api/billing/stripe/webhook");
 
     private final SessionService     sessions;
 
