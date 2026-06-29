@@ -96,9 +96,9 @@ auth:
     scope: openid email profile
 
   apple:
-    clientId: {{APPLE_CLIENT_ID | d('', true)}}
-    teamId: {{APPLE_TEAM_ID | d('', true)}}
-    keyId: {{APPLE_KEY_ID | d('', true)}}
+    clientId: {{APPLE_CLIENT_ID | d('com.novelkms.sso', true)}}
+    teamId: {{APPLE_TEAM_ID | d('675SWEHDTP', true)}}
+    keyId: {{APPLE_KEY_ID | d('RK98QT2799', true)}}
     privateKey: "{{APPLE_PRIVATE_KEY | d('', true)}}"
     authorizationUrl: https://appleid.apple.com/auth/authorize
     tokenUrl: https://appleid.apple.com/auth/token
