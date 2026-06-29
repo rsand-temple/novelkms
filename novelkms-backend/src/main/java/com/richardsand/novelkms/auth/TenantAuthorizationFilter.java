@@ -53,9 +53,12 @@ public class TenantAuthorizationFilter implements ContainerRequestFilter {
 
         UUID userId = CurrentUser.id(request);
         try {
-            // Admin operations are application-wide and are not user endpoints.
+            // Admin operations are application-wide and are authorized by JAX-RS roles
+            // not by tenant ownership checks. This is an extra enforcement catch
             if (path.startsWith("admin/")) {
-                deny(request);
+                if (!CurrentUser.isAdmin(request)) {
+                    deny(request);
+                }
                 return;
             }
 

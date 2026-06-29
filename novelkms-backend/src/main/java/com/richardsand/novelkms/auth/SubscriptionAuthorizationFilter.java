@@ -73,6 +73,10 @@ public class SubscriptionAuthorizationFilter implements ContainerRequestFilter {
         if (BILLING_PREFIXES.stream().anyMatch(path::startsWith)) {
             return;
         }
+        
+        if (path.startsWith("admin/") && CurrentUser.isAdmin(request)) {
+            return;
+        }
 
         UUID userId = CurrentUser.id(request);
 

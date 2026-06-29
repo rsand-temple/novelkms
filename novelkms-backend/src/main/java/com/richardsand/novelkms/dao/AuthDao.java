@@ -6,7 +6,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.sql.DataSource;
@@ -181,6 +183,32 @@ public class AuthDao {
                 c.setAutoCommit(true);
             }
         }
+    }
+
+    public Set<String> findRolesForUser(UUID userId) throws SQLException {
+        String sql = """
+                SELECT role
+                  FROM user_role
+                 WHERE user_id = ?
+                """;
+
+        Set<String> roles = new HashSet<>();
+
+        try (Connection c = dataSource.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, userId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String role = rs.getString("role");
+                    if (role != null && !role.isBlank()) {
+                        roles.add(role.trim());
+                    }
+                }
+            }
+        }
+
+        return Set.copyOf(roles);
     }
 
     private UUID updatePendingRegistration(Connection c, String tokenHash, OAuthProfile profile, Instant expiresAt) throws SQLException {

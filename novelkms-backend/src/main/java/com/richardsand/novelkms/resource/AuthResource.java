@@ -129,7 +129,7 @@ public class AuthResource {
         logger.debug("AuthResource.status invoked: hasSessionCookie={}, hasRegistrationCookie={}", sessionToken != null, registrationToken != null);
         var user = sessions.authenticate(sessionToken);
         if (user.isPresent()) {
-            var u = user.get();
+            var u = user.get().user();
             return Response.ok(Map.of("state", "AUTHENTICATED", "user", Map.of(
                     "id", u.id(), "displayName", u.displayName(), "emailAddress", u.emailAddress()))).build();
         }

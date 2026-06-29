@@ -9,6 +9,7 @@ import org.apache.commons.dbcp2.BasicDataSource;
 import org.flywaydb.core.Flyway;
 import org.glassfish.hk2.utilities.binding.AbstractBinder;
 import org.glassfish.jersey.media.multipart.MultiPartFeature;
+import org.glassfish.jersey.server.filter.RolesAllowedDynamicFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,6 +76,7 @@ import com.richardsand.novelkms.resource.SummaryResource;
 import com.richardsand.novelkms.resource.TemplateResource;
 import com.richardsand.novelkms.resource.TrashResource;
 import com.richardsand.novelkms.resource.UserPreferenceResource;
+import com.richardsand.novelkms.resource.admin.AdminSystemResource;
 import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.ArchiveService;
 import com.richardsand.novelkms.service.BillingService;
@@ -214,8 +216,12 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
             }
         });
 
-        // Resources
+        // OOTB resources
+        env.jersey().register(RolesAllowedDynamicFeature.class);
+        
+        // Custom resources
         env.jersey().register(AccountResource.class);
+        env.jersey().register(AdminSystemResource.class);
         env.jersey().register(AiFormInstructionsResource.class);
         env.jersey().register(AiReviewResource.class);
         env.jersey().register(AiCredentialResource.class);
