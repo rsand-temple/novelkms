@@ -89,7 +89,7 @@ auth:
   microsoft:
     clientId: {{MICROSOFT_CLIENT_ID}}
     clientSecret: {{MICROSOFT_CLIENT_SECRET}}
-    tenant: ${MICROSOFT_TENANT:-common}
+    tenant: {{MICROSOFT_TENANT | d('common')}}
     authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
     tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
     userInfoUrl: https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration
@@ -106,8 +106,9 @@ auth:
     scope: name email
 
 billing:
-  stripeSecretKey: ${STRIPE_SECRET_KEY}
-  stripeWebhookSecret: ${STRIPE_WEBHOOK_SECRET}
-  stripePriceId: ${STRIPE_PRICE_ID}
-  successUrl: https://novelkms.com/billing/success
-  cancelUrl: https://novelkms.com/billing/cancel
+  stripeSecretKey: {{STRIPE_SECRET_KEY}}
+  stripeWebhookSecret: {{STRIPE_WEBHOOK_SECRET}}
+  stripePriceId: {{STRIPE_PRICE_ID}}
+  successUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:3000', true)}}/billing/success
+  cancelUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:3000', true)}}/billing/cancel
+  enforceSubscriptions: true
