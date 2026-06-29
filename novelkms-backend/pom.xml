@@ -34,7 +34,7 @@
 		<json.version>20240303</json.version>
 		<jsoup.version>1.22.2</jsoup.version>
 		<junit.version>5.14.4</junit.version>
-		<logback.version>1.5.34</logback.version>
+		<logback.version>1.5.37</logback.version>
 		<lombok.version>1.18.20</lombok.version>
 		<nimbus-jose-jwt.version>9.48</nimbus-jose-jwt.version>
 		<poi-ooxml.version>5.5.1</poi-ooxml.version>
