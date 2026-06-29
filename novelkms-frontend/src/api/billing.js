@@ -7,6 +7,9 @@ export const billingApi = {
 	checkout: () =>
 		client.post('/billing/checkout', {}).then(r => r.data),
 
+	startTrial: () =>
+		client.post('/billing/trial', {}).then(r => r.data),
+
 	portal: () =>
 		client.post('/billing/portal', {}).then(r => r.data),
 }

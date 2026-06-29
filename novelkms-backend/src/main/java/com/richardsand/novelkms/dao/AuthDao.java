@@ -25,6 +25,9 @@ public class AuthDao {
     public record SessionUser(AppUser user, Instant expiresAt) {
     }
 
+    public record UserTrialEligibility(UUID userId, String normalizedEmail, Instant createdAt) {
+    }
+
     private final DataSource dataSource;
 
     public AuthDao(DataSource dataSource) {
@@ -93,6 +96,30 @@ public class AuthDao {
             ps.setString(1, normalizedEmail);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
+            }
+        }
+    }
+
+    public Optional<UserTrialEligibility> trialEligibilityUser(UUID userId) throws SQLException {
+        String sql = """
+                SELECT id, normalized_email, created_at
+                  FROM app_user
+                 WHERE id = ?
+                   AND status = 'ACTIVE'
+                """;
+
+        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, userId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+
+                return Optional.of(new UserTrialEligibility(
+                        (UUID) rs.getObject("id"),
+                        rs.getString("normalized_email"),
+                        rs.getTimestamp("created_at").toInstant()));
             }
         }
     }

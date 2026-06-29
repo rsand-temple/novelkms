@@ -156,6 +156,60 @@ public class UserSubscriptionDao {
         }
     }
 
+    public Optional<UserSubscription> startTrial(UUID userId, Instant now, Instant trialEnd) throws SQLException {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId is required");
+        }
+        if (now == null) {
+            throw new IllegalArgumentException("now is required");
+        }
+        if (trialEnd == null || !trialEnd.isAfter(now)) {
+            throw new IllegalArgumentException("trialEnd must be after now");
+        }
+
+        try (Connection c = ds.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                Optional<UserSubscription> existing = findByUserId(c, userId);
+                if (existing.isPresent()) {
+                    c.rollback();
+                    return Optional.empty();
+                }
+
+                String insert = """
+                        INSERT INTO user_subscription
+                            (user_id, status, plan_key,
+                             current_period_start, current_period_end,
+                             trial_start, trial_end,
+                             cancel_at_period_end,
+                             created_at, updated_at)
+                        VALUES (?, 'trialing', 'trial',
+                                ?, ?,
+                                ?, ?,
+                                FALSE,
+                                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        """;
+
+                try (PreparedStatement ps = c.prepareStatement(insert)) {
+                    ps.setObject(1, userId);
+                    ps.setTimestamp(2, toTimestamp(now));
+                    ps.setTimestamp(3, toTimestamp(trialEnd));
+                    ps.setTimestamp(4, toTimestamp(now));
+                    ps.setTimestamp(5, toTimestamp(trialEnd));
+                    ps.executeUpdate();
+                }
+
+                c.commit();
+                return findByUserId(userId);
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
+
     public Optional<UserSubscription> upsertStripeSubscription(StripeSubscriptionUpdate update) throws SQLException {
         if (update == null || update.userId() == null) {
             throw new IllegalArgumentException("update.userId is required");

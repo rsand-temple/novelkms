@@ -29,9 +29,12 @@ public record UserSubscription(
     public boolean hasAccess(Instant now) {
         if ("active".equals(status)
                 || "active_canceling".equals(status)
-                || "trialing".equals(status)
                 || "family".equals(status)) {
             return true;
+        }
+
+        if ("trialing".equals(status)) {
+            return trialEnd != null && trialEnd.isAfter(now);
         }
 
         if ("past_due".equals(status) && currentPeriodEnd != null && currentPeriodEnd.isAfter(now)) {

@@ -25,6 +25,18 @@ export function useCheckout() {
 	})
 }
 
+export function useStartTrial() {
+	const qc = useQueryClient()
+
+	return useMutation({
+		mutationFn: () => billingApi.startTrial(),
+		onSuccess: (result) => {
+			qc.setQueryData(BILLING_KEYS.status, result)
+			qc.invalidateQueries({ queryKey: BILLING_KEYS.status })
+		},
+	})
+}
+
 export function useBillingPortal() {
 	const qc = useQueryClient()
 

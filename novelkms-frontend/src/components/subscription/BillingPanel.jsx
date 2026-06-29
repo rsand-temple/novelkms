@@ -9,7 +9,7 @@ import {
 	Stack,
 	Typography,
 } from '@mui/material'
-import { useBillingPortal, useBillingStatus, useCheckout } from '../../hooks/useBilling'
+import { useBillingPortal, useBillingStatus, useCheckout, useStartTrial } from '../../hooks/useBilling'
 
 function statusLabel(status) {
 	switch (status) {
@@ -68,9 +68,15 @@ export default function BillingPanel() {
 	const hasStripeCustomer = !!status?.hasStripeCustomer
 	const currentPeriodEnd = formatDate(status?.currentPeriodEnd)
 	const trialEnd = formatDate(status?.trialEnd)
-
+	const startTrial = useStartTrial()
+	
 	const busy = checkout.isPending || portal.isPending
 
+	const canStartTrial =
+		status?.status === 'none' &&
+		!status?.hasAccess &&
+		!status?.hasStripeCustomer
+		
 	return (
 		<Card variant="outlined">
 			<CardContent>
@@ -147,6 +153,18 @@ export default function BillingPanel() {
 									{currentPeriodEnd ? ` Access continues until ${currentPeriodEnd}.` : ''}
 								</Alert>
 							)}
+							
+							{startTrial.isError && (
+								<Alert severity="error">
+									{startTrial.error?.response?.data?.message || 'The free trial could not be started for this account.'}
+								</Alert>
+							)}
+							
+							{canStartTrial && (
+								<Typography variant="body2" color="text.secondary">
+									No credit card required. The free trial is available only for new NovelKMS accounts and starts immediately.
+								</Typography>
+							)}
 
 							<Stack direction="row" spacing={1}>
 								{!hasAccess && (
@@ -166,6 +184,16 @@ export default function BillingPanel() {
 										disabled={busy}
 									>
 										Manage billing
+									</Button>
+								)}
+								
+								{canStartTrial && (
+									<Button
+										variant="outlined"
+										onClick={() => startTrial.mutate()}
+										disabled={startTrial.isPending || checkout.isPending}
+									>
+										{startTrial.isPending ? 'Starting trial…' : 'Start free 14-day trial'}
 									</Button>
 								)}
 

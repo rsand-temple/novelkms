@@ -2,13 +2,16 @@ package com.richardsand.novelkms.resource;
 
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.richardsand.novelkms.auth.CurrentUser;
+import com.richardsand.novelkms.dao.AuthDao;
 import com.richardsand.novelkms.dao.UserSubscriptionDao;
 import com.richardsand.novelkms.model.UserSubscription;
 import com.richardsand.novelkms.service.BillingService;
@@ -41,14 +44,16 @@ public class BillingResource {
 
     private final UserSubscriptionDao subscriptionDao;
     private BillingService            billingService;
+    private final AuthDao             authDao;
 
     @Context
     ContainerRequestContext request;
 
     @Inject
-    public BillingResource(UserSubscriptionDao subscriptionDao, BillingService billingService) {
+    public BillingResource(UserSubscriptionDao subscriptionDao, BillingService billingService, AuthDao authDao) {
         this.subscriptionDao = subscriptionDao;
         this.billingService = billingService;
+        this.authDao = authDao;
     }
 
     public record BillingStatusResponse(
@@ -126,6 +131,56 @@ public class BillingResource {
             logger.error("Stripe checkout creation failed", e);
             return Response.serverError().entity(Map.of("error", "stripe_checkout_failed")).build();
         }
+    }
+
+    /**
+     * Starts a local 14-day NovelKMS trial for a brand-new user.
+     *
+     * This does not call Stripe. It creates a local trialing entitlement row
+     * that the SubscriptionAuthorizationFilter can immediately honor.
+     */
+    @POST
+    @Path("/billing/trial")
+    public Response startTrial() {
+        UUID userId = CurrentUser.id(request);
+        logger.info("BillingResource.startTrial invoked: userId={}", userId);
+
+        return run(() -> {
+            Instant now = Instant.now();
+
+            AuthDao.UserTrialEligibility user = authDao.trialEligibilityUser(userId)
+                    .orElse(null);
+
+            if (user == null) {
+                return error(Status.BAD_REQUEST,
+                        "trial_unavailable",
+                        "A free trial could not be started for this account.");
+            }
+
+            if (user.createdAt().isBefore(now.minus(24, ChronoUnit.HOURS))) {
+                return error(Status.BAD_REQUEST,
+                        "trial_unavailable",
+                        "A free trial is only available immediately after creating a new NovelKMS account.");
+            }
+
+            Instant trialEnd = now.plus(14, ChronoUnit.DAYS);
+
+            Optional<UserSubscription> subscription = subscriptionDao.startTrial(userId, now, trialEnd);
+            if (subscription.isEmpty()) {
+                UserSubscription existing = subscriptionDao.findByUserId(userId).orElse(null);
+                if (existing != null) {
+                    return error(Status.BAD_REQUEST,
+                            "trial_unavailable",
+                            "A free trial is only available for new NovelKMS accounts that have not already used a trial or subscription.");
+                }
+
+                return error(Status.BAD_REQUEST,
+                        "trial_unavailable",
+                        "A free trial could not be started for this account.");
+            }
+
+            return Response.ok(toStatusResponse(subscription.get())).build();
+        });
     }
 
     /**
