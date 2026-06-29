@@ -36,7 +36,7 @@
 		<junit.version>5.14.4</junit.version>
 		<logback.version>1.5.37</logback.version>
 		<lombok.version>1.18.20</lombok.version>
-		<nimbus-jose-jwt.version>9.48</nimbus-jose-jwt.version>
+		<nimbus-jose-jwt.version>10.9.1</nimbus-jose-jwt.version>
 		<poi-ooxml.version>5.5.1</poi-ooxml.version>
 		<postgres.version>42.7.11</postgres.version>
 		<stripe-sdk.version>30.1.0</stripe-sdk.version>
@@ -206,6 +206,7 @@
 			<version>2.0.0</version>
 		</dependency>
 
+        <!--Mail -->
 		<dependency>
 			<groupId>com.sun.mail</groupId>
 			<artifactId>javax.mail</artifactId>
@@ -216,12 +217,16 @@
 			<artifactId>freemarker</artifactId>
 			<version>[2.3.0,)</version>
 		</dependency>
+		
+		<!-- Lombok -->
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
 			<scope>provided</scope>
 			<version>[1.18.0,)</version>
 		</dependency>
+		
+		<!-- Apache Commons -->
 		<dependency>
 			<groupId>commons-codec</groupId>
 			<artifactId>commons-codec</artifactId>
@@ -263,6 +268,7 @@
 			<version>${poi-ooxml.version}</version>
 		</dependency>
 		
+		<!-- JinJava -->
 		<dependency>
 			<groupId>com.hubspot.jinjava</groupId>
 			<artifactId>jinjava</artifactId>
@@ -286,6 +292,7 @@
 			<version>${json.version}</version>
 		</dependency>
 
+		<!-- Jackson -->
 		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
@@ -316,6 +323,14 @@
 			<groupId>org.glassfish.jersey.media</groupId>
 			<artifactId>jersey-media-multipart</artifactId>
 			<version>${jersey.version}</version>
+		</dependency>
+		
+		<!-- nimbus-jose-jwt -->
+		<dependency>
+		    <groupId>com.nimbusds</groupId>
+		    <artifactId>nimbus-jose-jwt</artifactId>
+		    <version>${nimbus-jose-jwt.version}</version>
+		    <scope>compile</scope>
 		</dependency>
 		
 		<!-- Billing -->

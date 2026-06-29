@@ -19,6 +19,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.CookieParam;
+import jakarta.ws.rs.FormParam;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -64,7 +65,8 @@ public class AuthResource {
                 "google", configured(config.google),
                 "github", configured(config.github),
                 "meta", configured(config.meta),
-                "microsoft", configured(config.microsoft));
+                "microsoft", configured(config.microsoft),
+                "apple", configuredApple(config.apple));
 
     }
 
@@ -82,12 +84,33 @@ public class AuthResource {
             @QueryParam("state") String state,
             @QueryParam("error") String error,
             @Context HttpServletRequest request) throws Exception {
-        logger.info("Registration completion requested: remoteAddr={}", request.getRemoteAddr());
+        return completeCallback(provider, code, state, error, null, request);
+    }
+
+    @POST
+    @Path("/{provider}/callback")
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    public Response callbackPost(@PathParam("provider") String provider,
+            @FormParam("code") String code,
+            @FormParam("state") String state,
+            @FormParam("error") String error,
+            @FormParam("user") String user,
+            @Context HttpServletRequest request) throws Exception {
+        return completeCallback(provider, code, state, error, user, request);
+    }
+
+    private Response completeCallback(String provider,
+            String code,
+            String state,
+            String error,
+            String providerUserJson,
+            HttpServletRequest request) throws Exception {
+        logger.info("OAuth callback requested: provider={}, remoteAddr={}", provider, request.getRemoteAddr());
         if (error != null) {
             logger.warn("OAuth callback denied by provider={}: error={}", provider, error);
             return Response.seeOther(URI.create(config.frontendBaseUrl + "/login?error=oauth_denied")).build();
         }
-        OAuthService.CallbackResult result = oauth.callback(provider, code, state);
+        OAuthService.CallbackResult result = oauth.callback(provider, code, state, providerUserJson);
         if (result.user() != null) {
             logger.info("OAuth callback authenticated existing user: provider={}, userId={}", provider, result.user().id());
             String token = sessions.create(result.user(), request.getRemoteAddr(), request.getHeader("User-Agent"));
@@ -201,6 +224,13 @@ public class AuthResource {
 
     private static boolean configured(NovelKmsConfig.OAuthProvider p) {
         return p != null && p.clientId != null && !p.clientId.isBlank();
+    }
+
+    private static boolean configuredApple(NovelKmsConfig.OAuthProvider p) {
+        return configured(p)
+                && p.teamId != null && !p.teamId.isBlank()
+                && p.keyId != null && !p.keyId.isBlank()
+                && p.privateKey != null && !p.privateKey.isBlank();
     }
 
     private static String nullToEmpty(String s) {

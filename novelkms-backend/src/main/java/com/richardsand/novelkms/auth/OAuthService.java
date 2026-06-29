@@ -4,9 +4,14 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
+import java.security.interfaces.ECPrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Date;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -22,10 +27,14 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.ECDSASigner;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
 import com.richardsand.novelkms.NovelKmsConfig;
 import com.richardsand.novelkms.dao.AuthDao;
 import com.richardsand.novelkms.model.AppUser;
@@ -33,6 +42,9 @@ import com.richardsand.novelkms.utils.EmailNormalizer;
 
 public class OAuthService implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(OAuthService.class);
+
+    private static final String APPLE_ISSUER   = "https://appleid.apple.com";
+    private static final String APPLE_PROVIDER = "APPLE";
 
     public record CallbackResult(AppUser user, String pendingRegistrationToken, String returnPath) {
     }
@@ -51,13 +63,20 @@ public class OAuthService implements AutoCloseable {
         String                       state          = CryptoTokens.randomToken(32);
         String                       safeReturnPath = safeReturnPath(returnPath);
         dao.createOAuthState(CryptoTokens.sha256(state), providerName.toUpperCase(Locale.ROOT), safeReturnPath, Instant.now().plus(Duration.ofMinutes(10)));
-        URI authorizationUri = new URIBuilder(p.authorizationUrl)
+
+        URIBuilder builder = new URIBuilder(p.authorizationUrl)
                 .addParameter("client_id", p.clientId)
                 .addParameter("redirect_uri", callbackUrl(providerName))
                 .addParameter("response_type", "code")
                 .addParameter("scope", p.scope)
-                .addParameter("state", state)
-                .build();
+                .addParameter("state", state);
+
+        if (providerName.equalsIgnoreCase("apple")) {
+            // Apple posts the authorization response when name/email scope is requested.
+            builder.addParameter("response_mode", "form_post");
+        }
+
+        URI authorizationUri = builder.build();
         logger.info("OAuth authorization started: provider={}, returnPath={}", providerName, safeReturnPath);
         logger.debug("OAuth authorization URI built: provider={}, authorizationHost={}, callbackUrl={}",
                 providerName, authorizationUri.getHost(), callbackUrl(providerName));
@@ -65,6 +84,10 @@ public class OAuthService implements AutoCloseable {
     }
 
     public CallbackResult callback(String providerName, String code, String state) throws Exception {
+        return callback(providerName, code, state, null);
+    }
+
+    public CallbackResult callback(String providerName, String code, String state, String providerUserJson) throws Exception {
         logger.info("OAuth callback received: provider={}, hasCode={}, hasState={}",
                 providerName, code != null && !code.isBlank(), state != null && !state.isBlank());
         AuthDao.OAuthState oauthState = dao.consumeOAuthState(CryptoTokens.sha256(state))
@@ -76,7 +99,7 @@ public class OAuthService implements AutoCloseable {
             throw new IllegalArgumentException("OAuth provider does not match state");
         }
 
-        OAuthProfile      profile  = exchange(providerName, code);
+        OAuthProfile      profile  = exchange(providerName, code, providerUserJson);
         Optional<AppUser> existing = dao.findUserByIdentity(profile.provider(), profile.subject());
         if (existing.isPresent()) {
             dao.touchLogin(existing.get().id(), profile.provider(), profile.subject());
@@ -106,11 +129,12 @@ public class OAuthService implements AutoCloseable {
         return new CallbackResult(null, pendingToken, oauthState.returnPath());
     }
 
-    private OAuthProfile exchange(String providerName, String code) throws Exception {
+    private OAuthProfile exchange(String providerName, String code, String providerUserJson) throws Exception {
         NovelKmsConfig.OAuthProvider p = provider(providerName);
         logger.info("OAuth token exchange started: provider={}", providerName);
 
-        String body = "client_id=" + enc(p.clientId) + "&client_secret=" + enc(p.clientSecret)
+        String clientSecret = providerName.equalsIgnoreCase("apple") ? appleClientSecret(p) : p.clientSecret;
+        String body = "client_id=" + enc(p.clientId) + "&client_secret=" + enc(clientSecret)
                 + "&code=" + enc(code) + "&redirect_uri=" + enc(callbackUrl(providerName))
                 + "&grant_type=authorization_code";
 
@@ -118,14 +142,17 @@ public class OAuthService implements AutoCloseable {
         post.setHeader("Accept", "application/json");
         post.setEntity(new StringEntity(body, ContentType.APPLICATION_FORM_URLENCODED));
 
-        JSONObject token       = executeJson(post);
-        String     accessToken = token.getString("access_token");
+        JSONObject token = executeJson(post);
         logger.debug("OAuth token exchange succeeded: provider={}", providerName);
 
+        if (providerName.equalsIgnoreCase("apple")) {
+            return appleProfile(token, providerUserJson, p.clientId);
+        }
         if (providerName.equalsIgnoreCase("microsoft")) {
             return microsoftProfile(token);
         }
 
+        String accessToken = token.getString("access_token");
         URIBuilder userInfo = new URIBuilder(p.userInfoUrl);
         if (providerName.equalsIgnoreCase("meta")) {
             userInfo.addParameter("fields", "id,email,first_name,last_name").addParameter("access_token", accessToken);
@@ -192,10 +219,19 @@ public class OAuthService implements AutoCloseable {
                 name.equalsIgnoreCase("google") ? auth.google : 
                     name.equalsIgnoreCase("github") ? auth.github : 
                         name.equalsIgnoreCase("meta") ? auth.meta : 
-                            name.equalsIgnoreCase("microsoft") ? auth.microsoft : 
-                                null;
-        if (p == null || p.clientId == null || p.clientSecret == null)
+                            name.equalsIgnoreCase("microsoft") ? auth.microsoft :
+                                name.equalsIgnoreCase("apple") ? auth.apple :
+                                    null;
+        if (p == null || p.clientId == null || p.clientId.isBlank()) {
             throw new IllegalArgumentException("OAuth provider is not configured: " + name);
+        }
+        if (name.equalsIgnoreCase("apple")) {
+            if (isBlank(p.teamId) || isBlank(p.keyId) || isBlank(p.privateKey)) {
+                throw new IllegalArgumentException("Apple OAuth provider is missing teamId, keyId, or privateKey");
+            }
+        } else if (p.clientSecret == null || p.clientSecret.isBlank()) {
+            throw new IllegalArgumentException("OAuth provider is not configured: " + name);
+        }
         return p;
     }
 
@@ -279,6 +315,79 @@ public class OAuthService implements AutoCloseable {
         return new OAuthProfile("MICROSOFT", subject, email, emailVerified, givenName, familyName);
     }
 
+    private OAuthProfile appleProfile(JSONObject token, String providerUserJson, String expectedAudience) throws ParseException {
+        String idToken = token.optString("id_token", null);
+        if (idToken == null || idToken.isBlank()) {
+            throw new IllegalArgumentException("Apple OAuth token response did not include an id_token");
+        }
+
+        SignedJWT signedJwt = SignedJWT.parse(idToken);
+        JWTClaimsSet claims = signedJwt.getJWTClaimsSet();
+        logger.debug("OAuth Apple id_token claim names: {}", claims.getClaims().keySet());
+
+        if (!APPLE_ISSUER.equals(claims.getIssuer())) {
+            throw new IllegalArgumentException("Apple id_token issuer was not appleid.apple.com");
+        }
+        if (claims.getAudience() == null || !claims.getAudience().contains(expectedAudience)) {
+            throw new IllegalArgumentException("Apple id_token audience did not match configured clientId");
+        }
+        if (claims.getExpirationTime() == null || claims.getExpirationTime().before(new Date())) {
+            throw new IllegalArgumentException("Apple id_token is expired");
+        }
+
+        String subject = claims.getSubject();
+        if (subject == null || subject.isBlank()) {
+            throw new IllegalArgumentException("Apple id_token did not include a subject claim");
+        }
+
+        String email = asString(claims.getClaim("email"));
+        boolean emailVerified = asBoolean(claims.getClaim("email_verified"));
+
+        String givenName = null;
+        String familyName = null;
+        if (providerUserJson != null && !providerUserJson.isBlank()) {
+            JSONObject user = new JSONObject(providerUserJson);
+            email = firstNonBlank(email, user.optString("email", null));
+            JSONObject name = user.optJSONObject("name");
+            if (name != null) {
+                givenName = name.optString("firstName", null);
+                familyName = name.optString("lastName", null);
+            }
+        }
+
+        return new OAuthProfile(APPLE_PROVIDER, subject, email, emailVerified, givenName, familyName);
+    }
+
+    private String appleClientSecret(NovelKmsConfig.OAuthProvider p) throws Exception {
+        Instant now = Instant.now();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(p.teamId)
+                .subject(p.clientId)
+                .audience(APPLE_ISSUER)
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(now.plus(Duration.ofDays(180))))
+                .build();
+
+        JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.ES256)
+                .keyID(p.keyId)
+                .build();
+
+        SignedJWT jwt = new SignedJWT(header, claims);
+        jwt.sign(new ECDSASigner(applePrivateKey(p.privateKey)));
+        return jwt.serialize();
+    }
+
+    private static ECPrivateKey applePrivateKey(String rawPrivateKey) throws Exception {
+        String normalized = rawPrivateKey
+                .replace("\\n", "\n")
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
+                .replaceAll("\\s+", "");
+        byte[] decoded = Base64.getDecoder().decode(normalized);
+        PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(decoded);
+        return (ECPrivateKey) KeyFactory.getInstance("EC").generatePrivate(spec);
+    }
+
     private static JSONObject decodeJwtPayload(String jwt) {
         String[] parts = jwt.split("\\.");
         if (parts.length < 2) {
@@ -295,6 +404,24 @@ public class OAuthService implements AutoCloseable {
             }
         }
         return null;
+    }
+
+    private static String asString(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static boolean asBoolean(Object value) {
+        if (value instanceof Boolean b) {
+            return b;
+        }
+        if (value instanceof String s) {
+            return Boolean.parseBoolean(s);
+        }
+        return false;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private JSONArray executeJsonArray(HttpUriRequest request) throws IOException {

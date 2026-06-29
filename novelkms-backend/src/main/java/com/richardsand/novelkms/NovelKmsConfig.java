@@ -23,6 +23,12 @@ public class NovelKmsConfig extends Configuration {
         public String userInfoUrl;
         public String scope;
         public String tenant = null;   // for MS
+
+        // Sign in with Apple uses a generated ES256 JWT as client_secret.
+        // These fields hold the material needed to generate it server-side.
+        public String teamId;
+        public String keyId;
+        public String privateKey;
     }
 
     @Getter
@@ -35,6 +41,7 @@ public class NovelKmsConfig extends Configuration {
         public OAuthProvider meta;
         public OAuthProvider github;
         public OAuthProvider microsoft;
+        public OAuthProvider apple;
     }
 
     @Getter

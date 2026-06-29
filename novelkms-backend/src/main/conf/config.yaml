@@ -95,6 +95,16 @@ auth:
     userInfoUrl: https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration
     scope: openid email profile
 
+  apple:
+    clientId: {{APPLE_CLIENT_ID | d('', true)}}
+    teamId: {{APPLE_TEAM_ID | d('', true)}}
+    keyId: {{APPLE_KEY_ID | d('', true)}}
+    privateKey: "{{APPLE_PRIVATE_KEY | d('', true)}}"
+    authorizationUrl: https://appleid.apple.com/auth/authorize
+    tokenUrl: https://appleid.apple.com/auth/token
+    userInfoUrl: ""
+    scope: name email
+
 billing:
   stripeSecretKey: ${STRIPE_SECRET_KEY}
   stripeWebhookSecret: ${STRIPE_WEBHOOK_SECRET}
