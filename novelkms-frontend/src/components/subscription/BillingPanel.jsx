@@ -69,14 +69,24 @@ export default function BillingPanel() {
 	const currentPeriodEnd = formatDate(status?.currentPeriodEnd)
 	const trialEnd = formatDate(status?.trialEnd)
 	const startTrial = useStartTrial()
-	
+	const isTrialing = status?.status === 'trialing' && status?.hasAccess
+	const trialEndDate = status?.trialEnd ? new Date(status.trialEnd) : null
+	const trialEndsText = trialEndDate
+		? trialEndDate.toLocaleDateString(undefined, {
+			year: 'numeric',
+			month: 'long',
+			day: 'numeric',
+		})
+		: null
 	const busy = checkout.isPending || portal.isPending
-
+	const canSubscribe =
+		!status?.hasStripeCustomer &&
+		status?.status !== 'family'
 	const canStartTrial =
 		status?.status === 'none' &&
 		!status?.hasAccess &&
 		!status?.hasStripeCustomer
-		
+
 	return (
 		<Card variant="outlined">
 			<CardContent>
@@ -153,13 +163,20 @@ export default function BillingPanel() {
 									{currentPeriodEnd ? ` Access continues until ${currentPeriodEnd}.` : ''}
 								</Alert>
 							)}
-							
+
 							{startTrial.isError && (
 								<Alert severity="error">
 									{startTrial.error?.response?.data?.message || 'The free trial could not be started for this account.'}
 								</Alert>
 							)}
-							
+
+							{isTrialing && (
+								<Alert severity="info">
+									You are using a free NovelKMS trial
+									{trialEndsText ? ` through ${trialEndsText}` : ''}. Subscribe before the trial ends to keep access uninterrupted.
+								</Alert>
+							)}
+
 							{canStartTrial && (
 								<Typography variant="body2" color="text.secondary">
 									No credit card required. The free trial is available only for new NovelKMS accounts and starts immediately.
@@ -167,13 +184,17 @@ export default function BillingPanel() {
 							)}
 
 							<Stack direction="row" spacing={1}>
-								{!hasAccess && (
+								{canSubscribe && (
 									<Button
-										variant="contained"
+										variant='contained'
 										onClick={() => checkout.mutate()}
-										disabled={busy}
+										disabled={checkout.isPending || startTrial.isPending}
 									>
-										Subscribe
+										{checkout.isPending
+											? 'Opening checkout…'
+											: isTrialing
+												? 'Subscribe before trial ends'
+												: 'Subscribe'}
 									</Button>
 								)}
 
@@ -186,7 +207,7 @@ export default function BillingPanel() {
 										Manage billing
 									</Button>
 								)}
-								
+
 								{canStartTrial && (
 									<Button
 										variant="outlined"
