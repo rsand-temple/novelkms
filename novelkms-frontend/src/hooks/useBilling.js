@@ -32,6 +32,16 @@ export function useStartTrial() {
 		mutationFn: () => billingApi.startTrial(),
 		onSuccess: (result) => {
 			qc.setQueryData(BILLING_KEYS.status, result)
+
+			// Starting a trial changes global entitlement state. Any query that
+			// previously failed with 402 subscription_required needs another chance.
+			// In particular, the nav tree's ['projects'] query may currently be
+			// cached in an error state and should refetch to show the empty project
+			// state for a new user.
+			qc.invalidateQueries({
+				predicate: (query) => query.queryKey[0] !== 'billing',
+			})
+
 			qc.invalidateQueries({ queryKey: BILLING_KEYS.status })
 		},
 	})
