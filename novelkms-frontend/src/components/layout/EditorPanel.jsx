@@ -348,7 +348,7 @@ export default function EditorPanel({
 		() => isBookSummaryDoc ? flaggedChapters(bookSummaryChapterRows) : [],
 		[isBookSummaryDoc, bookSummaryChapterRows]
 	);
-	
+
 	const aiDocStatusState = isMemoryDoc
 		? memoryStatusRows.find(s => s.chapterId === chapterId)?.state
 		: isChapterSummaryDoc
@@ -494,6 +494,14 @@ export default function EditorPanel({
 	const aggregateDraftModeRef = useRef(aggregateDraftMode);
 	const expectedSceneIdsRef = useRef([]);
 	const activeScenesRef = useRef([]);
+
+	// A codex entry is a scene (single-scene mode) whose parent chapter is a
+	// codex category — ground-truthed via chapterData.codexCategory rather than
+	// selection.codexId (see the mode comment above the component for why).
+	const isCodexEntry = singleSceneMode && !!chapterData?.codexCategory;
+	const codexEntryHeadingTitle = isCodexEntry
+		? (singleScene?.title?.trim() || 'Untitled Entry')
+		: null;
 
 	useEffect(() => { chapterIdRef.current = chapterId; }, [chapterId]);
 	useEffect(() => { singleSceneModeRef.current = singleSceneMode; }, [singleSceneMode]);
@@ -646,7 +654,9 @@ export default function EditorPanel({
 			// attributes, a drag-to-resize handle, and a floating control bar.
 			// allowBase64 and inline:false are configured inside the extension.
 			ResizableImage,
-			Placeholder.configure({ placeholder: 'Begin your scene…' }),
+			Placeholder.configure({
+				placeholder: isCodexEntry ? 'Begin your codex item…' : 'Begin your scene…',
+			}),
 			CharacterCount,
 			SearchHighlight,
 			ReviewHighlight,
@@ -705,7 +715,7 @@ export default function EditorPanel({
 				].join('; '),
 			},
 		},
-	});
+	}, [isCodexEntry]);
 
 	useEffect(() => { editorRef.current = editor; }, [editor]);
 
@@ -937,14 +947,6 @@ export default function EditorPanel({
 		? (chapterData.title?.trim() || `Chapter ${chapterData.chapterNumber}`)
 		: null;
 	const chapterHeadingSubtitle = (multiSceneMode && chapterData?.subtitle?.trim()) || null;
-
-	// A codex entry is a scene (single-scene mode) whose parent chapter is a
-	// codex category — ground-truthed via chapterData.codexCategory rather than
-	// selection.codexId (see the mode comment above the component for why).
-	const isCodexEntry = singleSceneMode && !!chapterData?.codexCategory;
-	const codexEntryHeadingTitle = isCodexEntry
-		? (singleScene?.title?.trim() || 'Untitled Entry')
-		: null;
 
 	return (
 		<Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
