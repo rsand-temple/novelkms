@@ -18,6 +18,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import ImageIcon from '@mui/icons-material/Image'
 import PersonIcon from '@mui/icons-material/Person'
 import { useImportDocx } from '../../../hooks/useImport'
+import { HelpButton } from '../../../help'
 
 /**
  * ImportDialog
@@ -82,7 +83,11 @@ export default function ImportDialog({ open, onClose, projectId, onSuccess }) {
 
 	return (
 		<Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-			<DialogTitle>Import from Word (.docx)</DialogTitle>
+			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+				Import from Word (.docx)
+				<Box sx={{ flex: 1 }} />
+				<HelpButton topic="import-export.import" />
+			</DialogTitle>
 
 			<DialogContent>
 				{!projectId && (

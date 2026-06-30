@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
 	Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent,
 	DialogTitle, Divider, FormControl, FormControlLabel, InputLabel, MenuItem,
@@ -17,6 +17,7 @@ import { usePageLayout, useSavePageLayout, useRemovePageLayout } from '../../hoo
 import {
 	useAiFormInstructions, useSaveAiFormInstructions, useRemoveAiFormInstructions,
 } from '../../hooks/useAiFormInstructions'
+import { HelpButton } from '../../help'
 
 const TAB_CONTENT_HEIGHT = '60vh'
 
@@ -338,11 +339,16 @@ function AiBody({ data, isOwn, scopeWord, busy, inheritedFrom, upsert, remove })
 
 // ── Dialog shell ───────────────────────────────────────────────────────────────
 
-function Content({ scope, projectId, bookId, scopeLabel, onEditGlobal }) {
+function Content({ scope, projectId, bookId, scopeLabel, onEditGlobal, onTabChange }) {
 	const [tab, setTab] = useState('document')
 	const id = scope === 'book' ? bookId : projectId
 	const scopeWord = scope === 'book' ? 'book' : 'project'
 	const ownScope = scope === 'book' ? 'BOOK' : 'PROJECT'
+
+	const handleTabChange = (_, v) => {
+		setTab(v)
+		onTabChange?.(v)
+	}
 
 	return (
 		<>
@@ -350,7 +356,7 @@ function Content({ scope, projectId, bookId, scopeLabel, onEditGlobal }) {
 				<Typography variant="body2" color="text.secondary">{scopeLabel}</Typography>
 				<Button size="small" onClick={onEditGlobal}>Global defaults…</Button>
 			</Box>
-			<Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
+			<Tabs value={tab} onChange={handleTabChange} sx={{ mb: 2 }}>
 				<Tab value="document" label="Document" />
 				<Tab value="layout" label="Page Layout" />
 				<Tab value="ai" label="AI" />
@@ -362,6 +368,15 @@ function Content({ scope, projectId, bookId, scopeLabel, onEditGlobal }) {
 			</Box>
 		</>
 	)
+}
+
+/**
+ * Map each context-settings tab to the most relevant help topic.
+ */
+const CTX_TAB_HELP_TOPICS = {
+	document: 'editor.styles',
+	layout: 'editor.page-layout',
+	ai: 'ai.form-instructions',
 }
 
 /**
@@ -377,13 +392,31 @@ function Content({ scope, projectId, bookId, scopeLabel, onEditGlobal }) {
  *   onClose     {() => void}
  */
 export default function EditorSettingsDialog({ open, scope, projectId, bookId, scopeLabel, onEditGlobal, onClose }) {
+	const [activeTab, setActiveTab] = useState('document')
+
+	// Reset when the dialog opens so the HelpButton matches the initial tab.
+	const prevOpen = useRef(false)
+	if (open && !prevOpen.current) {
+		if (activeTab !== 'document') {
+			setActiveTab('document')
+		}
+	}
+	prevOpen.current = open
+
+	const helpTopic = CTX_TAB_HELP_TOPICS[activeTab] ?? 'editor.overview'
+
 	return (
 		<Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-			<DialogTitle>{scope === 'book' ? 'Book Settings' : 'Project Settings'}</DialogTitle>
+			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+				{scope === 'book' ? 'Book Settings' : 'Project Settings'}
+				<Box sx={{ flex: 1 }} />
+				<HelpButton topic={helpTopic} />
+			</DialogTitle>
 			<DialogContent dividers>
 				{open && scope && (
 					<Content scope={scope} projectId={projectId} bookId={bookId}
-						scopeLabel={scopeLabel} onEditGlobal={onEditGlobal} />
+						scopeLabel={scopeLabel} onEditGlobal={onEditGlobal}
+						onTabChange={setActiveTab} />
 				)}
 			</DialogContent>
 			<DialogActions>

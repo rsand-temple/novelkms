@@ -158,6 +158,8 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 - Backup/restore should be periodically tested, not merely scheduled.
 - Frontend Phase 2 cleanup remains: point EditorPanel at book-resolved document settings for live render, remove DocSettingsPopover + its toolbar trigger, reduce the global SettingsDialog Document tab to user-only, strip Properties panel to book metadata + cover (remove Page Layout and AI sections), drop ignored page-layout fields from BookResource.UpdateRequest.
 - Delete confirmation dialog wording update: change "cannot be undone" language to "move to trash," and fix codex entries being referred to as "scenes" in that dialog.
+- Help topics are seed content; expand and refine as the product matures. The validator ensures cross-links stay valid.
+- `HelpButton` is wired into `SettingsDialog` as a reference example; wire into remaining dialogs and toolbars as help content is authored.
 
 ## Near-term next actions
 

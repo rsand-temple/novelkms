@@ -10,6 +10,7 @@ import {
 	TextField,
 } from '@mui/material'
 import { useAccount, useUpdateAccount } from '../../../hooks/useAccount'
+import { HelpButton } from '../../../help'
 
 export default function AccountDialog({ open, onClose }) {
 	const accountQuery = useAccount()
@@ -57,7 +58,11 @@ export default function AccountDialog({ open, onClose }) {
 
 	return (
 		<Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-			<DialogTitle>Account</DialogTitle>
+			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+				Account
+				<Box sx={{ flex: 1 }} />
+				<HelpButton topic="account.account" />
+			</DialogTitle>
 
 			<DialogContent>
 				<Box sx={{ display: 'grid', gap: 2, mt: 1 }}>

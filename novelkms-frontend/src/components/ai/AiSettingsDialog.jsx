@@ -1,4 +1,5 @@
 import {
+	Box,
 	Button,
 	Dialog,
 	DialogActions,
@@ -7,6 +8,7 @@ import {
 } from '@mui/material'
 import SettingsIcon from '@mui/icons-material/Settings'
 import AiCredentialsPanel from './AiCredentialsPanel'
+import { HelpButton } from '../../help'
 
 /**
  * AiSettingsDialog
@@ -25,6 +27,8 @@ export default function AiSettingsDialog({ open, onClose }) {
 			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 				<SettingsIcon fontSize="small" />
 				AI Settings
+				<Box sx={{ flex: 1 }} />
+				<HelpButton topic="ai.credentials" />
 			</DialogTitle>
 
 			<DialogContent>

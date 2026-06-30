@@ -50,6 +50,7 @@ import ReviewCard from './ReviewCard'
 import ChapterMemoryEditor from './ChapterMemoryEditor'
 import PreReviewMemoryDialog from './PreReviewMemoryDialog'
 import { isFlagged } from './memoryStatus'
+import { HelpButton } from '../../help'
 
 const RAIL_WIDTH = 332
 const RAIL_COLLAPSED_WIDTH = 44
@@ -478,6 +479,7 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 				<Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
 					AI Review{openCount > 0 ? ` · ${openCount} open` : ''}
 				</Typography>
+				<HelpButton topic="ai.review.rail" />
 				<Tooltip title="Collapse">
 					<IconButton size="small" onClick={review.collapse} aria-label="Collapse review">
 						<ChevronRightIcon fontSize="small" />

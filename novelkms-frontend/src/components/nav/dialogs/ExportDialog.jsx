@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
 	Alert,
+	Box,
 	Button,
 	CircularProgress,
 	Dialog,
@@ -11,6 +12,7 @@ import {
 	Typography,
 } from '@mui/material'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
+import { HelpButton } from '../../../help'
 
 const DEFAULT_ACCEPT = {
 	'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
@@ -161,7 +163,11 @@ function ExportDialogInner({
 
 	return (
 		<Dialog open={open} onClose={exporting ? undefined : onClose} maxWidth="sm" fullWidth>
-			<DialogTitle>{dialogTitle}</DialogTitle>
+			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+				{dialogTitle}
+				<Box sx={{ flex: 1 }} />
+				<HelpButton topic="import-export.export" />
+			</DialogTitle>
 
 			<DialogContent>
 				<Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

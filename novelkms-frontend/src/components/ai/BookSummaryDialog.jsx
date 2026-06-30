@@ -29,6 +29,7 @@ import PreBookSummaryDialog from './PreBookSummaryDialog'
 import RegenerateConfirmDialog from './RegenerateConfirmDialog'
 import RichTextPreview from './RichTextPreview'
 import { stripHtmlToText } from '../../utils/htmlText'
+import { HelpButton } from '../../help'
 
 function errMessage(err) {
 	const data = err?.response?.data
@@ -130,8 +131,10 @@ export default function BookSummaryDialog({ open, onClose, bookId, title, onEdit
 
 	return (
 		<Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-			<DialogTitle>
+			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 				Summary{title?.trim() ? ` — ${title.trim()}` : ''}
+				<Box sx={{ flex: 1 }} />
+				<HelpButton topic="ai.summaries" />
 			</DialogTitle>
 			<DialogContent dividers>
 				{/* ── Book summary ─────────────────────────────────────────────── */}

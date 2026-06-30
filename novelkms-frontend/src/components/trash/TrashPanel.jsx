@@ -23,6 +23,7 @@ import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark'
 import DataObjectIcon from '@mui/icons-material/DataObject'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import { useTrash, useRestoreTrashItem, usePurgeTrashItem, useEmptyTrash } from '../../hooks/useTrash'
+import { HelpButton } from '../../help'
 
 const TYPE_META = {
 	PROJECT:        { icon: FolderIcon,              label: 'Project' },
@@ -117,6 +118,7 @@ export default function TrashPanel() {
 				<Typography variant="h6" sx={{ fontWeight: 700, flex: 1 }}>
 					Trash
 				</Typography>
+				<HelpButton topic="manuscript.trash" />
 				{items.length > 0 && (
 					<Chip label={`${items.length} item${items.length !== 1 ? 's' : ''}`} size="small" />
 				)}

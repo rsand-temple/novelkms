@@ -17,6 +17,7 @@ import {
 } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import { useCodexAiContext, useSetScenePinned, useSetCategoryPinned } from '../../hooks/useAiContext'
+import { HelpButton } from '../../help'
 
 /**
  * ManageAiContextDialog
@@ -97,6 +98,8 @@ export default function ManageAiContextDialog({ open, onClose, codexId, title })
 			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 				<AutoAwesomeIcon fontSize="small" color="primary" />
 				Manage AI Context — {title || 'Codex'}
+				<Box sx={{ flex: 1 }} />
+				<HelpButton topic="ai.overview" />
 			</DialogTitle>
 
 			<DialogContent dividers>
