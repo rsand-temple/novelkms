@@ -169,7 +169,9 @@ public abstract class NovelKmsTestBase {
             s.execute("DELETE FROM pending_registration");
             s.execute("DELETE FROM oauth_state");
             s.execute("DELETE FROM stripe_webhook_event");
+            s.execute("DELETE FROM admin_audit_log");
             s.execute("DELETE FROM user_subscription");
+            s.execute("DELETE FROM user_role");
             s.execute("DELETE FROM app_user");
         }
         resetTestUsers();
