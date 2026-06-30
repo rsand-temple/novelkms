@@ -13,6 +13,7 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
 import AccountDialog from './dialogs/AccountDialog'
 import { useAuth } from '../../auth/AuthContext'
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 
 export default function UserMenu() {
 	const [anchorEl, setAnchorEl] = useState(null)
@@ -27,6 +28,8 @@ export default function UserMenu() {
 	const initials = displayName
 		? displayName.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase()
 		: null
+	const roles = user?.roles ?? []
+	const isAdmin = roles.includes('ADMIN')
 
 	async function handleLogout() {
 		setAnchorEl(null)
@@ -54,6 +57,20 @@ export default function UserMenu() {
 					)}
 				</IconButton>
 			</Tooltip>
+
+			{isAdmin && (
+				<MenuItem
+					onClick={() => {
+						setAnchorEl(null)
+						window.location.href = '/admin'
+					}}
+				>
+					<ListItemIcon>
+						<AdminPanelSettingsIcon fontSize="small" />
+					</ListItemIcon>
+					Admin console
+				</MenuItem>
+			)}
 
 			<Menu
 				anchorEl={anchorEl}

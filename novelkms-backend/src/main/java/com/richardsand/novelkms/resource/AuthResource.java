@@ -129,9 +129,17 @@ public class AuthResource {
         logger.debug("AuthResource.status invoked: hasSessionCookie={}, hasRegistrationCookie={}", sessionToken != null, registrationToken != null);
         var user = sessions.authenticate(sessionToken);
         if (user.isPresent()) {
-            var u = user.get().user();
-            return Response.ok(Map.of("state", "AUTHENTICATED", "user", Map.of(
-                    "id", u.id(), "displayName", u.displayName(), "emailAddress", u.emailAddress()))).build();
+            var session = user.get();
+            var u       = session.user();
+
+            return Response.ok(Map.of(
+                    "state", "AUTHENTICATED",
+                    "user", Map.of(
+                            "id", u.id(),
+                            "displayName", u.displayName(),
+                            "emailAddress", u.emailAddress(),
+                            "roles", session.roles())))
+                    .build();
         }
         if (registrationToken != null) {
             var pending = dao.findPendingRegistration(CryptoTokens.sha256(registrationToken));

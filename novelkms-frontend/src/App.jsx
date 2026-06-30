@@ -32,6 +32,7 @@ import { ReviewProvider } from './review/ReviewProvider'
 import { usePreferences } from './hooks/usePreferences'
 import { hydrateSkipDeleteConfirm } from './utils/deleteConfirmPrefs'
 import BillingReturnPage from './components/subscription/BillingReturnPage'
+import AdminSupportConsole from './components/admin/AdminSupportConsole'
 
 /* eslint-disable no-undef */
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
@@ -242,6 +243,10 @@ export default function App() {
 
 	const path = window.location.pathname
 
+	if (path === '/admin') {
+		return <AdminSupportConsole />
+	}
+	
 	if (path === '/billing/success') {
 		return <BillingReturnPage result="success" />
 	}
