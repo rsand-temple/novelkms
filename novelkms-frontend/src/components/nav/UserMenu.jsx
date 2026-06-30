@@ -10,14 +10,17 @@ import {
 } from '@mui/material'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
+import ContactSupportIcon from '@mui/icons-material/ContactSupport'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
 import AccountDialog from './dialogs/AccountDialog'
+import ContactSupportDialog from './dialogs/ContactSupportDialog'
 import { useAuth } from '../../auth/AuthContext'
 
 export default function UserMenu() {
 	const [anchorEl, setAnchorEl] = useState(null)
 	const [accountOpen, setAccountOpen] = useState(false)
+	const [contactSupportOpen, setContactSupportOpen] = useState(false)
 	const [loggingOut, setLoggingOut] = useState(false)
 	const auth = useAuth()
 
@@ -94,6 +97,18 @@ export default function UserMenu() {
 
 				<Divider />
 
+				<MenuItem
+					onClick={() => {
+						setAnchorEl(null)
+						setContactSupportOpen(true)
+					}}
+				>
+					<ListItemIcon>
+						<ContactSupportIcon fontSize="small" />
+					</ListItemIcon>
+					Help / Contact support
+				</MenuItem>
+
 				<MenuItem onClick={handleLogout} disabled={loggingOut}>
 					<ListItemIcon>
 						<LogoutIcon fontSize="small" />
@@ -105,6 +120,11 @@ export default function UserMenu() {
 			<AccountDialog
 				open={accountOpen}
 				onClose={() => setAccountOpen(false)}
+			/>
+
+			<ContactSupportDialog
+				open={contactSupportOpen}
+				onClose={() => setContactSupportOpen(false)}
 			/>
 		</>
 	)
