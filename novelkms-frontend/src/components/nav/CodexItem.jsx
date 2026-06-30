@@ -39,6 +39,7 @@ export default function CodexItem({ codex, scope, selection, setSelection }) {
             chapterId:     null,
             sceneId:       null,
             codexId:       codex.id,
+            codexTitle:    codex.title || 'Codex',
             codexCategory: null,
         }))
     }

@@ -24,6 +24,7 @@ import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor';
 import MemoryTemplateEditor from '../ai/MemoryTemplateEditor';
 import { useChapterMemory, useChapterMemoryStatus } from '../../hooks/useChapterMemory';
 import { useChapterSummary, useBookChapterSummaries, useBookSummary, useBookSummaryStatus } from '../../hooks/useSummary';
+import { useCodexAiContext, useSetScenePinned, useSetCategoryPinned } from '../../hooks/useAiContext';
 import { stateColor as memoryStateColor, stateExplanation as memoryStateExplanation, stateLabel as memoryStateLabel, formatTime as formatMemoryTime } from '../ai/memoryStatus';
 import { stateColor as summaryStateColor, stateExplanation as summaryStateExplanation, stateLabel as summaryStateLabel } from '../ai/summaryStatus';
 
@@ -38,9 +39,58 @@ const PAGE_SIZE_PRESETS = [
 	{ label: 'Custom', value: 'CUSTOM', width: null, height: null },
 ]
 
+// ── Codex AI context ──────────────────────────────────────────────────────────
+
+const CODEX_CATEGORY_LABELS = {
+	CHARACTER: 'Characters',
+	VOICE: 'Voices',
+	PLOT: 'Plot',
+	WORLD: 'World',
+	TIMELINE: 'Timeline',
+	CANON: 'Canon',
+	NOTES: 'Notes',
+};
+
+/**
+ * Presentational AI-context toggle shared by the codex container, codex
+ * category, and codex entry property panels. The checkbox shares its meaning
+ * with the nav context-menu "Include in AI context" actions: a checked box
+ * means the entry/entries are shared with the AI as reference context for
+ * chapter/scene reviews.
+ */
+function AiContextToggle({ label, checked, indeterminate = false, disabled = false, onChange, summary, helper }) {
+	return (
+		<Box>
+			<FormControlLabel
+				sx={{ m: 0 }}
+				control={
+					<Checkbox
+						size="small"
+						checked={checked}
+						indeterminate={indeterminate}
+						disabled={disabled}
+						onChange={(e) => onChange(e.target.checked)}
+					/>
+				}
+				label={<Typography variant="body2">{label}</Typography>}
+			/>
+			{summary && (
+				<Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 3.5 }}>
+					{summary}
+				</Typography>
+			)}
+			{helper && (
+				<Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 3.5, mt: 0.5 }}>
+					{helper}
+				</Typography>
+			)}
+		</Box>
+	);
+}
+
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
-function SceneForm({ scene, sceneId, chapterId }) {
+function SceneForm({ scene, sceneId, chapterId, codexId = null }) {
 	const qc = useQueryClient();
 	const [title, setTitle] = useState(scene.title ?? '');
 	const [synopsis, setSynopsis] = useState(scene.synopsis ?? '');
@@ -53,9 +103,13 @@ function SceneForm({ scene, sceneId, chapterId }) {
 		},
 	});
 
+	// Codex entries (codexId set) can be shared with the AI as reference context.
+	const isCodexEntry = !!codexId;
+	const { mutate: setScenePinned } = useSetScenePinned();
+
 	return (
 		<Stack spacing={2} sx={{ p: 2 }}>
-			<Typography variant="overline" color="text.secondary">Scene</Typography>
+			<Typography variant="overline" color="text.secondary">{isCodexEntry ? 'Codex Entry' : 'Scene'}</Typography>
 			<TextField
 				label="Title" size="small" fullWidth
 				value={title} onChange={(e) => setTitle(e.target.value)}
@@ -64,6 +118,18 @@ function SceneForm({ scene, sceneId, chapterId }) {
 				label="Synopsis" size="small" fullWidth multiline minRows={3}
 				value={synopsis} onChange={(e) => setSynopsis(e.target.value)}
 			/>
+
+			{isCodexEntry && (
+				<AiContextToggle
+					label="Include in AI context"
+					checked={!!scene.aiContextPinned}
+					onChange={(pinned) => setScenePinned({ sceneId, chapterId, codexId, pinned })}
+					summary={scene.aiContextPinned
+						? 'Shared with the AI as reference context.'
+						: 'Not shared with the AI.'}
+				/>
+			)}
+
 			<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
 				<Chip label={`${scene.wordCount ?? 0} words`} size="small" variant="outlined" />
 				<Button size="small" variant="contained"
@@ -75,11 +141,11 @@ function SceneForm({ scene, sceneId, chapterId }) {
 	);
 }
 
-function SceneProperties({ sceneId, chapterId }) {
+function SceneProperties({ sceneId, chapterId, codexId = null }) {
 	const { data: scene, isLoading } = useScene(sceneId);
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!scene) return null;
-	return <SceneForm key={`${scene.id}:${scene.title ?? ''}`} scene={scene} sceneId={sceneId} chapterId={chapterId} />;
+	return <SceneForm key={`${scene.id}:${scene.title ?? ''}:${scene.aiContextPinned}`} scene={scene} sceneId={sceneId} chapterId={chapterId} codexId={codexId} />;
 }
 
 // ── Chapter ───────────────────────────────────────────────────────────────────
@@ -148,6 +214,104 @@ function ChapterProperties({ chapterId, bookId }) {
 	if (isLoading) return <CircularProgress size={20} sx={{ m: 2 }} />;
 	if (!chapter) return null;
 	return <ChapterForm key={`${chapter.id}:${chapter.title ?? ''}`} chapter={chapter} chapterId={chapterId} bookId={bookId} />;
+}
+
+// ── Codex category (a fixed chapter inside a codex) ───────────────────────────
+
+/**
+ * Properties for a codex category. Unlike a manuscript chapter, a category is
+ * fixed: it shows its read-only name (no "Chapter N", no title/subtitle/notes),
+ * plus a bulk AI-context toggle that shares (or unshares) every entry in the
+ * category — the same meaning as the nav "Include/Exclude all in AI context".
+ */
+function CodexCategoryProperties({ chapterId, codexId, codexCategory }) {
+	const { data: ctx, isLoading } = useCodexAiContext(codexId);
+	const { mutate: setCategoryPinned } = useSetCategoryPinned();
+
+	const items = (ctx?.entries ?? []).filter(e => e.chapterId === chapterId);
+	const total = items.length;
+	const pinned = items.filter(e => e.pinned).length;
+	const label = items[0]?.categoryTitle?.trim()
+		|| CODEX_CATEGORY_LABELS[codexCategory]
+		|| 'Category';
+
+	return (
+		<Stack spacing={2} sx={{ p: 2 }}>
+			<Typography variant="overline" color="text.secondary">Codex Category</Typography>
+			<Chip
+				label={label}
+				size="small" variant="outlined"
+				sx={{ alignSelf: 'flex-start', fontWeight: 500, color: 'text.secondary', borderColor: 'divider' }}
+			/>
+
+			{isLoading ? (
+				<CircularProgress size={18} />
+			) : (
+				<AiContextToggle
+					label="Include all in AI context"
+					checked={total > 0 && pinned === total}
+					indeterminate={pinned > 0 && pinned < total}
+					disabled={total === 0}
+					onChange={(checked) => setCategoryPinned({ chapterId, codexId, pinned: checked })}
+					summary={total === 0
+						? 'No entries in this category yet.'
+						: `${pinned} of ${total} ${total === 1 ? 'entry' : 'entries'} shared with the AI.`}
+				/>
+			)}
+		</Stack>
+	);
+}
+
+// ── Codex container ───────────────────────────────────────────────────────────
+
+/**
+ * Properties for the codex container. Shows a codex-wide AI-context toggle that
+ * shares (or unshares) every entry across all categories — the same meaning as
+ * the nav "Manage AI Context" dialog's Clear-all / select-all, surfaced as a
+ * single checkbox.
+ */
+function CodexProperties({ codexId, title }) {
+	const { data: ctx, isLoading } = useCodexAiContext(codexId);
+	const { mutate: setCategoryPinned } = useSetCategoryPinned();
+
+	const entries = ctx?.entries ?? [];
+	const total = entries.length;
+	const pinned = entries.filter(e => e.pinned).length;
+
+	const setAll = (checked) => {
+		// Bulk-toggle each distinct category chapter, mirroring the Manage dialog.
+		const chapterIds = [...new Set(entries.map(e => e.chapterId))];
+		for (const cid of chapterIds) {
+			setCategoryPinned({ chapterId: cid, codexId, pinned: checked });
+		}
+	};
+
+	return (
+		<Stack spacing={2} sx={{ p: 2 }}>
+			<Typography variant="overline" color="text.secondary">Codex</Typography>
+			<Chip
+				label={title || 'Codex'}
+				size="small" variant="outlined"
+				sx={{ alignSelf: 'flex-start', fontWeight: 500, color: 'text.secondary', borderColor: 'divider' }}
+			/>
+
+			{isLoading ? (
+				<CircularProgress size={18} />
+			) : (
+				<AiContextToggle
+					label="Include all entries in AI context"
+					checked={total > 0 && pinned === total}
+					indeterminate={pinned > 0 && pinned < total}
+					disabled={total === 0}
+					onChange={setAll}
+					summary={total === 0
+						? 'No entries in this codex yet.'
+						: `${pinned} of ${total} ${total === 1 ? 'entry' : 'entries'} shared with the AI.`}
+					helper="Right-click the Codex → Manage AI Context for per-entry control."
+				/>
+			)}
+		</Stack>
+	);
 }
 
 // ── Part ──────────────────────────────────────────────────────────────────────
@@ -770,7 +934,7 @@ function TemplateProperties({ selection, setSelection }) {
 // ── Root panel ────────────────────────────────────────────────────────────────
 
 export default function PropertiesPanel({ selection, setSelection, selectTemplate }) {
-	const { sceneId, chapterId, partId, bookId, projectId, templateType, aiDocType } = selection ?? {};
+	const { sceneId, chapterId, partId, bookId, projectId, codexId, codexCategory, templateType, aiDocType } = selection ?? {};
 
 	// AI document mode (memory document / chapter or book summary) takes over
 	// the panel entirely, same as template mode.
@@ -789,6 +953,20 @@ export default function PropertiesPanel({ selection, setSelection, selectTemplat
 				<TemplateProperties selection={selection} setSelection={setSelection} />
 			</Box>
 		);
+	}
+
+	// Codex selections take over the panel — they are not manuscript nodes, so
+	// they never render the chapter/scene manuscript forms ("Chapter 0", etc.).
+	if (codexId) {
+		let body;
+		if (sceneId) {
+			body = <SceneProperties sceneId={sceneId} chapterId={chapterId} codexId={codexId} />;
+		} else if (chapterId) {
+			body = <CodexCategoryProperties chapterId={chapterId} codexId={codexId} codexCategory={codexCategory} />;
+		} else {
+			body = <CodexProperties codexId={codexId} title={selection?.codexTitle} />;
+		}
+		return <Box sx={{ height: '100%', overflowY: 'auto' }}>{body}</Box>;
 	}
 
 	if (!sceneId && !chapterId && !partId && !bookId && !projectId) {
