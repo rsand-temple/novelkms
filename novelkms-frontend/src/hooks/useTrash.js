@@ -62,4 +62,5 @@ function invalidateAll(qc) {
 	qc.invalidateQueries({ queryKey: ['scenes'] })
 	qc.invalidateQueries({ queryKey: ['codex'] })
 	qc.invalidateQueries({ queryKey: ['ai', 'reviews'] })
+	qc.invalidateQueries({ queryKey: ['artifacts'] })
 }

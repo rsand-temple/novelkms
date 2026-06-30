@@ -209,6 +209,30 @@ public class TrashDao {
                 });
     }
 
+    /**
+     * Trashes an artifact folder or file. The root type is ARTIFACT_FOLDER or
+     * ARTIFACT_FILE; for a folder, child_count is the number of live direct
+     * children (display only). Ownership resolves through the owning project.
+     */
+    public Optional<TrashItem> trashArtifactNode(UUID userId, UUID id) throws SQLException {
+        String ctx = """
+                SELECT a.name, a.node_type, a.project_id, p.title AS project_title,
+                       (SELECT COUNT(*) FROM artifact_node ch
+                          WHERE ch.parent_id = a.id AND ch.deleted_at IS NULL) AS child_count
+                FROM artifact_node a
+                JOIN project p ON p.id = a.project_id
+                WHERE a.id = ? AND p.owner_user_id = ? AND a.deleted_at IS NULL
+                """;
+        return doTrash(userId, id, ctx, "artifact_node", "ARTIFACT_FILE",
+                (rs) -> {
+                    boolean folder = "FOLDER".equals(rs.getString("node_type"));
+                    return new Ctx(rs.getString("name"),
+                            rs.getObject("project_id", UUID.class), rs.getString("project_title"),
+                            folder ? rs.getInt("child_count") : 0,
+                            folder ? "ARTIFACT_FOLDER" : "ARTIFACT_FILE");
+                });
+    }
+
     // ---- shared trash plumbing ----------------------------------------------
 
     /** Resolved batch context for a soft-delete. */
@@ -380,6 +404,25 @@ public class TrashDao {
         }
     }
 
+    /**
+     * Restores an artifact node, applying the de-duplicated name (and its
+     * normalized form, recomputed by {@code TrashService} under the Windows-style
+     * case rule) and the append display_order.
+     */
+    public boolean restoreArtifactNode(UUID id, String name, String nameNormalized, int displayOrder)
+            throws SQLException {
+        String sql = "UPDATE artifact_node SET deleted_at = NULL, deleted_batch_id = NULL, "
+                + "name = ?, name_normalized = ?, display_order = ?, updated_at = ? WHERE id = ?";
+        try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, name);
+            ps.setString(2, nameNormalized);
+            ps.setInt(3, displayOrder);
+            ps.setTimestamp(4, Timestamp.from(Instant.now()));
+            ps.setObject(5, id);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
     private boolean restoreOrdered(String table, UUID id, String title, int displayOrder) throws SQLException {
         String sql = "UPDATE " + table + " SET deleted_at = NULL, deleted_batch_id = NULL, "
                 + "title = ?, display_order = ?, updated_at = ? WHERE id = ?";
@@ -416,6 +459,66 @@ public class TrashDao {
 
     public void purgeReview(UUID id) throws SQLException {
         simpleDelete("DELETE FROM ai_review WHERE id = ?", id);
+    }
+
+    /**
+     * Permanently removes an artifact subtree. Node rows cascade via the
+     * self-referential {@code parent_id} FK, but the {@code node -> blob} FK has
+     * no cascade, so the subtree's blob storage keys are collected first (for the
+     * caller to delete the on-disk bytes after this commits) and the blob rows are
+     * deleted explicitly once their referencing nodes are gone. Returns the
+     * storage keys whose disk files the caller must remove.
+     */
+    public List<String> purgeArtifactNode(UUID rootId) throws SQLException {
+        String collectSql = """
+                WITH RECURSIVE sub(id) AS (
+                    SELECT id FROM artifact_node WHERE id = ?
+                    UNION ALL
+                    SELECT a.id FROM artifact_node a JOIN sub ON a.parent_id = sub.id
+                )
+                SELECT n.blob_id, b.storage_key
+                FROM artifact_node n
+                JOIN artifact_blob b ON b.id = n.blob_id
+                WHERE n.blob_id IS NOT NULL AND n.id IN (SELECT id FROM sub)
+                """;
+        List<UUID>   blobIds     = new ArrayList<>();
+        List<String> storageKeys = new ArrayList<>();
+        try (Connection c = ds.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                try (PreparedStatement ps = c.prepareStatement(collectSql)) {
+                    ps.setObject(1, rootId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            blobIds.add(rs.getObject("blob_id", UUID.class));
+                            storageKeys.add(rs.getString("storage_key"));
+                        }
+                    }
+                }
+                // Delete the subtree (descendants cascade through parent_id).
+                try (PreparedStatement ps = c.prepareStatement("DELETE FROM artifact_node WHERE id = ?")) {
+                    ps.setObject(1, rootId);
+                    ps.executeUpdate();
+                }
+                // Now the (orphaned) blob rows can be removed.
+                if (!blobIds.isEmpty()) {
+                    try (PreparedStatement ps = c.prepareStatement("DELETE FROM artifact_blob WHERE id = ?")) {
+                        for (UUID blobId : blobIds) {
+                            ps.setObject(1, blobId);
+                            ps.addBatch();
+                        }
+                        ps.executeBatch();
+                    }
+                }
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+        return storageKeys;
     }
 
     private void purgeWithReviews(String reviewSql, String entitySql, UUID id) throws SQLException {
@@ -467,6 +570,8 @@ public class TrashDao {
                             AND NOT EXISTS (SELECT 1 FROM scene     WHERE id = trash_batch.root_id))
                      OR (root_type = 'AI_REVIEW'
                             AND NOT EXISTS (SELECT 1 FROM ai_review WHERE id = trash_batch.root_id))
+                     OR (root_type IN ('ARTIFACT_FOLDER', 'ARTIFACT_FILE')
+                            AND NOT EXISTS (SELECT 1 FROM artifact_node WHERE id = trash_batch.root_id))
                   )
                 """;
         try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {

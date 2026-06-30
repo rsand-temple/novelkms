@@ -112,3 +112,13 @@ billing:
   successUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:3000', true)}}/billing/success
   cancelUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:3000', true)}}/billing/cancel
   enforceSubscriptions: true
+
+# Artifacts: per-project store for non-manuscript files (query letters, research,
+# cover-art sources). File bytes live on disk under storageDir (mount a host
+# volume in any real deployment); blank uses an INSECURE temp dir with a warning,
+# fine for local Eclipse runs. Quotas are per-user.
+artifacts:
+  enabled: true
+  storageDir: {{NOVELKMS_ARTIFACT_DIR | d('')}}
+  maxFileSizeBytes: 52428800
+  defaultUserQuotaBytes: 1073741824

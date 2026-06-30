@@ -7,6 +7,7 @@ import { useBooks }          from '../../hooks/useBooks'
 import { useUpdateProject }  from '../../hooks/useProjects'
 import BookItem              from './BookItem'
 import CodexSection          from './CodexSection'
+import ArtifactsSection      from './ArtifactsSection'
 import { useNavContextMenu } from './NavContextMenuContext'
 import { useSearch } from '../../search/SearchContext'
 
@@ -144,6 +145,12 @@ export default function ProjectItem({ project, selection, setSelection }) {
 					<CodexSection
 						scope="project"
 						ownerId={project.id}
+						open={open}
+						selection={selection}
+						setSelection={setSelection}
+					/>
+					<ArtifactsSection
+						projectId={project.id}
 						open={open}
 						selection={selection}
 						setSelection={setSelection}

@@ -77,6 +77,21 @@ public class NovelKmsConfig extends Configuration {
         }
     }
 
+    /**
+     * Artifacts (non-manuscript project file store). {@code storageDir} is the
+     * host-mounted directory the blob bytes live in; blank falls back to a temp
+     * directory with a startup warning (local dev only). Quotas are per-user:
+     * {@code defaultUserQuotaBytes} applies unless a user has an
+     * {@code artifact_quota_bytes} override.
+     */
+    @Getter
+    public static class Artifacts {
+        public boolean enabled               = true;
+        public String  storageDir;
+        public long    maxFileSizeBytes      = 52_428_800L;     // 50 MB
+        public long    defaultUserQuotaBytes = 1_073_741_824L;  // 1 GB
+    }
+
     @JsonProperty
     Database database;
 
@@ -91,4 +106,7 @@ public class NovelKmsConfig extends Configuration {
 
     @JsonProperty
     Tools tools = new Tools();
+
+    @JsonProperty
+    Artifacts artifacts = new Artifacts();
 }

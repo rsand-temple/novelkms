@@ -15,6 +15,7 @@ import org.flywaydb.core.Flyway;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.richardsand.novelkms.auth.AuthConstants;
+import com.richardsand.novelkms.dao.ArtifactNodeDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.ProjectDao;
@@ -23,6 +24,7 @@ import com.richardsand.novelkms.dao.TemplateDao;
 import com.richardsand.novelkms.dao.TrashDao;
 import com.richardsand.novelkms.dao.UserStyleDao;
 import com.richardsand.novelkms.model.Project;
+import com.richardsand.novelkms.service.ArtifactStorage;
 import com.richardsand.novelkms.service.TrashService;
 
 import jakarta.annotation.Priority;
@@ -67,6 +69,10 @@ public abstract class NovelKmsTestBase {
     protected static final TrashDao        trashDao;
     protected static final TrashService    trashService;
 
+    private static ArtifactStorage artifactStorage;
+
+    private static ArtifactNodeDao artifactNodeDao;
+
     static {
         try {
             ds = new BasicDataSource();
@@ -85,14 +91,16 @@ public abstract class NovelKmsTestBase {
                     .load()
                     .migrate();
 
-            projectDao = new ProjectDao(ds);
+            artifactNodeDao = new ArtifactNodeDao(ds);
+            artifactStorage = new ArtifactStorage("");
             bookDao = new BookDao(ds);
             chapterDao = new ChapterDao(ds);
+            projectDao = new ProjectDao(ds);
             sceneDao = new SceneDao(ds);
-            templateDao = new TemplateDao(ds);
             styleDao = new UserStyleDao(ds);
+            templateDao = new TemplateDao(ds);
             trashDao = new TrashDao(ds);
-            trashService = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
+            trashService = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao, artifactNodeDao, artifactStorage);
 
             // Ensure static ResourceExtensions have a valid principal even before
             // the first subclass @BeforeEach executes.

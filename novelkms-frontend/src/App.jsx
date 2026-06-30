@@ -16,6 +16,7 @@ import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import NavPanel from './components/layout/NavPanel'
 import EditorPanel from './components/layout/EditorPanel'
+import ArtifactsPanel from './components/artifacts/ArtifactsPanel'
 import TrashPanel from './components/trash/TrashPanel'
 import PropertiesPanel from './components/layout/PropertiesPanel'
 import ImportDialog from './components/nav/dialogs/ImportDialog'
@@ -75,6 +76,7 @@ const EMPTY_SELECTION = {
 	templateType: null,   // 'cover' | 'part' | null
 	templateScope: null,  // 'global' | 'book' | null
 	aiDocType: null,       // 'memory' | 'chapterSummary' | 'bookSummary' | null
+	artifactFolderId: null, // 'root' | <folderId> | null — active Artifacts Explorer folder
 }
 
 function WorkspacePanelHeader({ icon, title, subtitle, actions }) {
@@ -306,6 +308,7 @@ export default function App() {
 				templateType: null,
 				templateScope: null,
 				aiDocType: null,
+				artifactFolderId: null,
 			}
 
 			const base = typeof update === 'function' ? update(cleanPrev) : update
@@ -319,6 +322,7 @@ export default function App() {
 				templateType: base.templateType ?? null,
 				templateScope: base.templateScope ?? null,
 				aiDocType: base.aiDocType ?? null,
+				artifactFolderId: base.artifactFolderId ?? null,
 			}
 		})
 	}, [])
@@ -765,6 +769,12 @@ export default function App() {
 						}}>
 							{selection.trashSelected ? (
 								<TrashPanel />
+							) : selection.artifactFolderId ? (
+								<ArtifactsPanel
+									projectId={selection.projectId}
+									folderId={selection.artifactFolderId === 'root' ? null : selection.artifactFolderId}
+									setSelection={setSelection}
+								/>
 							) : (
 								<EditorPanel
 									partId={selection.partId}

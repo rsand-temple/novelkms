@@ -31,6 +31,8 @@ import com.richardsand.novelkms.dao.AiCredentialDao;
 import com.richardsand.novelkms.dao.AiFormInstructionsDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.ArchiveDao;
+import com.richardsand.novelkms.dao.ArtifactBlobDao;
+import com.richardsand.novelkms.dao.ArtifactNodeDao;
 import com.richardsand.novelkms.dao.AuthDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.BookSummaryDao;
@@ -60,6 +62,7 @@ import com.richardsand.novelkms.resource.AiCredentialResource;
 import com.richardsand.novelkms.resource.AiFormInstructionsResource;
 import com.richardsand.novelkms.resource.AiReviewResource;
 import com.richardsand.novelkms.resource.ArchiveResource;
+import com.richardsand.novelkms.resource.ArtifactResource;
 import com.richardsand.novelkms.resource.AuthResource;
 import com.richardsand.novelkms.resource.BillingResource;
 import com.richardsand.novelkms.resource.BookResource;
@@ -88,6 +91,8 @@ import com.richardsand.novelkms.resource.admin.AdminSystemResource;
 import com.richardsand.novelkms.resource.admin.AdminUserResource;
 import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.ArchiveService;
+import com.richardsand.novelkms.service.ArtifactService;
+import com.richardsand.novelkms.service.ArtifactStorage;
 import com.richardsand.novelkms.service.BillingService;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
@@ -186,6 +191,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         CodexCategoryDao      codexCategoryDao      = new CodexCategoryDao(ds);
         EditorSettingsDao     editorSettingsDao     = new EditorSettingsDao(ds);
         ArchiveDao            archiveDao            = new ArchiveDao(ds);
+        ArtifactNodeDao       artifactNodeDao       = new ArtifactNodeDao(ds);
+        ArtifactBlobDao       artifactBlobDao       = new ArtifactBlobDao(ds);
         MemoryTemplateDao     memoryTemplateDao     = new MemoryTemplateDao(ds);
         PageLayoutDao         pageLayoutDao         = new PageLayoutDao(ds);
         PartDao               partDao               = new PartDao(ds);
@@ -214,7 +221,11 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         ImportService       importService       = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
         OAuthService        oauthService        = new OAuthService(config.getAuth(), authDao);
         SessionService      sessionService      = new SessionService(authDao, config.getAuth());
-        TrashService        trashService        = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
+        ArtifactStorage     artifactStorage     = new ArtifactStorage(
+                config.getArtifacts() != null ? config.getArtifacts().storageDir : null);
+        ArtifactService     artifactService     = new ArtifactService(ds, artifactNodeDao, artifactBlobDao, artifactStorage, config);
+        TrashService        trashService        = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao,
+                artifactNodeDao, artifactStorage);
 
         // AI Credential DAO
         SecretCipher    secretCipher    = new SecretCipher(
@@ -262,6 +273,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(AiReviewResource.class);
         env.jersey().register(AiCredentialResource.class);
         env.jersey().register(ArchiveResource.class);
+        env.jersey().register(ArtifactResource.class);
         env.jersey().register(AuthenticationFilter.class);
         env.jersey().register(AuthResource.class);
         env.jersey().register(BillingResource.class);
@@ -309,6 +321,10 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(aiReviewDao).to(AiReviewDao.class);
                 bind(aiReviewService).to(AiReviewService.class);
                 bind(archiveDao).to(ArchiveDao.class);
+                bind(artifactNodeDao).to(ArtifactNodeDao.class);
+                bind(artifactBlobDao).to(ArtifactBlobDao.class);
+                bind(artifactStorage).to(ArtifactStorage.class);
+                bind(artifactService).to(ArtifactService.class);
                 bind(authDao).to(AuthDao.class);
                 bind(billingService).to(BillingService.class);
                 bind(bookDao).to(BookDao.class);

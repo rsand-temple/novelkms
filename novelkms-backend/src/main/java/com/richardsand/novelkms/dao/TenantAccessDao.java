@@ -82,13 +82,28 @@ public class TenantAccessDao {
                 """, sceneId, userId);
     }
 
+    /**
+     * An artifact node (folder or file) belongs to exactly one project; ownership
+     * resolves straight through the project. This also lets the tenant filter's
+     * generic JSON-body check accept an artifact {@code parentId} on a move
+     * request (see {@link #ownsAnyEntity}).
+     */
+    public boolean ownsArtifactNode(UUID userId, UUID nodeId) throws SQLException {
+        return exists("""
+                SELECT 1 FROM artifact_node a
+                JOIN project p ON p.id = a.project_id
+                WHERE a.id = ? AND p.owner_user_id = ?
+                """, nodeId, userId);
+    }
+
     public boolean ownsAnyEntity(UUID userId, UUID entityId) throws SQLException {
         return ownsProject(userId, entityId)
                 || ownsBook(userId, entityId)
                 || ownsPart(userId, entityId)
                 || ownsCodex(userId, entityId)
                 || ownsChapter(userId, entityId)
-                || ownsScene(userId, entityId);
+                || ownsScene(userId, entityId)
+                || ownsArtifactNode(userId, entityId);
     }
 
     private boolean exists(String sql, UUID entityId, UUID userId) throws SQLException {

@@ -4,6 +4,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -11,6 +12,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.richardsand.novelkms.dao.ArtifactNodeDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.ProjectDao;
@@ -18,6 +20,7 @@ import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.TrashDao;
 import com.richardsand.novelkms.dao.TrashDao.ChapterParents;
 import com.richardsand.novelkms.dao.TrashDao.CodexOwner;
+import com.richardsand.novelkms.model.ArtifactNode;
 import com.richardsand.novelkms.model.Book;
 import com.richardsand.novelkms.model.Chapter;
 import com.richardsand.novelkms.model.Project;
@@ -39,19 +42,24 @@ public class TrashService {
 
     private static final Logger logger = LoggerFactory.getLogger(TrashService.class);
 
-    private final TrashDao    trashDao;
-    private final ProjectDao  projectDao;
-    private final BookDao     bookDao;
-    private final ChapterDao  chapterDao;
-    private final SceneDao    sceneDao;
+    private final TrashDao        trashDao;
+    private final ProjectDao      projectDao;
+    private final BookDao         bookDao;
+    private final ChapterDao      chapterDao;
+    private final SceneDao        sceneDao;
+    private final ArtifactNodeDao artifactNodeDao;
+    private final ArtifactStorage artifactStorage;
 
     public TrashService(TrashDao trashDao, ProjectDao projectDao, BookDao bookDao,
-            ChapterDao chapterDao, SceneDao sceneDao) {
+            ChapterDao chapterDao, SceneDao sceneDao,
+            ArtifactNodeDao artifactNodeDao, ArtifactStorage artifactStorage) {
         this.trashDao = trashDao;
         this.projectDao = projectDao;
         this.bookDao = bookDao;
         this.chapterDao = chapterDao;
         this.sceneDao = sceneDao;
+        this.artifactNodeDao = artifactNodeDao;
+        this.artifactStorage = artifactStorage;
     }
 
     // =========================================================================
@@ -81,6 +89,11 @@ public class TrashService {
     public Optional<TrashItem> trashReview(UUID userId, UUID id) throws SQLException {
         logger.info("Moving AI review to trash: userId={}, reviewId={}", userId, id);
         return trashDao.trashReview(userId, id);
+    }
+
+    public Optional<TrashItem> trashArtifactNode(UUID userId, UUID id) throws SQLException {
+        logger.info("Moving artifact to trash: userId={}, nodeId={}", userId, id);
+        return trashDao.trashArtifactNode(userId, id);
     }
 
     // =========================================================================
@@ -113,6 +126,7 @@ public class TrashService {
             case "CODEX_CATEGORY" -> restoreCodexCategory(batch);
             case "SCENE", "CODEX_ENTRY" -> restoreScene(batch);
             case "AI_REVIEW"      -> restoreReview(batch);
+            case "ARTIFACT_FOLDER", "ARTIFACT_FILE" -> restoreArtifactNode(batch);
             default -> throw new TrashException(400, "unknown_type",
                     "Cannot restore unknown item type: " + batch.getRootType());
         }
@@ -191,6 +205,25 @@ public class TrashService {
         trashDao.restoreReview(batch.getRootId());
     }
 
+    private void restoreArtifactNode(TrashItem batch) throws SQLException {
+        ArtifactNode node = artifactNodeDao.findAnyById(batch.getRootId())
+                .orElseThrow(() -> gone("artifact"));
+        UUID projectId = node.getProjectId();
+        UUID parentId  = node.getParentId();
+        if (parentId == null) {
+            if (projectDao.findById(projectId).isEmpty()) {
+                throw parentTrashed("Restore the project first — it is in the trash.");
+            }
+        } else if (artifactNodeDao.findLiveById(parentId).isEmpty()) {
+            throw parentTrashed("Restore the parent folder first — it is in the trash.");
+        }
+        List<ArtifactNode> siblings = artifactNodeDao.liveChildren(projectId, parentId);
+        String name = dedupeArtifactName(node.getName(), siblings);
+        String norm = name.toLowerCase(Locale.ROOT);
+        int order = nextOrder(orders(siblings, ArtifactNode::getDisplayOrder));
+        trashDao.restoreArtifactNode(node.getId(), name, norm, order);
+    }
+
     private boolean codexOwnerLive(UUID codexId) throws SQLException {
         Optional<CodexOwner> owner = trashDao.codexOwner(codexId);
         if (owner.isEmpty()) return false;
@@ -238,6 +271,12 @@ public class TrashService {
             case "CHAPTER", "CODEX_CATEGORY" -> trashDao.purgeChapter(batch.getRootId());
             case "SCENE", "CODEX_ENTRY"     -> trashDao.purgeScene(batch.getRootId());
             case "AI_REVIEW"                -> trashDao.purgeReview(batch.getRootId());
+            case "ARTIFACT_FOLDER", "ARTIFACT_FILE" -> {
+                // Remove the node subtree + blob rows, then delete the on-disk bytes.
+                for (String key : trashDao.purgeArtifactNode(batch.getRootId())) {
+                    artifactStorage.delete(key);
+                }
+            }
             default -> { /* unknown type: leave the (orphan) batch for the sweep */ }
         }
     }
@@ -281,6 +320,24 @@ public class TrashService {
         for (int n = 1;; n++) {
             String candidate = base + " (" + n + ")";
             if (!set.contains(candidate)) return candidate;
+        }
+    }
+
+    /**
+     * Case-insensitive (Windows-style) de-duplication for a restored artifact
+     * name: if the name collides with a live sibling ignoring case, append the
+     * first free " (n)" suffix.
+     */
+    private static String dedupeArtifactName(String base, List<ArtifactNode> siblings) {
+        if (base == null || base.isBlank()) return base;
+        Set<String> taken = new HashSet<>();
+        for (ArtifactNode s : siblings) {
+            if (s.getName() != null) taken.add(s.getName().toLowerCase(Locale.ROOT));
+        }
+        if (!taken.contains(base.toLowerCase(Locale.ROOT))) return base;
+        for (int n = 1;; n++) {
+            String candidate = base + " (" + n + ")";
+            if (!taken.contains(candidate.toLowerCase(Locale.ROOT))) return candidate;
         }
     }
 
