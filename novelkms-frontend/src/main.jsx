@@ -6,6 +6,7 @@ import { ThemeProvider, CssBaseline } from '@mui/material'
 import theme from './theme'
 import AuthGate from './auth/AuthGate'
 import { AuthProvider } from './auth/AuthProvider'
+import { HelpProvider, HelpCenter } from './help'
 import 'prosemirror-view/style/prosemirror.css'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 1000 * 30, retry: (failureCount, error) => { const status = error?.response?.status; if (status && status < 500) return false; return failureCount < 1 } } } })
@@ -17,7 +18,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 				<ThemeProvider theme={theme}>
 					<CssBaseline />
 					<AuthProvider>
-						<AuthGate />
+						<HelpProvider>
+							<AuthGate />
+							<HelpCenter />
+						</HelpProvider>
 					</AuthProvider>
 				</ThemeProvider>
 			</QueryClientProvider>

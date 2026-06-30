@@ -14,6 +14,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined'
 import SettingsIcon from '@mui/icons-material/Settings'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
 import NavPanel from './components/layout/NavPanel'
 import EditorPanel from './components/layout/EditorPanel'
 import TrashPanel from './components/trash/TrashPanel'
@@ -29,6 +30,7 @@ import { LogoMark } from './components/branding/Logo'
 import { exportApi } from './api/export'
 import { SearchProvider } from './search/SearchProvider'
 import { ReviewProvider } from './review/ReviewProvider'
+import { useHelp } from './help'
 import { usePreferences } from './hooks/usePreferences'
 import { hydrateSkipDeleteConfirm } from './utils/deleteConfirmPrefs'
 import BillingReturnPage from './components/subscription/BillingReturnPage'
@@ -177,6 +179,7 @@ const topBarButtonSx = {
 
 export default function App() {
 	const [selection, setSel] = useState(EMPTY_SELECTION)
+	const { openHelp } = useHelp()
 	const [tplAnchor, setTplAnchor] = useState(null)
 	const [importAnchor, setImportAnchor] = useState(null)
 	const [exportAnchor, setExportAnchor] = useState(null)
@@ -526,6 +529,18 @@ export default function App() {
 								<MenuItem onClick={() => openGlobalTemplate('cover')}>Cover Page</MenuItem>
 								<MenuItem onClick={() => openGlobalTemplate('part')}>Part Page</MenuItem>
 							</Menu>
+
+							<Tooltip title="Help">
+								<IconButton
+									color="inherit"
+									size="small"
+									aria-label="Open help"
+									onClick={() => openHelp()}
+									sx={{ ml: 0.5, color: 'rgba(255,255,255,0.86)', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.09)' } }}
+								>
+									<MenuBookIcon fontSize="small" />
+								</IconButton>
+							</Tooltip>
 
 							<Tooltip title="Settings">
 								<IconButton

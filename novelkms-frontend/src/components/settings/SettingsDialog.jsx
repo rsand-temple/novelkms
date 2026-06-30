@@ -9,6 +9,7 @@ import AiCredentialsPanel from '../ai/AiCredentialsPanel'
 import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor'
 import MemoryTemplateEditor from '../ai/MemoryTemplateEditor'
 import BillingPanel from '../subscription/BillingPanel'
+import { HelpButton } from '../../help'
 
 // Fixed height for the tab body. MUI centers Dialog paper based on its
 // content height, so without a fixed height here the dialog grew/shrank and
@@ -86,6 +87,8 @@ export default function SettingsDialog({ open, initialTab = 'document', projectI
 			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 				<SettingsIcon fontSize="small" />
 				Settings
+				<Box sx={{ flex: 1 }} />
+				<HelpButton topic="index" label="About settings" />
 			</DialogTitle>
 
 			<DialogContent dividers>

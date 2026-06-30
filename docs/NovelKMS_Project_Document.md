@@ -134,6 +134,17 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 - The context `EditorSettingsDialog` has three tabs (Document / Page Layout / AI), each with its own override toggle.
 - The global `SettingsDialog` holds user-level defaults (Document, AI credentials + global review instructions, Other).
 
+### In-app help system
+
+- Help Center modal with table of contents, topic content pane, search, and back-navigation.
+- Help topics are Markdown files under `src/help/content/`, auto-discovered at build time via Vite glob.
+- Cross-linking between topics uses `#help:topic.id` syntax intercepted by the renderer.
+- `HelpButton` component provides one-line context-sensitive `?` buttons for any control or dialog.
+- AppBar Help button opens the Help Center.
+- Static validator (`npm run check-help`) catches broken cross-links, missing topic references in code, duplicate ids, and missing frontmatter.
+- 26 starter topics covering the full product surface across 7 sections.
+- Zero-dependency Markdown renderer; no backend or migration required.
+
 ## Known issues / watchlist
 
 - Billing/admin support now has a minimal console and family-access grant flow. Remaining billing work: extend trial, revoke/remove family access with a defined restoration policy, plan mapping, webhook diagnostics, and eventual Stripe reconciliation.

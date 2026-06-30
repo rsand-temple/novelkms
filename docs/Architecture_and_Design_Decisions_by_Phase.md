@@ -393,3 +393,39 @@ Moves memory-document and chapter/book-summary editing out of modal dialogs and 
 **Removed.** `MemoryDocDialog`, `ChapterSummaryDialog`, `ChapterSummaryEditor` — superseded by the nav leaf + EditorPanel. The chapter context menu's "Edit memory document…"/"Edit chapter summary…" now select the nav node instead of opening a dialog; Generate/Clear quick actions are unchanged.
 
 **PropertiesPanel.** New `AiDocProperties` block (source, generated-at, model, word count for book summaries, last guidance), routed ahead of the normal router exactly the way `TemplateProperties` already is.
+
+### V31 — In-app help system
+
+A frontend-only feature adding a full help center, context-sensitive help buttons, and a static validator — no backend, no migration, no database.
+
+**Design principles.** The system is optimized for four things: (1) adding a topic is dropping a `.md` file — no registry to edit, (2) cross-linking is a single `[label](#help:topic.id)` link, (3) attaching context help to any control is one JSX element `<HelpButton topic="..." />`, and (4) broken links cannot rot silently because the validator catches them.
+
+**Content storage.** Help topics are Markdown files bundled at build time under `src/help/content/`, auto-discovered by Vite's `import.meta.glob('./content/**/*.md', { eager: true, query: '?raw' })`. Each file carries YAML-style frontmatter (`id`, `title`, `section`, `order`) and a Markdown body. Section membership comes from frontmatter, not filesystem path, so topics can be flat or organized into subdirectories freely.
+
+**Markdown rendering.** A zero-dependency renderer (`miniMarkdown.js`) converts Markdown to HTML at render time, supporting headings, bold/italic, inline code, fenced code blocks, links, lists, blockquotes, and horizontal rules. All text is HTML-escaped before structural tags are emitted — the same trust boundary as `RichTextPreview`. The renderer is a single swappable file; replacing it with `marked` or another library requires no other changes.
+
+**Help registry (`helpRegistry.js`).** Parses frontmatter at import time and exposes `getTopic(id)`, `hasTopic(id)`, `allTopics()`, `getTableOfContents()`, `getDefaultTopicId()`, and `searchTopics(query)`. The table of contents groups topics by their `section` field against the ordered list in `helpSections.js`; unknown sections fall into a trailing "More" group. Search is a case-insensitive filter over title and body, with title hits ranked first.
+
+**HelpProvider / useHelp().** A context provider mounted in `main.jsx` (alongside `AuthProvider`) managing modal open/close state, the current topic id, and a back-history stack. Any component anywhere can call `useHelp().openHelp('topic.id')` without prop-drilling — same pattern as `SearchProvider` and `ReviewProvider`. The provider includes a soft fallback so a stray `HelpButton` outside the provider no-ops instead of crashing.
+
+**HelpCenter (modal).** A centered `Dialog` (confirmed D2) with a 280px left TOC pane (sections → topics, with live search) and a right content pane rendering the selected topic via `MarkdownView`. In-content `#help:` links are intercepted by event delegation and routed through the provider's `navigate()`, pushing onto the history stack so the Back button retraces the trail. External `https://` links open in a new tab.
+
+**HelpButton.** A small circular `?` affordance (a styled text glyph, not an icon-font import, so it can never break the Rolldown build on a missing icon file). Renders an `IconButton` that calls `openHelp(topic)`. One line to add anywhere: `<HelpButton topic="ai.review.rail" />`.
+
+**AppBar integration.** A Help icon button (using the proven `MenuBookIcon`) was added to the top bar between Templates and Settings. It opens the Help Center at the default topic (the welcome page).
+
+**Wiring reference.** `SettingsDialog` carries a `HelpButton` in its title bar as a working example of dialog-level context help.
+
+**Validator (`scripts/check-help.mjs`).** A standalone Node script (zero dependencies, no Vite needed) that walks the content directory and source tree. It **fails** on: cross-links to missing topics, `HelpButton topic="..."` or `openHelp('...')` references to missing topics, duplicate topic ids, and files with no `id` frontmatter. It **warns** on topics whose `section` is not declared in `helpSections.js`. Added as `npm run check-help` and intended to run as part of the existing static-verification pass. Confirmed to pass clean and fail correctly on injected bad links.
+
+**Starter content.** 26 topics across 7 sections (Getting Started, Manuscript & Navigation, Editor & Formatting, AI Review & Summaries, Codex, Import & Export, Account & Billing), all cross-linked. These are seed content covering the full product surface; expanding or editing them is the `.md` authoring loop.
+
+**Decisions.**
+- D1: Markdown files bundled in the frontend (not DB-backed, not hardcoded JSX).
+- D2: Centered modal (not drawer — right side is already owned by ReviewRail).
+- D3: One component (`HelpButton`) for launch; popover variant deferred.
+- D4: Dotted-string topic ids in frontmatter; `#help:id` cross-link syntax.
+- D5: Zero-dep `miniMarkdown.js` (swappable for `marked` later).
+- D6: Section grouping/ordering in `helpSections.js`; per-topic `section`+`order` in frontmatter.
+- D7: Static validator in `scripts/check-help.mjs`.
+- D8: Client-side search over title + body included.
