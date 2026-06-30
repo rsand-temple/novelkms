@@ -56,10 +56,10 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 	const { data: usage } = useArtifactUsage(projectId)
 
 	const createFolder = useCreateArtifactFolder()
-	const uploadFile   = useUploadArtifactFile()
-	const renameNode   = useRenameArtifactNode()
-	const moveNode     = useMoveArtifactNode()
-	const trashNode    = useTrashArtifactNode()
+	const uploadFile = useUploadArtifactFile()
+	const renameNode = useRenameArtifactNode()
+	const moveNode = useMoveArtifactNode()
+	const trashNode = useTrashArtifactNode()
 
 	const fileInputRef = useRef(null)
 	const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
@@ -72,7 +72,7 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 	const [uploading, setUploading] = useState(0)             // count remaining
 	const [snack, setSnack] = useState(null)                  // { severity, message }
 
-	const nodes = tree ?? []
+	const nodes = useMemo(() => tree ?? [], [tree])
 
 	// The folder whose contents we are showing (null object => virtual root).
 	const currentFolder = folderId ? nodes.find(n => n.id === folderId && n.type === 'FOLDER') ?? null : null
@@ -161,7 +161,6 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 		setUploading(files.length)
 		for (const file of files) {
 			try {
-				// eslint-disable-next-line no-await-in-loop
 				await uploadFile.mutateAsync({ projectId, parentId: effectiveParentId, file })
 			} catch (err) {
 				setSnack({ severity: 'error', message: artifactErrorMessage(err) })
@@ -198,9 +197,9 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 	}
 
 	// ── Render ─────────────────────────────────────────────────────────────────
-	const usedBytes  = usage?.usedBytes ?? 0
+	const usedBytes = usage?.usedBytes ?? 0
 	const quotaBytes = usage?.quotaBytes ?? 0
-	const usedPct    = quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0
+	const usedPct = quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0
 
 	return (
 		<Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -219,7 +218,7 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 			</Box>
 
 			{/* Toolbar */}
-			<Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5, py: 1, flexShrink: 0 }}>
+			<Stack direction="row" spacing={1} sx={{ alignItems: 'center', px: 1.5, py: 1, flexShrink: 0 }}>
 				<Tooltip title="Up one level">
 					<span>
 						<IconButton size="small" onClick={goUp} disabled={!currentFolder}>
@@ -335,7 +334,7 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 			{/* Usage footer */}
 			<Divider />
 			<Box sx={{ px: 1.75, py: 1, flexShrink: 0 }}>
-				<Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
+				<Stack direction="row" sx={{ justifyContent: 'space-between', mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary">
 						Storage: {formatBytes(usedBytes)} of {formatBytes(quotaBytes)} used
 					</Typography>
@@ -458,7 +457,7 @@ function ArtifactRow({ node, onOpenFolder, onContextMenu, onDownload }) {
 			}}
 		>
 			<TableCell>
-				<Stack direction="row" spacing={1} alignItems="center">
+				<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
 					{isFolder
 						? <FolderIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 						: (isImage(node.contentType)
@@ -481,7 +480,7 @@ function UpRow({ onOpen }) {
 		<TableRow ref={setNodeRef} hover onDoubleClick={onOpen}
 			sx={{ cursor: 'pointer', bgcolor: isOver ? 'action.hover' : undefined }}>
 			<TableCell>
-				<Stack direction="row" spacing={1} alignItems="center">
+				<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
 					<ArrowUpwardIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 					<Typography variant="body2" color="text.secondary">..</Typography>
 				</Stack>
