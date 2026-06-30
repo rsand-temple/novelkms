@@ -27,4 +27,8 @@ export const adminApi = {
 	getRecentAudit: async (limit = 25) => (
 		await client.get('/admin/audit/recent', { params: { limit } })
 	).data,
+
+	getOverviewMetrics: async () => (
+		await client.get('/admin/metrics/overview')
+	).data,
 }

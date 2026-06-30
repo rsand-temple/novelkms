@@ -24,6 +24,9 @@ import com.richardsand.novelkms.auth.SessionService;
 import com.richardsand.novelkms.auth.SubscriptionAuthorizationFilter;
 import com.richardsand.novelkms.auth.TenantAuthorizationFilter;
 import com.richardsand.novelkms.dao.AccountDao;
+import com.richardsand.novelkms.dao.AdminAuditDao;
+import com.richardsand.novelkms.dao.AdminMetricsDao;
+import com.richardsand.novelkms.dao.AdminUserDao;
 import com.richardsand.novelkms.dao.AiCredentialDao;
 import com.richardsand.novelkms.dao.AiFormInstructionsDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
@@ -77,7 +80,11 @@ import com.richardsand.novelkms.resource.SummaryResource;
 import com.richardsand.novelkms.resource.TemplateResource;
 import com.richardsand.novelkms.resource.TrashResource;
 import com.richardsand.novelkms.resource.UserPreferenceResource;
+import com.richardsand.novelkms.resource.admin.AdminAuditResource;
+import com.richardsand.novelkms.resource.admin.AdminBillingResource;
+import com.richardsand.novelkms.resource.admin.AdminMetricsResource;
 import com.richardsand.novelkms.resource.admin.AdminSystemResource;
+import com.richardsand.novelkms.resource.admin.AdminUserResource;
 import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.ArchiveService;
 import com.richardsand.novelkms.service.BillingService;
@@ -85,6 +92,7 @@ import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 import com.richardsand.novelkms.service.TrashService;
+import com.richardsand.novelkms.service.admin.AdminBillingService;
 
 import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.core.Application;
@@ -152,8 +160,16 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 .load()
                 .migrate();
 
+        // Object Mapper
+        ObjectMapper mapper = env.getObjectMapper();
+        mapper.findAndRegisterModules();
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
         // DAOs
         AccountDao            accountDao            = new AccountDao(ds);
+        AdminAuditDao         adminAuditDao         = new AdminAuditDao(ds);
+        AdminMetricsDao       adminMetricsDao       = new AdminMetricsDao(ds);
+        AdminUserDao          adminUserDao          = new AdminUserDao(ds);
         AiFormInstructionsDao aiFormInstructionsDao = new AiFormInstructionsDao(ds);
         AiReviewDao           aiReviewDao           = new AiReviewDao(ds);
         AuthDao               authDao               = new AuthDao(ds);
@@ -182,14 +198,19 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         StripeWebhookEventDao stripeWebhookEventDao = new StripeWebhookEventDao(ds);
 
         // Services
-        ArchiveService    archiveService    = new ArchiveService(archiveDao);
-        BillingService    billingService    = new BillingService(userSubscriptionDao, config);
-        EpubExportService epubExportService = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        ExportService     exportService     = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
-        ImportService     importService     = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        OAuthService      oauthService      = new OAuthService(config.getAuth(), authDao);
-        SessionService    sessionService    = new SessionService(authDao, config.getAuth());
-        TrashService      trashService      = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
+        AdminBillingService adminBillingService = new AdminBillingService(userSubscriptionDao,
+                adminAuditDao,
+                adminUserDao,
+                authDao,
+                mapper);
+        ArchiveService      archiveService      = new ArchiveService(archiveDao);
+        BillingService      billingService      = new BillingService(userSubscriptionDao, config);
+        EpubExportService   epubExportService   = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
+        ExportService       exportService       = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
+        ImportService       importService       = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
+        OAuthService        oauthService        = new OAuthService(config.getAuth(), authDao);
+        SessionService      sessionService      = new SessionService(authDao, config.getAuth());
+        TrashService        trashService        = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao);
 
         // AI Credential DAO
         SecretCipher    secretCipher    = new SecretCipher(
@@ -219,9 +240,13 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
 
         // OOTB resources
         env.jersey().register(RolesAllowedDynamicFeature.class);
-        
+
         // Custom resources
         env.jersey().register(AccountResource.class);
+        env.jersey().register(AdminAuditResource.class);
+        env.jersey().register(AdminBillingResource.class);
+        env.jersey().register(AdminMetricsResource.class);
+        env.jersey().register(AdminUserResource.class);
         env.jersey().register(AdminSystemResource.class);
         env.jersey().register(AiFormInstructionsResource.class);
         env.jersey().register(AiContextResource.class);
@@ -260,16 +285,15 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 .addFilter("spa-fallback", new SpaFallbackFilter())
                 .addMappingForUrlPatterns(EnumSet.of(DispatcherType.REQUEST), true, "/*");
 
-        // Object Mapper
-        ObjectMapper mapper = env.getObjectMapper();
-        mapper.findAndRegisterModules();
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
         // Jersey Registrations
         env.jersey().register(new AbstractBinder() {
             @Override
             protected void configure() {
                 bind(accountDao).to(AccountDao.class);
+                bind(adminAuditDao).to(AdminAuditDao.class);
+                bind(adminBillingService).to(AdminBillingService.class);
+                bind(adminMetricsDao).to(AdminMetricsDao.class);
+                bind(adminUserDao).to(AdminUserDao.class);
                 bind(aiCredentialDao).to(AiCredentialDao.class);
                 bind(aiFormInstructionsDao).to(AiFormInstructionsDao.class);
                 bind(aiReviewDao).to(AiReviewDao.class);
