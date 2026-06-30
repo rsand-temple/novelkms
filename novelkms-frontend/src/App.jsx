@@ -34,6 +34,7 @@ import { usePreferences } from './hooks/usePreferences'
 import { hydrateSkipDeleteConfirm } from './utils/deleteConfirmPrefs'
 import BillingReturnPage from './components/subscription/BillingReturnPage'
 import AdminSupportConsole from './components/admin/AdminSupportConsole'
+import ToolsMenu from './components/tools/ToolsMenu'
 
 /* eslint-disable no-undef */
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
@@ -526,6 +527,8 @@ export default function App() {
 								<MenuItem onClick={() => openGlobalTemplate('cover')}>Cover Page</MenuItem>
 								<MenuItem onClick={() => openGlobalTemplate('part')}>Part Page</MenuItem>
 							</Menu>
+							
+							<ToolsMenu buttonSx={topBarButtonSx} />
 
 							<Button
 								color="inherit"

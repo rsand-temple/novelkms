@@ -66,6 +66,8 @@ public class OpenAiProvider implements AiProvider {
     public static final  String CHAPTER_SUMMARY_PROMPT_VERSION = "chapter-summary-v2";
     /** Book-summary generation prompt version (free-text synopsis built from chapter summaries). */
     public static final  String BOOK_SUMMARY_PROMPT_VERSION = "book-summary-v2";
+    /** Weather interpretation prompt version; facts are supplied by a weather provider. */
+    public static final  String WEATHER_INTERPRETATION_PROMPT_VERSION = "weather-interpretation-v1";
 
     private static final String ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
@@ -152,6 +154,23 @@ public class OpenAiProvider implements AiProvider {
         logger.info("OpenAI book-summary request completed: model={}, outputChars={}",
                 model, lengthOf(content));
         return new SummaryResult(content.strip(), BOOK_SUMMARY_PROMPT_VERSION);
+    }
+
+    @Override
+    public WeatherInterpretationResult interpretWeather(WeatherInterpretationRequest request) throws AiProviderException {
+        String model = (request.model() == null || request.model().isBlank())
+                ? DEFAULT_MODEL : request.model().trim();
+
+        logger.info("OpenAI weather-interpretation request started: model={}, promptVersion={}",
+                model, WEATHER_INTERPRETATION_PROMPT_VERSION);
+        logger.debug("OpenAI weather-interpretation context: weatherFactsChars={}, sceneContextChars={}",
+                lengthOf(request.weatherFacts()), lengthOf(request.sceneContext()));
+
+        String body = buildWeatherInterpretationRequestBody(model, request);
+        String content = postForContent(request.apiKey(), body);
+        logger.info("OpenAI weather-interpretation request completed: model={}, outputChars={}",
+                model, lengthOf(content));
+        return new WeatherInterpretationResult(content.strip(), WEATHER_INTERPRETATION_PROMPT_VERSION);
     }
 
     /**
@@ -446,6 +465,52 @@ public class OpenAiProvider implements AiProvider {
         sb.append(heading).append(" text:\n\n");
         sb.append(nullToBlank(request.text()));
         return sb.toString();
+    }
+
+    private String buildWeatherInterpretationRequestBody(String model, WeatherInterpretationRequest request) {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("model", model);
+
+        ArrayNode messages = root.putArray("messages");
+
+        ObjectNode system = messages.addObject();
+        system.put("role", "system");
+        system.put("content", """
+                You are helping an author interpret supplied weather data for a fiction scene.
+
+                Rules:
+                - Do not invent meteorological facts not present in the supplied weather data.
+                - Do not claim the weather is an observed station record unless the supplied source says so.
+                - If the source is modeled, reanalysis, or forecast data, mention uncertainty naturally.
+                - Focus on what the weather would likely feel like to a person in the scene.
+                - Keep the answer practical for writing: clothing, light, footing, mood, visibility,
+                  and plausible sensory details.
+                - Do not rewrite manuscript prose.
+                """);
+
+        ObjectNode user = messages.addObject();
+        user.put("role", "user");
+        user.put("content", weatherInterpretationPrompt(request));
+
+        try {
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to build OpenAI weather interpretation request body", e);
+        }
+    }
+
+    private String weatherInterpretationPrompt(WeatherInterpretationRequest request) {
+        String sceneContext = request.sceneContext() == null || request.sceneContext().isBlank()
+                ? "No scene context supplied."
+                : request.sceneContext().strip();
+
+        return """
+                Weather data:
+                %s
+
+                Optional scene context:
+                %s
+                """.formatted(request.weatherFacts(), sceneContext);
     }
 
     private String extractContent(String responseBody) throws AiProviderException {

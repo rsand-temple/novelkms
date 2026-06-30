@@ -79,6 +79,7 @@ import com.richardsand.novelkms.resource.StyleResource;
 import com.richardsand.novelkms.resource.SummaryResource;
 import com.richardsand.novelkms.resource.TemplateResource;
 import com.richardsand.novelkms.resource.TrashResource;
+import com.richardsand.novelkms.resource.ToolsResource;
 import com.richardsand.novelkms.resource.UserPreferenceResource;
 import com.richardsand.novelkms.resource.admin.AdminAuditResource;
 import com.richardsand.novelkms.resource.admin.AdminBillingResource;
@@ -93,6 +94,9 @@ import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 import com.richardsand.novelkms.service.TrashService;
 import com.richardsand.novelkms.service.admin.AdminBillingService;
+import com.richardsand.novelkms.service.tools.CalendarToolsService;
+import com.richardsand.novelkms.service.tools.OpenMeteoWeatherProvider;
+import com.richardsand.novelkms.service.tools.WeatherLookupService;
 
 import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.core.Application;
@@ -226,6 +230,11 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 chapterSummaryDao, bookSummaryDao,
                 codexDao, codexCategoryDao, aiProviders);
 
+        // Author utility tools
+        CalendarToolsService calendarToolsService = new CalendarToolsService();
+        WeatherLookupService weatherLookupService = new WeatherLookupService(
+                new OpenMeteoWeatherProvider(), aiCredentialDao, aiProviders);
+
         // Manage lifecycle
         env.lifecycle().manage(new Managed() {
             @Override
@@ -276,6 +285,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(TemplateResource.class);
         env.jersey().register(TenantAuthorizationFilter.class);
         env.jersey().register(TrashResource.class);
+        env.jersey().register(ToolsResource.class);
         env.jersey().register(UserPreferenceResource.class);
 
         // SPA fallback
@@ -327,6 +337,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(tenantAccessDao).to(TenantAccessDao.class);
                 bind(trashDao).to(TrashDao.class);
                 bind(trashService).to(TrashService.class);
+                bind(calendarToolsService).to(CalendarToolsService.class);
+                bind(weatherLookupService).to(WeatherLookupService.class);
                 bind(userStyleDao).to(UserStyleDao.class);
                 bind(userSubscriptionDao).to(UserSubscriptionDao.class);
                 bind(userPreferenceDao).to(UserPreferenceDao.class);

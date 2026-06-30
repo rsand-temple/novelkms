@@ -41,4 +41,11 @@ public interface AiProvider {
      * bounded to {@link BookSummaryRequest#maxWords()}.
      */
     SummaryResult generateBookSummary(BookSummaryRequest request) throws AiProviderException;
+
+    /**
+     * Converts supplied, structured weather facts into author-facing scene guidance.
+     * The AI must not become the weather authority; callers provide the weather facts
+     * and source metadata that ground the answer.
+     */
+    WeatherInterpretationResult interpretWeather(WeatherInterpretationRequest request) throws AiProviderException;
 }

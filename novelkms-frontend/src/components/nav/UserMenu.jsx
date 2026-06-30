@@ -121,7 +121,7 @@ export default function UserMenu({ onOpenSettings }) {
 					<ListItemIcon>
 						<ContactSupportIcon fontSize="small" />
 					</ListItemIcon>
-					Help / Contact support
+					Contact support
 				</MenuItem>
 
 				<MenuItem onClick={handleLogout} disabled={loggingOut}>

@@ -66,6 +66,17 @@ public class NovelKmsConfig extends Configuration {
         public boolean enforceSubscriptions = false;
     }
 
+    @Getter
+    public static class Tools {
+        public Weather weather = new Weather();
+
+        @Getter
+        public static class Weather {
+            public boolean enabled  = true;
+            public String  provider = "open-meteo";
+        }
+    }
+
     @JsonProperty
     Database database;
 
@@ -77,4 +88,7 @@ public class NovelKmsConfig extends Configuration {
 
     @JsonProperty
     Billing billing;
+
+    @JsonProperty
+    Tools tools = new Tools();
 }
