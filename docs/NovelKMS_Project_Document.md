@@ -59,6 +59,16 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 - Active scheduled cancellation is represented locally as `active_canceling`; cancellation date, feedback, comment, reason, and request timestamp are preserved.
 - Detailed billing implementation notes are in `README.billing_and_subscriptions.md`.
 
+### Admin support console and admin security
+
+- Admin authorization now uses first-class backend role infrastructure: `user_role`, `NovelKmsPrincipal`, JAX-RS `SecurityContext`, and `@RolesAllowed(Roles.ADMIN)`.
+- `/api/auth/status` returns the authenticated user's roles so the frontend can expose admin navigation only to administrators.
+- Admin audit logging is implemented through `admin_audit_log`, `AdminAuditDao`, and `/api/admin/audit/*` endpoints. Admin mutations are expected to write old/new values and a reason.
+- Admin user lookup is implemented through `/api/admin/users`, including identity, roles, subscription summary, and usage counts.
+- Admin billing support currently includes `/api/admin/billing/users/{userId}` and `POST /api/admin/billing/users/{userId}/family-access`.
+- The minimal frontend admin support console lives at `/admin`: search users, inspect identity/billing/usage/audit, and grant family access with reason/note.
+- Tests now use Flyway-backed schema via `NovelKmsTestBase` where practical; the base truncation order includes admin audit and role tables.
+
 ### Manuscript structure and editing
 
 - Project, book, part, chapter, and scene hierarchy.
@@ -126,7 +136,7 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 
 ## Known issues / watchlist
 
-- Billing needs admin/support tooling for family access, plan mapping, webhook diagnostics, and eventual Stripe reconciliation.
+- Billing/admin support now has a minimal console and family-access grant flow. Remaining billing work: extend trial, revoke/remove family access with a defined restoration policy, plan mapping, webhook diagnostics, and eventual Stripe reconciliation.
 - ePub export menu/API wiring needs verification because the menu entry appears to have regressed.
 - Style-editor UI is deferred; styles exist but need full edit/override/reset UX.
 - Full-book TipTap performance should be profiled with large and image-heavy manuscripts.
@@ -140,7 +150,7 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 
 ## Near-term next actions
 
-1. Add billing admin/support tooling: family access management, plan mapping, webhook diagnostics, and subscription reconciliation.
+1. Continue admin billing functionality: extend trial, decide revoke-family/manual-override semantics, add plan mapping, webhook diagnostics, and subscription reconciliation.
 2. Frontend Phase 2: book-aware editor render, remove old doc-settings popover, reduce global dialog to user-only, clean Properties panel to metadata + cover.
 3. Restore or finish ePub export in the menus and verify the backing endpoint.
 4. Add a Future/deferred AI findings view.

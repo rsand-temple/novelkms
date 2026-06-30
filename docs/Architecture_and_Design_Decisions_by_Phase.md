@@ -252,11 +252,29 @@ Stripe subscription support was added using Stripe-hosted Checkout and Customer 
 
 **Frontend.** Added billing API/hooks, a Settings → Billing tab, Stripe success/cancel return pages, and global handling for `402 subscription_required` so blocked users are routed to Billing instead of seeing generic failures.
 
+### V29–V31 — Admin role foundation, audit, billing support, and minimal console
+
+This phase created the first production-oriented admin/support surface. The guiding rule was security and auditability before mutation: build role-aware authorization first, then audit logging, then read-only support visibility, then a single conservative billing mutation.
+
+**Admin role foundation.** A `user_role` table gives users explicit roles, beginning with `ADMIN`. Authenticated sessions now hydrate roles from `AuthDao.findRolesForUser(...)`. `AuthenticationFilter` creates a `NovelKmsPrincipal`, stores it on the request, and installs a JAX-RS `SecurityContext` whose `isUserInRole(...)` delegates to that principal. `RolesAllowedDynamicFeature` is registered so resources can use `@RolesAllowed(Roles.ADMIN)`. `CurrentUser` gained helpers for reading the principal and role membership while preserving existing user-id access. Tenant and subscription filters explicitly allow admin paths only for admin principals and deny non-admins before tenant checks.
+
+**Admin audit.** `admin_audit_log` records admin actions with `admin_user_id`, optional `target_user_id`, `action`, `entity_type`, `entity_id`, `old_value`, `new_value`, `reason`, and `created_at`. `AdminAuditDao` supports insert and basic retrieval (`recent`, by target user, by admin user, by id). `AdminAuditResource` exposes read-only audit endpoints under `/api/admin/audit/*`. Admin mutations should treat audit logging as mandatory and should record old/new JSON where practical.
+
+**Read-only admin user and billing views.** `AdminUserDao` and `AdminUserResource` expose `/api/admin/users` search and `/api/admin/users/{userId}` detail. Search covers email/name/user id/Stripe ids. User detail includes identity, roles, subscription summary, and usage counts. The usage SQL was corrected against the real Flyway schema after tests exposed invalid assumptions about `deleted_at` columns on some tables. `AdminBillingService.billingDetail(...)` and `AdminBillingResource` expose `/api/admin/billing/users/{userId}`, returning subscription state plus computed flags such as `hasAccess`, `familyAccess`, `stripeLinked`, `trialActive`, `canceling`, `paymentProblem`, and `accessReason`.
+
+**First admin mutation: grant family access.** `AdminBillingService.grantFamilyAccess(...)` checks that the target user is active, captures the old subscription, calls `UserSubscriptionDao.setFamilyAccess(...)`, captures the new subscription, writes `GRANT_FAMILY_ACCESS` to `admin_audit_log`, and returns the updated subscription. The manual `family` entitlement remains a local override that Stripe webhook processing must not demote. Revocation was intentionally deferred because it requires a policy decision: restore last Stripe-derived status, query Stripe live, fall back to no access, or introduce a richer manual-override model.
+
+**Frontend admin console.** A minimal support console was added at `/admin`, integrated into the existing pathname-based app branching rather than introducing new route structure. The user menu shows “Admin console” only when `/api/auth/status` reports the `ADMIN` role. The console supports user search, selected-user identity details, role/status chips, billing state, usage counts, recent audit entries, and a dialog to grant family access with reason/note. MUI warnings were resolved by using current `slotProps` for `ListItemText`, moving forwarded layout props into `sx`, and keeping all `MenuItem` components inside `Menu`.
+
+**Testing lessons.** Admin DAO/service tests started with hand-rolled mini schemas, then moved to `NovelKmsTestBase` so Flyway owns schema setup. This exposed real schema mismatches and foreign-key cleanup issues. `NovelKmsTestBase.truncateAll()` now deletes admin audit and role rows before deleting `app_user`. Test fixtures should use unique emails and Stripe ids because the shared H2 database can retain data across methods until explicit truncation.
+
+**Next admin increments.** The next backend actions should be trial extension and billing diagnostics. Revoke/remove family access should wait until manual override restoration semantics are deliberately designed. Frontend should keep the admin console narrow: support workflows first, not a broad dashboard.
+
 ## Current architectural watchlist
 
-- Add admin-only family access management and a support/debug billing view.
+- Extend admin billing support: trial extension, revoke-family/manual-override design, webhook diagnostics, plan mapping, and Stripe reconciliation.
 - Add plan mapping from Stripe price IDs to friendly `plan_key` values.
-- Add tests for billing entitlement logic and Stripe webhook subscription parsing.
+- Continue Flyway-backed tests for admin billing actions, billing entitlement logic, and Stripe webhook subscription parsing.
 - Consider a scheduled Stripe reconciliation job for local subscription state.
 - Finish/repair ePub export menu and endpoint wiring.
 - Move project/document settings out of localStorage.
