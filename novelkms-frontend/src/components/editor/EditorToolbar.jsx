@@ -26,7 +26,6 @@ import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import EditNoteIcon from '@mui/icons-material/EditNote'
-import DocSettingsPopover from './DocSettingsPopover'
 import { useReview } from '../../review/ReviewContext'
 import { STYLE_ORDER, STYLE_LABELS, HEADING_KEYS } from '../../utils/styles'
 
@@ -143,7 +142,6 @@ function VDivider() {
  * Props:
  *   editor            — TipTap editor instance (from useEditor in EditorPanel)
  *   settings          — current project settings
- *   onSettingsChange  — updateSettings(patch) from useProjectSettings
  *   onSceneBreak      — async callback: creates DB scene then inserts SceneBreak node
  *   isSaving          — boolean — shows saving spinner when true
  *   templateMode      — boolean — true when editing a page template
@@ -168,9 +166,11 @@ function VDivider() {
  *   aiDocGuidance     — string — one-time guidance text for the next generation
  *   onAiDocGuidanceChange — (text) => void
  *   onAiDocGenerate   — () => void — runs (or gates, then runs) generation
+ *   onOpenContextSettings — opens the selected project/book settings dialog
+ *   contextSettingsLabel  — label for the selected project/book settings action
  */
 export default function EditorToolbar({
-	editor, settings = {}, onSettingsChange, onSceneBreak, isSaving,
+	editor, settings = {}, onSceneBreak, isSaving,
 	templateMode = false, tokenOptions = [], onInsertToken,
 	previewActive = false, onTogglePreview,
 	styleSheet = [],
@@ -186,8 +186,9 @@ export default function EditorToolbar({
 	aiDocGuidance = '',
 	onAiDocGuidanceChange,
 	onAiDocGenerate,
+	onOpenContextSettings,
+	contextSettingsLabel = '',
 }) {
-	const [settingsAnchor, setSettingsAnchor] = useState(null)
 	const [fieldAnchor, setFieldAnchor] = useState(null)
 	const [guidanceAnchor, setGuidanceAnchor] = useState(null)
 
@@ -578,8 +579,10 @@ export default function EditorToolbar({
 					)}
 
 					<VDivider />
-					<TBtn title="Document settings"
-						onClick={e => setSettingsAnchor(e.currentTarget)}
+					<TBtn
+						title={contextSettingsLabel || 'Settings unavailable'}
+						onClick={onOpenContextSettings}
+						disabled={!contextSettingsLabel || !onOpenContextSettings}
 					>
 						<SettingsIcon fontSize="small" />
 					</TBtn>
@@ -749,13 +752,6 @@ export default function EditorToolbar({
 				</Box>
 			</Toolbar>
 
-			{/* Doc settings popover */}
-			<DocSettingsPopover
-				anchorEl={settingsAnchor}
-				onClose={() => setSettingsAnchor(null)}
-				settings={settings}
-				onSave={onSettingsChange}
-			/>
 		</Box>
 	)
 }

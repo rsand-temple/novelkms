@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import {
 	Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Tab, Tabs, Typography,
 } from '@mui/material'
@@ -90,38 +90,38 @@ function SettingsContent({ initialTab, projectId, subscriptionRequired, onTabCha
 /**
  * SettingsDialog
  *
- * Global settings, organized into tabs. Opened from the AppBar gear icon.
+ * Global settings, organized into tabs. Opened from the account menu.
  *
  * Props:
  *   open        {boolean}
- *   initialTab  {'document'|'ai'|'other'}  Tab to show on open. Default 'document'.
- *   projectId   {string|null}              Passed to the Document tab for the
- *                                          per-project override panel.
+ *   initialTab  {'document'|'ai'|'billing'|'other'}  Tab to show on open. Default 'document'.
+ *   projectId   {string|null}                        Passed to the Document tab for the
+ *                                                    per-project override panel.
  *   onClose     {() => void}
  */
 export default function SettingsDialog({ open, initialTab = 'document', projectId, subscriptionRequired = false, onClose }) {
-	// Track the active tab so the title-bar HelpButton can point to the right
-	// topic. The canonical tab state lives inside SettingsContent (which
-	// remounts on open, resetting to initialTab); this mirror is purely for
-	// the HelpButton and is kept in sync via onTabChange.
-	const [activeTab, setActiveTab] = useState(initialTab)
+	return (
+		<Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+			{open && (
+				<SettingsDialogBody
+					initialTab={initialTab}
+					projectId={projectId}
+					subscriptionRequired={subscriptionRequired}
+					onClose={onClose}
+				/>
+			)}
+		</Dialog>
+	)
+}
 
-	// Reset when the dialog opens so the HelpButton matches initialTab even
-	// if it was left on a different tab last time. Uses the established
-	// "setState during render with prev-value guard" pattern.
-	const prevOpen = useRef(false)
-	if (open && !prevOpen.current) {
-		const target = initialTab ?? 'document'
-		if (activeTab !== target) {
-			setActiveTab(target)
-		}
-	}
-	prevOpen.current = open
-
+function SettingsDialogBody({ initialTab = 'document', projectId, subscriptionRequired = false, onClose }) {
+	// Mounted only while the dialog is open, so this initializes cleanly for
+	// each open without reading or writing refs during render.
+	const [activeTab, setActiveTab] = useState(initialTab ?? 'document')
 	const helpTopic = TAB_HELP_TOPICS[activeTab] ?? 'index'
 
 	return (
-		<Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+		<>
 			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 				<SettingsIcon fontSize="small" />
 				Settings
@@ -130,19 +130,17 @@ export default function SettingsDialog({ open, initialTab = 'document', projectI
 			</DialogTitle>
 
 			<DialogContent dividers>
-				{open && (
-					<SettingsContent
-						initialTab={initialTab}
-						projectId={projectId}
-						subscriptionRequired={subscriptionRequired}
-						onTabChange={setActiveTab}
-					/>
-				)}
+				<SettingsContent
+					initialTab={initialTab}
+					projectId={projectId}
+					subscriptionRequired={subscriptionRequired}
+					onTabChange={setActiveTab}
+				/>
 			</DialogContent>
 
 			<DialogActions>
 				<Button onClick={onClose}>Close</Button>
 			</DialogActions>
-		</Dialog>
+		</>
 	)
 }

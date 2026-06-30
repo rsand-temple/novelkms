@@ -211,6 +211,10 @@ function countWords(html) {
  *                    this panel edits.
  *   onSelectBook   — callback(bookId) invoked when the user clicks a book in
  *                    the project shelf (project home mode).
+ *   onOpenContextSettings
+ *                  — opens the project/book settings dialog for the current selection.
+ *   contextSettingsLabel
+ *                  — label for the project/book settings menu item in the editor gear.
  *
  * Modes (priority order):
  *   1. AI doc mode         — aiDocType set (memory document / chapter or book summary)
@@ -241,6 +245,7 @@ function countWords(html) {
 export default function EditorPanel({
 	partId, chapterId, sceneId, projectId, bookId, codexId,
 	templateType, templateScope, aiDocType, setSelection, onSelectBook,
+	onOpenContextSettings, contextSettingsLabel,
 }) {
 	const { settings, updateSettings } = useProjectSettings(projectId);
 	const queryClient = useQueryClient();
@@ -967,6 +972,8 @@ export default function EditorPanel({
 				aiDocGuidance={aiDocGuidance}
 				onAiDocGuidanceChange={setAiDocGuidance}
 				onAiDocGenerate={handleAiDocGenerateClick}
+				onOpenContextSettings={onOpenContextSettings}
+				contextSettingsLabel={contextSettingsLabel}
 			/>
 
 			<SearchBar />

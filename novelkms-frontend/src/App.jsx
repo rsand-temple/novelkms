@@ -13,7 +13,6 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined'
-import SettingsIcon from '@mui/icons-material/Settings'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import NavPanel from './components/layout/NavPanel'
 import EditorPanel from './components/layout/EditorPanel'
@@ -188,7 +187,6 @@ export default function App() {
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
 	const [kmsImportDialogOpen, setKmsImportDialogOpen] = useState(false)
 	const [settings, setSettings] = useState({ open: false, tab: 'document', subscriptionRequired: false })
-	const [settingsMenuAnchor, setSettingsMenuAnchor] = useState(null)
 	const [ctxSettings, setCtxSettings] = useState({ open: false, scope: null })
 
 	const [navWidth, setNavWidth] = useState(() =>
@@ -407,7 +405,6 @@ export default function App() {
 	}
 
 	const openContextSettings = () => {
-		setSettingsMenuAnchor(null)
 		const scope = selection.bookId ? 'book' : (selection.projectId ? 'project' : null)
 		if (!scope) return
 		setCtxSettings({ open: true, scope })
@@ -530,44 +527,17 @@ export default function App() {
 								<MenuItem onClick={() => openGlobalTemplate('part')}>Part Page</MenuItem>
 							</Menu>
 
-							<Tooltip title="Help">
-								<IconButton
-									color="inherit"
-									size="small"
-									aria-label="Open help"
-									onClick={() => openHelp()}
-									sx={{ ml: 0.5, color: 'rgba(255,255,255,0.86)', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.09)' } }}
-								>
-									<MenuBookIcon fontSize="small" />
-								</IconButton>
-							</Tooltip>
-
-							<Tooltip title="Settings">
-								<IconButton
-									color="inherit"
-									size="small"
-									aria-label="Open settings"
-									onClick={(e) => setSettingsMenuAnchor(e.currentTarget)}
-									sx={{ ml: 0.5, color: 'rgba(255,255,255,0.86)', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.09)' } }}
-								>
-									<SettingsIcon fontSize="small" />
-								</IconButton>
-							</Tooltip>
-
-							<Menu
-								anchorEl={settingsMenuAnchor}
-								open={!!settingsMenuAnchor}
-								onClose={() => setSettingsMenuAnchor(null)}
+							<Button
+								color="inherit"
+								size="small"
+								startIcon={<MenuBookIcon fontSize="small" />}
+								onClick={() => openHelp()}
+								sx={topBarButtonSx}
 							>
-								<MenuItem onClick={openContextSettings} disabled={!selection.projectId && !selection.bookId}>
-									{selection.bookId ? 'Book Settings' : selection.projectId ? 'Project Settings' : 'Settings'}
-								</MenuItem>
-								<Divider />
-								<MenuItem onClick={() => { setSettingsMenuAnchor(null); openSettings() }}>
-									Global Defaults…
-								</MenuItem>
-							</Menu>
-							<UserMenu />
+								Help
+							</Button>
+
+							<UserMenu onOpenSettings={openSettings} />
 						</Toolbar>
 					</AppBar>
 
@@ -805,6 +775,8 @@ export default function App() {
 									aiDocType={selection.aiDocType}
 									setSelection={setSelection}
 									onSelectBook={handleSelectBook}
+									onOpenContextSettings={openContextSettings}
+									contextSettingsLabel={selection.bookId ? 'Book Settings' : selection.projectId ? 'Project Settings' : null}
 								/>
 							)}
 						</Box>

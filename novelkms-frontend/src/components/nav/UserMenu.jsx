@@ -13,11 +13,12 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import ContactSupportIcon from '@mui/icons-material/ContactSupport'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
+import SettingsIcon from '@mui/icons-material/Settings'
 import AccountDialog from './dialogs/AccountDialog'
 import ContactSupportDialog from './dialogs/ContactSupportDialog'
 import { useAuth } from '../../auth/AuthContext'
 
-export default function UserMenu() {
+export default function UserMenu({ onOpenSettings }) {
 	const [anchorEl, setAnchorEl] = useState(null)
 	const [accountOpen, setAccountOpen] = useState(false)
 	const [contactSupportOpen, setContactSupportOpen] = useState(false)
@@ -93,6 +94,20 @@ export default function UserMenu() {
 						<PersonIcon fontSize="small" />
 					</ListItemIcon>
 					Account
+				</MenuItem>
+
+				<Divider />
+
+				<MenuItem
+					onClick={() => {
+						setAnchorEl(null)
+						onOpenSettings?.()
+					}}
+				>
+					<ListItemIcon>
+						<SettingsIcon fontSize="small" />
+					</ListItemIcon>
+					Global settings
 				</MenuItem>
 
 				<Divider />
