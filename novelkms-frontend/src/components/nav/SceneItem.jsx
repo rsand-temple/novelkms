@@ -1,6 +1,7 @@
 import { useRef } from 'react'
-import { InputBase, ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
+import { Box, InputBase, ListItemButton, ListItemText, ListItemIcon, Tooltip } from '@mui/material'
 import TheatersIcon from '@mui/icons-material/Theaters'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useUpdateScene } from '../../hooks/useScenes'
@@ -124,6 +125,8 @@ export default function SceneItem({
 			bookId,
 			projectId: selection.projectId,
 			codexCategory: isCodexEntry ? codexCategory : null,
+			codexId: isCodexEntry ? codexId : null,
+			aiContextPinned: isCodexEntry ? !!scene.aiContextPinned : false,
 		})
 	}
 
@@ -175,6 +178,17 @@ export default function SceneItem({
 					secondary={matchCount > 0 ? `${matchCount} matches` : null}
 					slotProps={{ primary: { variant: 'body2' } }}
 				/>
+			)}
+
+			{/* Shared-with-AI indicator — codex entries only, when pinned into
+			    AI reference context. Uses the AI sparkle used elsewhere for AI
+			    features. */}
+			{isCodexEntry && scene.aiContextPinned && !isRenaming && (
+				<Tooltip title="Shared with AI as reference context" arrow>
+					<Box component="span" sx={{ display: 'inline-flex', ml: 0.5, color: 'primary.main' }}>
+						<AutoAwesomeIcon sx={{ fontSize: '0.95rem' }} />
+					</Box>
+				</Tooltip>
 			)}
 		</ListItemButton>
 	)

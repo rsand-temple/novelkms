@@ -12,8 +12,8 @@ import AiCredentialsPanel from './AiCredentialsPanel'
  * AiSettingsDialog
  *
  * Thin dialog wrapper around the shared AiCredentialsPanel. Kept for any caller
- * that opens AI settings directly (e.g. AiReviewDialog's onOpenSettings). The
- * global Settings dialog reuses the same panel as its AI tab.
+ * that opens AI settings directly. The global Settings dialog reuses the same
+ * panel as its AI tab.
  *
  * Props:
  *   open     {boolean}

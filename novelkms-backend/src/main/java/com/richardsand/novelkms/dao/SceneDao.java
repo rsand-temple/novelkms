@@ -35,6 +35,7 @@ public class SceneDao {
                 .displayOrder(rs.getInt("display_order"))
                 .content(rs.getString("content"))
                 .wordCount(rs.getInt("word_count"))
+                .aiContextPinned(rs.getBoolean("ai_context_pinned"))
                 .notes(rs.getString("notes"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .updatedAt(rs.getTimestamp("updated_at").toInstant())
@@ -213,6 +214,41 @@ public class SceneDao {
             }
         }
         return findById(id);
+    }
+
+    /**
+     * Sets the AI-context pin flag on a single scene (a Codex entry). Returns the
+     * refreshed scene, or empty if no row matched. Only meaningful for codex
+     * entries; the column is inert for manuscript scenes.
+     */
+    public Optional<Scene> setAiContextPinned(UUID id, boolean pinned) throws SQLException {
+        String sql = "UPDATE scene SET ai_context_pinned = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setBoolean(1, pinned);
+            ps.setTimestamp(2, Timestamp.from(Instant.now()));
+            ps.setObject(3, id);
+            if (ps.executeUpdate() == 0) {
+                return Optional.empty();
+            }
+        }
+        return findById(id);
+    }
+
+    /**
+     * Bulk-sets the AI-context pin flag on every (non-deleted) entry under one
+     * codex category chapter. Returns the number of rows updated. The caller is
+     * responsible for confirming the chapter is a codex category.
+     */
+    public int setAiContextPinnedForChapter(UUID chapterId, boolean pinned) throws SQLException {
+        String sql = "UPDATE scene SET ai_context_pinned = ?, updated_at = ? WHERE chapter_id = ? AND deleted_at IS NULL";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setBoolean(1, pinned);
+            ps.setTimestamp(2, Timestamp.from(Instant.now()));
+            ps.setObject(3, chapterId);
+            return ps.executeUpdate();
+        }
     }
 
     public void moveScene(UUID sceneId, UUID newChapterId,

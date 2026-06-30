@@ -79,6 +79,13 @@ public class AiReviewResource {
         /** Optional one-time author note for this run only; null/blank = none. */
         @JsonProperty
         public String userGuidance;
+        /**
+         * When true (the default when omitted), pinned Codex entries are folded
+         * into the review's reference context. The review rail sends false to
+         * skip pinned context for a single run without unpinning anything.
+         */
+        @JsonProperty
+        public Boolean includePinnedContext;
     }
 
     public static class StatusRequest {
@@ -101,8 +108,9 @@ public class AiReviewResource {
         UUID   credentialId = body == null ? null : body.credentialId;
         String model        = body == null ? null : body.model;
         String userGuidance = body == null ? null : body.userGuidance;
+        boolean includePinned = body == null || body.includePinnedContext == null || body.includePinnedContext;
         try {
-            AiReview review = service.runChapterReview(userId, chapterId, credentialId, model, userGuidance);
+            AiReview review = service.runChapterReview(userId, chapterId, credentialId, model, userGuidance, includePinned);
             return Response.ok(review).build();
         } catch (ReviewException e) {
             logger.warn("Chapter AI review rejected for chapterId={}: status={} code={} message={}", chapterId, e.status(), e.code(), e.getMessage());
@@ -123,8 +131,9 @@ public class AiReviewResource {
         UUID   credentialId = body == null ? null : body.credentialId;
         String model        = body == null ? null : body.model;
         String userGuidance = body == null ? null : body.userGuidance;
+        boolean includePinned = body == null || body.includePinnedContext == null || body.includePinnedContext;
         try {
-            AiReview review = service.runSceneReview(userId, sceneId, credentialId, model, userGuidance);
+            AiReview review = service.runSceneReview(userId, sceneId, credentialId, model, userGuidance, includePinned);
             return Response.ok(review).build();
         } catch (ReviewException e) {
             logger.warn("Scene AI review rejected for sceneId={}: status={} code={} message={}", sceneId, e.status(), e.code(), e.getMessage());

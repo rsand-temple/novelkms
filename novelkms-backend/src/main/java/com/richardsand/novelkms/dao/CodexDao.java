@@ -6,6 +6,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -102,5 +104,78 @@ public class CodexDao {
             ps.setObject(1, id);
             return ps.executeUpdate() > 0;
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // AI reference context (pinned codex entries shared with the AI)
+    // -------------------------------------------------------------------------
+
+    /**
+     * One codex entry as it appears in the "Manage AI Context" surface and in
+     * review-prompt assembly: the entry scene joined to its codex category
+     * chapter. {@code content} is the entry's authored HTML (stripped to plain
+     * text by the caller before it reaches a prompt).
+     */
+    public record AiContextEntry(
+            UUID sceneId,
+            UUID chapterId,
+            String categoryKey,
+            String categoryTitle,
+            String title,
+            int wordCount,
+            boolean pinned,
+            String content) {
+    }
+
+    private static final String AI_CONTEXT_SELECT =
+            "SELECT s.id AS scene_id, s.chapter_id, ch.codex_category, ch.title AS category_title, " +
+            "       s.title, s.word_count, s.ai_context_pinned, s.content " +
+            "FROM scene s " +
+            "JOIN chapter ch ON ch.id = s.chapter_id " +
+            "WHERE ch.codex_id = ? AND ch.deleted_at IS NULL AND s.deleted_at IS NULL ";
+
+    private AiContextEntry mapEntry(ResultSet rs) throws SQLException {
+        return new AiContextEntry(
+                rs.getObject("scene_id", UUID.class),
+                rs.getObject("chapter_id", UUID.class),
+                rs.getString("codex_category"),
+                rs.getString("category_title"),
+                rs.getString("title"),
+                rs.getInt("word_count"),
+                rs.getBoolean("ai_context_pinned"),
+                rs.getString("content"));
+    }
+
+    /**
+     * Every entry in a codex (pinned or not), category first then display order,
+     * for the Manage AI Context dialog.
+     */
+    public List<AiContextEntry> listAiContextEntries(UUID codexId) throws SQLException {
+        String sql = AI_CONTEXT_SELECT + "ORDER BY ch.display_order, s.display_order, s.title";
+        return queryEntries(sql, codexId);
+    }
+
+    /**
+     * Only the pinned entries in a codex, in the same order. Used by review
+     * assembly and by the per-book pinned-context summary.
+     */
+    public List<AiContextEntry> listPinnedAiContextEntries(UUID codexId) throws SQLException {
+        String sql = AI_CONTEXT_SELECT +
+                "AND s.ai_context_pinned = TRUE ORDER BY ch.display_order, s.display_order, s.title";
+        return queryEntries(sql, codexId);
+    }
+
+    private List<AiContextEntry> queryEntries(String sql, UUID codexId) throws SQLException {
+        List<AiContextEntry> result = new ArrayList<>();
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, codexId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(mapEntry(rs));
+                }
+            }
+        }
+        return result;
     }
 }

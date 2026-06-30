@@ -37,6 +37,7 @@ import ExportDialog from './dialogs/ExportDialog'
 import PreReviewMemoryDialog from '../ai/PreReviewMemoryDialog'
 import { flaggedPreceding } from '../ai/memoryStatus'
 import BookSummaryDialog from '../ai/BookSummaryDialog'
+import ManageAiContextDialog from '../ai/ManageAiContextDialog'
 
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
 import { useChapters, useReorderChapters, useDeleteChapter } from '../../hooks/useChapters'
@@ -50,6 +51,7 @@ import {
 import { useRunChapterReview, useRunSceneReview } from '../../hooks/useAiReviews'
 import { useGenerateChapterMemory, useChapterMemoryStatus, useDeleteChapterMemory } from '../../hooks/useChapterMemory'
 import { useGenerateChapterSummary, useBookChapterSummaries, useDeleteChapterSummary } from '../../hooks/useSummary'
+import { useSetScenePinned, useSetCategoryPinned } from '../../hooks/useAiContext'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
 import { useReview } from '../../review/ReviewContext'
 
@@ -209,6 +211,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	)
 	const canRunReview = aiCredentials.length > 0
 
+	// ── AI reference context (share Codex entries with the AI) ─────────────────
+	const { mutate: setScenePinned } = useSetScenePinned()
+	const { mutate: setCategoryPinned } = useSetCategoryPinned()
+	const [manageContextCodexId, setManageContextCodexId] = useState(null)
+	const [manageContextTitle, setManageContextTitle] = useState('')
+
 	// Chapter memory document (nav "Generate / Edit memory document").
 	const { mutate: generateMemory, isPending: generatingMemory } = useGenerateChapterMemory()
 	const [memorySnack, setMemorySnack] = useState(null) // { severity, message } | null
@@ -251,6 +259,57 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				{ onSuccess, onError },
 			)
 		}
+	}
+
+	// ── AI reference context handlers ──────────────────────────────────────────
+
+	// Toggle one Codex entry. menuNode (type 'scene', codexCategory set) carries
+	// its current aiContextPinned so the menu shows the right verb.
+	const handleToggleEntryPin = () => {
+		const node = menuNode
+		closeMenu()
+		if (!node) return
+		const next = !node.aiContextPinned
+		setScenePinned(
+			{ sceneId: node.id, chapterId: node.chapterId, codexId: node.codexId, pinned: next },
+			{
+				onSuccess: () => setMemorySnack({
+					severity: 'success',
+					message: next
+						? `“${node.title?.trim() || 'Entry'}” is now shared with the AI.`
+						: `“${node.title?.trim() || 'Entry'}” is no longer shared with the AI.`,
+				}),
+				onError: (e) => setMemorySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Could not update AI context.' }),
+			},
+		)
+	}
+
+	// Bulk include/exclude every entry under one Codex category (type
+	// 'codex-category'; menuNode.id is the category chapter).
+	const handleCategoryPin = (pinned) => {
+		const node = menuNode
+		closeMenu()
+		if (!node) return
+		setCategoryPinned(
+			{ chapterId: node.id, codexId: node.codexId, pinned },
+			{
+				onSuccess: (data) => setMemorySnack({
+					severity: 'success',
+					message: pinned
+						? `Shared ${data?.updated ?? 0} ${node.title?.trim() || 'category'} entr${(data?.updated === 1) ? 'y' : 'ies'} with the AI.`
+						: `Stopped sharing ${node.title?.trim() || 'category'} entries with the AI.`,
+				}),
+				onError: (e) => setMemorySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Could not update AI context.' }),
+			},
+		)
+	}
+
+	const openManageContext = () => {
+		const node = menuNode
+		closeMenu()
+		if (!node) return
+		setManageContextTitle(node.title || 'Codex')
+		setManageContextCodexId(node.id)
 	}
 
 	const doGenerateMemory = (node) => {
@@ -670,6 +729,46 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
+				{/* ── Share Codex with the AI ──────────────────────────────────
+				    Per-entry toggle (a codex-entry scene), per-category bulk, and
+				    the Manage dialog (codex container). Flat MenuItems only — MUI
+				    indexes direct children, so no Fragment wrappers. */}
+				{menuNode?.type === 'scene' && menuNode?.codexCategory && <Divider />}
+				{menuNode?.type === 'scene' && menuNode?.codexCategory && (
+					<MenuItem dense onClick={handleToggleEntryPin}>
+						<ListItemIcon>
+							{menuNode.aiContextPinned
+								? <CloseIcon fontSize="small" />
+								: <AutoAwesomeIcon fontSize="small" />}
+						</ListItemIcon>
+						<ListItemText>
+							{menuNode.aiContextPinned ? 'Exclude from AI context' : 'Include in AI context'}
+						</ListItemText>
+					</MenuItem>
+				)}
+
+				{menuNode?.type === 'codex-category' && <Divider />}
+				{menuNode?.type === 'codex-category' && (
+					<MenuItem dense onClick={() => handleCategoryPin(true)}>
+						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Include all in AI context</ListItemText>
+					</MenuItem>
+				)}
+				{menuNode?.type === 'codex-category' && (
+					<MenuItem dense onClick={() => handleCategoryPin(false)}>
+						<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Exclude all from AI context</ListItemText>
+					</MenuItem>
+				)}
+
+				{menuNode?.type === 'codex' && <Divider />}
+				{menuNode?.type === 'codex' && (
+					<MenuItem dense onClick={openManageContext}>
+						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Manage AI Context…</ListItemText>
+					</MenuItem>
+				)}
+
 				{/* Export as Word — not available for project */}
 				{exportUrl && <Divider />}
 				{exportUrl && (
@@ -926,6 +1025,13 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				bookId={bookSummaryNode?.id}
 				title={bookSummaryNode?.title}
 				onEditInDocument={openBookSummaryDocument}
+			/>
+
+			<ManageAiContextDialog
+				open={!!manageContextCodexId}
+				onClose={() => setManageContextCodexId(null)}
+				codexId={manageContextCodexId}
+				title={manageContextTitle}
 			/>
 
 			<Snackbar

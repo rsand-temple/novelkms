@@ -125,13 +125,15 @@ public class AiReviewService {
      * FAILED). Chapter ownership has already been enforced by the tenant filter
      * for the {@code chapters/{id}} path segment.
      *
-     * @param credentialId  optional explicit credential; null = the user's default
-     * @param modelOverride optional model override; null/blank = credential or provider default
-     * @param userGuidance  optional one-time author note for this run only; null/blank = none
+     * @param credentialId        optional explicit credential; null = the user's default
+     * @param modelOverride       optional model override; null/blank = credential or provider default
+     * @param userGuidance        optional one-time author note for this run only; null/blank = none
+     * @param includePinnedContext when true, pinned Codex entries (book + project)
+     *                            are assembled into the review's reference context
      */
     public AiReview runChapterReview(UUID userId, UUID chapterId, UUID credentialId,
-            String modelOverride, String userGuidance) throws SQLException {
-        logger.info("Starting AI chapter review: userId={}, chapterId={}, credentialId={}, modelOverride={}", userId, chapterId, credentialId, modelOverride);
+            String modelOverride, String userGuidance, boolean includePinnedContext) throws SQLException {
+        logger.info("Starting AI chapter review: userId={}, chapterId={}, credentialId={}, modelOverride={}, includePinnedContext={}", userId, chapterId, credentialId, modelOverride, includePinnedContext);
         Chapter chapter = chapterDao.findById(chapterId)
                 .orElseThrow(() -> new ReviewException(Status.PRECONDITION_REQUIRED, "not_found", "Chapter not found."));
 
@@ -147,11 +149,13 @@ public class AiReviewService {
                     "This chapter has no text to review yet.");
         }
 
-        String priorContext = assemblePriorContext(bookId, chapterId);
-        logger.debug("AI chapter review context assembled: chapterId={}, textChars={}, priorContextChars={}", chapterId, chapterText.length(), priorContext == null ? 0 : priorContext.length());
+        String priorContext     = assemblePriorContext(bookId, chapterId);
+        String referenceContext = includePinnedContext ? assembleReferenceContext(bookId) : null;
+        logger.debug("AI chapter review context assembled: chapterId={}, textChars={}, priorContextChars={}, referenceContextChars={}",
+                chapterId, chapterText.length(), priorContext == null ? 0 : priorContext.length(), referenceContext == null ? 0 : referenceContext.length());
         ReviewTarget target = new ReviewTarget(chapterId, null, bookId,
                 "chapter", chapterLabel(chapter), chapter.getSubtitle(), chapterText,
-                priorContext, null, blankToNull(userGuidance));
+                priorContext, referenceContext, blankToNull(userGuidance));
         return execute(userId, target, credentialId, modelOverride);
     }
 
@@ -161,11 +165,13 @@ public class AiReviewService {
      * {@code scenes/{id}} path segment. The review is filed under the scene's
      * parent chapter so it appears in that chapter's AI workflow.
      *
-     * @param userGuidance optional one-time author note for this run only; null/blank = none
+     * @param userGuidance         optional one-time author note for this run only; null/blank = none
+     * @param includePinnedContext when true, pinned Codex entries (book + project)
+     *                             are assembled into the review's reference context
      */
     public AiReview runSceneReview(UUID userId, UUID sceneId, UUID credentialId,
-            String modelOverride, String userGuidance) throws SQLException {
-        logger.info("Starting AI scene review: userId={}, sceneId={}, credentialId={}, modelOverride={}", userId, sceneId, credentialId, modelOverride);
+            String modelOverride, String userGuidance, boolean includePinnedContext) throws SQLException {
+        logger.info("Starting AI scene review: userId={}, sceneId={}, credentialId={}, modelOverride={}, includePinnedContext={}", userId, sceneId, credentialId, modelOverride, includePinnedContext);
         Scene scene = sceneDao.findById(sceneId)
                 .orElseThrow(() -> new ReviewException(Status.PRECONDITION_REQUIRED, "not_found", "Scene not found."));
 
@@ -188,9 +194,11 @@ public class AiReviewService {
                     "This scene has no text to review yet.");
         }
 
-        logger.debug("AI scene review context assembled: sceneId={}, chapterId={}, textChars={}", sceneId, chapterId, sceneText.length());
+        String referenceContext = includePinnedContext ? assembleReferenceContext(bookId) : null;
+        logger.debug("AI scene review context assembled: sceneId={}, chapterId={}, textChars={}, referenceContextChars={}",
+                sceneId, chapterId, sceneText.length(), referenceContext == null ? 0 : referenceContext.length());
         ReviewTarget target = new ReviewTarget(chapterId, sceneId, bookId,
-                "scene", sceneLabel(scene), null, sceneText, null, null, blankToNull(userGuidance));
+                "scene", sceneLabel(scene), null, sceneText, null, referenceContext, blankToNull(userGuidance));
         return execute(userId, target, credentialId, modelOverride);
     }
 
@@ -409,7 +417,80 @@ public class AiReviewService {
         return result.isEmpty() ? null : result;
     }
 
-    // ── Chapter & book summaries ──────────────────────────────────────────────
+    // ── Pinned Codex reference context ────────────────────────────────────────
+    //
+    // The author may pin individual Codex entries (per-entry, via the nav menu or
+    // the Manage AI Context dialog) to share them with the model as established
+    // canon/voice that the manuscript must respect. These flow through the
+    // review prompt's referenceContext block (rendered by the provider as
+    // "reference material — do not review it"). Nothing is shared by default;
+    // a heavy worldbuilder's full Codex is never dumped at the model.
+
+    /** Aggregate counts for the per-book pinned-context summary the review UI shows. */
+    public record PinnedContextSummary(int entryCount, int wordCount) {
+    }
+
+    /**
+     * Concatenates the pinned Codex entries that apply to a review in {@code bookId}
+     * — both the book's own Codex and the series-wide project Codex, the same two
+     * containers that already coexist elsewhere — into a single reference block,
+     * grouped by category, or null if nothing is pinned. Entry content is authored
+     * HTML; it is stripped to plain text before it reaches the prompt.
+     */
+    private String assembleReferenceContext(UUID bookId) throws SQLException {
+        List<CodexDao.AiContextEntry> entries = collectPinnedEntries(bookId);
+        if (entries.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb       = new StringBuilder();
+        String        lastCat  = null;
+        for (CodexDao.AiContextEntry e : entries) {
+            String plain = htmlToPlainText(e.content());
+            if (plain.isBlank()) {
+                continue;
+            }
+            String category = (e.categoryTitle() == null || e.categoryTitle().isBlank())
+                    ? "Codex" : e.categoryTitle().trim();
+            if (!category.equals(lastCat)) {
+                sb.append("# ").append(category).append("\n\n");
+                lastCat = category;
+            }
+            String title = (e.title() == null || e.title().isBlank()) ? "Untitled" : e.title().trim();
+            sb.append("=== ").append(title).append(" ===\n").append(plain).append("\n\n");
+        }
+        String result = sb.toString().strip();
+        return result.isEmpty() ? null : result;
+    }
+
+    /**
+     * Pinned entry count and total word count for {@code bookId}'s review scope,
+     * for the "Pinned context: N entries, ~M words" line in the review rail.
+     */
+    public PinnedContextSummary pinnedContextSummary(UUID bookId) throws SQLException {
+        List<CodexDao.AiContextEntry> entries = collectPinnedEntries(bookId);
+        int words = 0;
+        for (CodexDao.AiContextEntry e : entries) {
+            words += e.wordCount();
+        }
+        return new PinnedContextSummary(entries.size(), words);
+    }
+
+    /** Pinned entries from the book's Codex and (if any) the project's Codex. */
+    private List<CodexDao.AiContextEntry> collectPinnedEntries(UUID bookId) throws SQLException {
+        List<CodexDao.AiContextEntry> entries = new ArrayList<>();
+        Optional<Codex> bookCodex = codexDao.findByBookId(bookId);
+        if (bookCodex.isPresent()) {
+            entries.addAll(codexDao.listPinnedAiContextEntries(bookCodex.get().getId()));
+        }
+        UUID projectId = resolveProjectId(bookId);
+        if (projectId != null) {
+            Optional<Codex> projectCodex = codexDao.findByProjectId(projectId);
+            if (projectCodex.isPresent()) {
+                entries.addAll(codexDao.listPinnedAiContextEntries(projectCodex.get().getId()));
+            }
+        }
+        return entries;
+    }
     //
     // A separate artifact family from memory documents: a chapter summary is one
     // readable paragraph; the book summary is built entirely from the chapter

@@ -4,8 +4,10 @@ import {
 	Badge,
 	Box,
 	Button,
+	Checkbox,
 	Chip,
 	CircularProgress,
+	FormControlLabel,
 	IconButton,
 	MenuItem,
 	Tab,
@@ -31,6 +33,7 @@ import {
 	AI_REVIEW_KEYS,
 } from '../../hooks/useAiReviews'
 import { useChapterMemoryStatus } from '../../hooks/useChapterMemory'
+import { useBookAiContextSummary } from '../../hooks/useAiContext'
 import { aiApi } from '../../api/ai'
 import { useScenes } from '../../hooks/useScenes'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
@@ -138,6 +141,16 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 		setGuidance(filteredReviews[0]?.userGuidance ?? '')
 	}
 
+	// Pinned Codex reference context for this book (book + project codex). The
+	// author can pin entries to share them with the AI; here they can opt out of
+	// pinned context for a single run without unpinning anything. The toggle only
+	// appears when something is actually pinned.
+	const { data: pinnedSummary } = useBookAiContextSummary(bookId, !!bookId)
+	const pinnedEntryCount = pinnedSummary?.entryCount ?? 0
+	const pinnedWordCount  = pinnedSummary?.wordCount ?? 0
+	const hasPinnedContext = pinnedEntryCount > 0
+	const [includePinned, setIncludePinned] = useState(true)
+
 	const completedReviews = useMemo(
 		() => filteredReviews.filter(r => r.status === 'COMPLETED'),
 		[filteredReviews],
@@ -229,14 +242,14 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 
 	const doRunChapter = () => {
 		setRunError(null)
-		runChapter({ chapterId, credentialId: effectiveCredId, model: null, userGuidance: guidance.trim() || null },
+		runChapter({ chapterId, credentialId: effectiveCredId, model: null, userGuidance: guidance.trim() || null, includePinnedContext: includePinned },
 			{ onSuccess: onRunSuccess, onError: onRunError })
 	}
 
 	const handleRun = () => {
 		setRunError(null)
 		if (scope === 'SCENE') {
-			runScene({ sceneId, credentialId: effectiveCredId, model: null, userGuidance: guidance.trim() || null },
+			runScene({ sceneId, credentialId: effectiveCredId, model: null, userGuidance: guidance.trim() || null, includePinnedContext: includePinned },
 				{ onSuccess: onRunSuccess, onError: onRunError })
 			return
 		}
@@ -516,6 +529,30 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 							<Button size="small" sx={{ mb: 1 }} onClick={() => setGuidance('')} disabled={running}>
 								Clear guidance
 							</Button>
+						)}
+
+						{/* Pinned Codex reference context — opt out for one run without
+						    unpinning. Only shown when something is pinned for this book. */}
+						{hasPinnedContext && (
+							<Box sx={{ mb: 1 }}>
+								<FormControlLabel
+									sx={{ m: 0 }}
+									control={
+										<Checkbox
+											size="small"
+											checked={includePinned}
+											onChange={(e) => setIncludePinned(e.target.checked)}
+											disabled={running}
+										/>
+									}
+									label={
+										<Typography variant="body2">Include pinned Codex context</Typography>
+									}
+								/>
+								<Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 3.5 }}>
+									{pinnedEntryCount} {pinnedEntryCount === 1 ? 'entry' : 'entries'}, ~{pinnedWordCount} {pinnedWordCount === 1 ? 'word' : 'words'}
+								</Typography>
+							</Box>
 						)}
 
 						<Button
