@@ -59,6 +59,15 @@ function statusColor(status) {
 	}
 }
 
+function roleColor(role) {
+	switch (role) {
+		case 'ADMIN':
+			return 'success'
+		default:
+			return 'default'
+	}
+}
+
 function Section({ title, children, actions }) {
 	return (
 		<Paper
@@ -437,10 +446,17 @@ export default function AdminSupportConsole() {
 													{user.id}
 												</>
 											}
-											primaryTypographyProps={{ fontWeight: 650, noWrap: true }}
-											secondaryTypographyProps={{ component: 'span', sx: { overflowWrap: 'anywhere' } }}
-										/>
-									</ListItemButton>
+											slotProps={{
+												primary: {
+													fontWeight: 650,
+													noWrap: true,
+												},
+												secondary: {
+													component: 'span',
+													sx: { overflowWrap: 'anywhere' },
+												},
+											}}
+										/>									</ListItemButton>
 								))}
 								{!loadingUsers && users.length === 0 && (
 									<Box sx={{ p: 2 }}>
@@ -472,13 +488,24 @@ export default function AdminSupportConsole() {
 						) : (
 							<>
 								<Section title="User">
-									<Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+									<Stack
+										direction="row"
+										spacing={1}
+										useFlexGap
+										sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+									>
 										<Typography variant="h5" sx={{ fontWeight: 750 }}>
 											{valueOrDash(userForHeader?.displayName)}
 										</Typography>
 										<Chip size="small" label={valueOrDash(userForHeader?.status)} color={statusColor(userForHeader?.status)} />
 										{userForHeader?.roles?.map((role) => (
-											<Chip key={role} size="small" label={role} variant="outlined" />
+											<Chip
+												key={role}
+												size="small"
+												label={role}
+												color={roleColor(role)}
+												variant={roleColor(role) === 'default' ? 'outlined' : 'filled'}
+											/>
 										))}
 									</Stack>
 
