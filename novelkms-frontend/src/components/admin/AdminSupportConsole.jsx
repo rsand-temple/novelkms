@@ -16,6 +16,8 @@ import {
 	ListItemText,
 	Paper,
 	Stack,
+	Tab,
+	Tabs,
 	TextField,
 	Toolbar,
 	Typography,
@@ -202,6 +204,174 @@ function AuditList({ rows }) {
 	)
 }
 
+function MetricCard({ label, value, helper, severity = 'default' }) {
+	const colorMap = {
+		success: 'success.main',
+		warning: 'warning.main',
+		error: 'error.main',
+		default: 'text.primary',
+	}
+
+	return (
+		<Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+			<Typography variant="h4" sx={{ fontWeight: 800, color: colorMap[severity] ?? colorMap.default }}>
+				{value ?? 0}
+			</Typography>
+			<Typography variant="subtitle2" sx={{ fontWeight: 750 }}>
+				{label}
+			</Typography>
+			{helper && (
+				<Typography variant="caption" color="text.secondary">
+					{helper}
+				</Typography>
+			)}
+		</Paper>
+	)
+}
+
+function MetricGrid({ children }) {
+	return (
+		<Box
+			sx={{
+				display: 'grid',
+				gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' },
+				gap: 1.5,
+			}}
+		>
+			{children}
+		</Box>
+	)
+}
+
+function MetricRows({ rows }) {
+	return (
+		<Stack divider={<Divider flexItem />} spacing={0.75}>
+			{rows.map(([label, value]) => (
+				<Box key={label} sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+					<Typography variant="body2" sx={{ flex: 1 }}>
+						{label}
+					</Typography>
+					<Typography variant="body2" sx={{ fontWeight: 750 }}>
+						{value ?? 0}
+					</Typography>
+				</Box>
+			))}
+		</Stack>
+	)
+}
+
+function AdminOverview({ metrics, loading, onRefresh }) {
+	if (loading && !metrics) {
+		return (
+			<Paper variant="outlined" sx={{ p: 4, borderRadius: 2, display: 'grid', placeItems: 'center' }}>
+				<CircularProgress />
+			</Paper>
+		)
+	}
+
+	if (!metrics) {
+		return (
+			<Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
+				<Typography variant="body2" color="text.secondary">
+					No overview metrics loaded.
+				</Typography>
+			</Paper>
+		)
+	}
+
+	const users = metrics.users ?? {}
+	const billing = metrics.billing ?? {}
+	const activity = metrics.activity ?? {}
+	const content = metrics.content ?? {}
+	const ai = metrics.ai ?? {}
+	const billingHealth = metrics.billingHealth ?? {}
+
+	return (
+		<Stack spacing={2}>
+			<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+				<Box sx={{ flex: 1 }}>
+					<Typography variant="h5" sx={{ fontWeight: 800 }}>
+						Admin overview
+					</Typography>
+					<Typography variant="caption" color="text.secondary">
+						Evaluated {formatDate(metrics.evaluatedAt)}
+					</Typography>
+				</Box>
+				<Button size="small" variant="outlined" onClick={onRefresh} disabled={loading}>
+					Refresh
+				</Button>
+			</Box>
+
+			<MetricGrid>
+				<MetricCard label="Total users" value={users.total} />
+				<MetricCard label="Subscribed/access" value={billing.subscribedAccess} helper="active + canceling + trial + family" severity="success" />
+				<MetricCard label="Trialing" value={billing.trialing} severity="warning" />
+				<MetricCard label="Idle 30 days" value={users.idle30Days} helper="active users only" severity={users.idle30Days ? 'warning' : 'default'} />
+			</MetricGrid>
+
+			<MetricGrid>
+				<MetricCard label="New users 7d" value={users.createdLast7Days} />
+				<MetricCard label="Logins 7d" value={activity.loginsLast7Days} />
+				<MetricCard label="AI reviews 30d" value={ai.reviewsLast30Days} />
+				<MetricCard label="Payment problems" value={billingHealth.paymentProblems} severity={billingHealth.paymentProblems ? 'error' : 'default'} />
+			</MetricGrid>
+
+			<Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+				<Section title="Users">
+					<MetricRows rows={[
+						['Active', users.active],
+						['Disabled', users.disabled],
+						['Created last 30 days', users.createdLast30Days],
+						['Never logged in', users.neverLoggedIn],
+					]} />
+				</Section>
+
+				<Section title="Billing">
+					<MetricRows rows={[
+						['Active', billing.active],
+						['Active canceling', billing.activeCanceling],
+						['Trialing', billing.trialing],
+						['Family', billing.family],
+						['Past due', billing.pastDue],
+						['Canceled', billing.canceled],
+						['No subscription row', billing.noSubscriptionRow],
+					]} />
+				</Section>
+
+				<Section title="Content">
+					<MetricRows rows={[
+						['Projects', content.projects],
+						['Books', content.books],
+						['Parts', content.parts],
+						['Chapters', content.chapters],
+						['Scenes', content.scenes],
+						['Codex entries', content.codexEntries],
+					]} />
+				</Section>
+
+				<Section title="AI review activity">
+					<MetricRows rows={[
+						['Reviews total', ai.reviewsTotal],
+						['Reviews last 7 days', ai.reviewsLast7Days],
+						['Reviews last 30 days', ai.reviewsLast30Days],
+						['Open recommendations', ai.openRecommendations],
+						['Deferred recommendations', ai.deferredRecommendations],
+						['Promoted recommendations', ai.promotedRecommendations],
+					]} />
+				</Section>
+
+				<Section title="Billing health">
+					<MetricRows rows={[
+						['Failed webhooks last 7 days', billingHealth.failedWebhookEventsLast7Days],
+						['Unprocessed/failed webhook events', billingHealth.unprocessedWebhookEvents],
+						['Payment problems', billingHealth.paymentProblems],
+					]} />
+				</Section>
+			</Box>
+		</Stack>
+	)
+}
+
 function GrantFamilyAccessDialog({ open, user, saving, onClose, onSubmit }) {
 	const [reason, setReason] = useState('')
 	const [note, setNote] = useState('')
@@ -269,6 +439,9 @@ export default function AdminSupportConsole() {
 	const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
 	const [error, setError] = useState(null)
 	const [success, setSuccess] = useState(null)
+	const [tab, setTab] = useState('overview')
+	const [metrics, setMetrics] = useState(null)
+	const [loadingMetrics, setLoadingMetrics] = useState(true)
 
 	const selectedSummary = useMemo(
 		() => users.find((user) => user.id === selectedUserId) ?? null,
@@ -329,6 +502,57 @@ export default function AdminSupportConsole() {
 
 		return () => {
 			cancelled = true
+		}
+	}, [])
+
+	useEffect(() => {
+		let cancelled = false
+
+		async function loadInitialMetrics() {
+			try {
+				const overview = await adminApi.getOverviewMetrics()
+
+				if (!cancelled) {
+					setMetrics(overview)
+					setError(null)
+				}
+			} catch (err) {
+				if (!cancelled) {
+					if (err.response?.status === 403) {
+						setError('You are authenticated, but this account does not have administrator access.')
+					} else {
+						setError(err.response?.data?.message ?? 'Could not load admin overview metrics.')
+					}
+				}
+			} finally {
+				if (!cancelled) {
+					setLoadingMetrics(false)
+				}
+			}
+		}
+
+		loadInitialMetrics()
+
+		return () => {
+			cancelled = true
+		}
+	}, [])
+
+	const loadMetrics = useCallback(async () => {
+		setLoadingMetrics(true)
+
+		try {
+			const overview = await adminApi.getOverviewMetrics()
+			setMetrics(overview)
+			setError(null)
+		} catch (err) {
+			if (err.response?.status === 403) {
+				setError('You are authenticated, but this account does not have administrator access.')
+			} else {
+				setError(err.response?.data?.message ?? 'Could not load admin overview metrics.')
+			}
+		} finally {
+			setLoadingMetrics(false)
 		}
 	}, [])
 
@@ -397,8 +621,25 @@ export default function AdminSupportConsole() {
 				</Toolbar>
 			</AppBar>
 
-			<Box sx={{ p: 2, display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '360px 1fr' }, gap: 2 }}>
-				<Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', bgcolor: 'background.paper' }}>
+			<Box sx={{ px: 2, pt: 2 }}>
+				<Paper variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
+					<Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ px: 1 }}>
+						<Tab value="overview" label="Overview" />
+						<Tab value="users" label="Users" />
+					</Tabs>
+				</Paper>
+			</Box>
+
+			{tab === 'overview' ? (
+				<Box sx={{ p: 2 }}>
+					<Stack spacing={2}>
+						{error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
+						{success && <Alert severity="success" onClose={() => setSuccess(null)}>{success}</Alert>}
+						<AdminOverview metrics={metrics} loading={loadingMetrics} onRefresh={loadMetrics} />
+					</Stack>
+				</Box>
+			) : (
+				<Box sx={{ p: 2, display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '360px 1fr' }, gap: 2 }}>				<Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', bgcolor: 'background.paper' }}>
 					<Box component="form" onSubmit={handleSearchSubmit} sx={{ p: 2 }}>
 						<Stack spacing={1.5}>
 							<Typography variant="subtitle1" sx={{ fontWeight: 750 }}>
@@ -470,114 +711,115 @@ export default function AdminSupportConsole() {
 					</Box>
 				</Paper>
 
-				<Box>
-					<Stack spacing={2}>
-						{error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-						{success && <Alert severity="success" onClose={() => setSuccess(null)}>{success}</Alert>}
+					<Box>
+						<Stack spacing={2}>
+							{error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
+							{success && <Alert severity="success" onClose={() => setSuccess(null)}>{success}</Alert>}
 
-						{!selectedUserId ? (
-							<Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
-								<Typography variant="body1" color="text.secondary">
-									Search for a user to begin.
-								</Typography>
-							</Paper>
-						) : loadingDetail && !selectedUser ? (
-							<Paper variant="outlined" sx={{ p: 4, borderRadius: 2, display: 'grid', placeItems: 'center' }}>
-								<CircularProgress />
-							</Paper>
-						) : (
-							<>
-								<Section title="User">
-									<Stack
-										direction="row"
-										spacing={1}
-										useFlexGap
-										sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-									>
-										<Typography variant="h5" sx={{ fontWeight: 750 }}>
-											{valueOrDash(userForHeader?.displayName)}
-										</Typography>
-										<Chip size="small" label={valueOrDash(userForHeader?.status)} color={statusColor(userForHeader?.status)} />
-										{userForHeader?.roles?.map((role) => (
-											<Chip
-												key={role}
-												size="small"
-												label={role}
-												color={roleColor(role)}
-												variant={roleColor(role) === 'default' ? 'outlined' : 'filled'}
-											/>
-										))}
-									</Stack>
-
-									<Divider />
-
-									<DetailRow label="User ID" value={userForHeader?.id} />
-									<DetailRow label="Email" value={userForHeader?.emailAddress} />
-									<DetailRow label="Normalized email" value={userForHeader?.normalizedEmail} />
-									<DetailRow label="Created" value={formatDate(userForHeader?.createdAt)} />
-									<DetailRow label="Last login" value={formatDate(userForHeader?.lastLoginAt)} />
-								</Section>
-
-								<Section
-									title="Billing"
-									actions={
-										<Button
-											size="small"
-											variant="contained"
-											startIcon={<FamilyRestroomIcon />}
-											onClick={() => setFamilyDialogOpen(true)}
-											disabled={!selectedUserId || billing?.familyAccess}
+							{!selectedUserId ? (
+								<Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
+									<Typography variant="body1" color="text.secondary">
+										Search for a user to begin.
+									</Typography>
+								</Paper>
+							) : loadingDetail && !selectedUser ? (
+								<Paper variant="outlined" sx={{ p: 4, borderRadius: 2, display: 'grid', placeItems: 'center' }}>
+									<CircularProgress />
+								</Paper>
+							) : (
+								<>
+									<Section title="User">
+										<Stack
+											direction="row"
+											spacing={1}
+											useFlexGap
+											sx={{ alignItems: 'center', flexWrap: 'wrap' }}
 										>
-											Grant family access
-										</Button>
-									}
-								>
-									{billing ? (
-										<>
-											<Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+											<Typography variant="h5" sx={{ fontWeight: 750 }}>
+												{valueOrDash(userForHeader?.displayName)}
+											</Typography>
+											<Chip size="small" label={valueOrDash(userForHeader?.status)} color={statusColor(userForHeader?.status)} />
+											{userForHeader?.roles?.map((role) => (
 												<Chip
-													label={billing.subscription?.status ?? 'no subscription'}
-													color={statusColor(billing.subscription?.status)}
+													key={role}
+													size="small"
+													label={role}
+													color={roleColor(role)}
+													variant={roleColor(role) === 'default' ? 'outlined' : 'filled'}
 												/>
-												<Chip
-													label={`Access: ${billing.hasAccess ? 'yes' : 'no'}`}
-													color={billing.hasAccess ? 'success' : 'default'}
-													variant={billing.hasAccess ? 'filled' : 'outlined'}
-												/>
-												<Chip label={`Reason: ${billing.accessReason}`} variant="outlined" />
-											</Stack>
+											))}
+										</Stack>
 
-											<BillingFlags billing={billing} />
+										<Divider />
 
-											<Divider />
+										<DetailRow label="User ID" value={userForHeader?.id} />
+										<DetailRow label="Email" value={userForHeader?.emailAddress} />
+										<DetailRow label="Normalized email" value={userForHeader?.normalizedEmail} />
+										<DetailRow label="Created" value={formatDate(userForHeader?.createdAt)} />
+										<DetailRow label="Last login" value={formatDate(userForHeader?.lastLoginAt)} />
+									</Section>
 
-											<DetailRow label="Plan" value={billing.subscription?.planKey} />
-											<DetailRow label="Stripe customer" value={billing.subscription?.stripeCustomerId} />
-											<DetailRow label="Stripe subscription" value={billing.subscription?.stripeSubscriptionId} />
-											<DetailRow label="Current period end" value={formatDate(billing.subscription?.currentPeriodEnd)} />
-											<DetailRow label="Trial end" value={formatDate(billing.subscription?.trialEnd)} />
-											<DetailRow label="Last payment failed" value={formatDate(billing.subscription?.lastPaymentFailedAt)} />
-											<DetailRow label="Evaluated" value={formatDate(billing.evaluatedAt)} />
-										</>
-									) : (
-										<Typography variant="body2" color="text.secondary">
-											No billing detail loaded.
-										</Typography>
-									)}
-								</Section>
+									<Section
+										title="Billing"
+										actions={
+											<Button
+												size="small"
+												variant="contained"
+												startIcon={<FamilyRestroomIcon />}
+												onClick={() => setFamilyDialogOpen(true)}
+												disabled={!selectedUserId || billing?.familyAccess}
+											>
+												Grant family access
+											</Button>
+										}
+									>
+										{billing ? (
+											<>
+												<Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+													<Chip
+														label={billing.subscription?.status ?? 'no subscription'}
+														color={statusColor(billing.subscription?.status)}
+													/>
+													<Chip
+														label={`Access: ${billing.hasAccess ? 'yes' : 'no'}`}
+														color={billing.hasAccess ? 'success' : 'default'}
+														variant={billing.hasAccess ? 'filled' : 'outlined'}
+													/>
+													<Chip label={`Reason: ${billing.accessReason}`} variant="outlined" />
+												</Stack>
 
-								<Section title="Usage">
-									<UsageSummary usage={selectedUser?.usage} />
-								</Section>
+												<BillingFlags billing={billing} />
 
-								<Section title="Audit">
-									<AuditList rows={auditRows} />
-								</Section>
-							</>
-						)}
-					</Stack>
+												<Divider />
+
+												<DetailRow label="Plan" value={billing.subscription?.planKey} />
+												<DetailRow label="Stripe customer" value={billing.subscription?.stripeCustomerId} />
+												<DetailRow label="Stripe subscription" value={billing.subscription?.stripeSubscriptionId} />
+												<DetailRow label="Current period end" value={formatDate(billing.subscription?.currentPeriodEnd)} />
+												<DetailRow label="Trial end" value={formatDate(billing.subscription?.trialEnd)} />
+												<DetailRow label="Last payment failed" value={formatDate(billing.subscription?.lastPaymentFailedAt)} />
+												<DetailRow label="Evaluated" value={formatDate(billing.evaluatedAt)} />
+											</>
+										) : (
+											<Typography variant="body2" color="text.secondary">
+												No billing detail loaded.
+											</Typography>
+										)}
+									</Section>
+
+									<Section title="Usage">
+										<UsageSummary usage={selectedUser?.usage} />
+									</Section>
+
+									<Section title="Audit">
+										<AuditList rows={auditRows} />
+									</Section>
+								</>
+							)}
+						</Stack>
+					</Box>
 				</Box>
-			</Box>
+			)}
 
 			{familyDialogOpen && (
 				<GrantFamilyAccessDialog
