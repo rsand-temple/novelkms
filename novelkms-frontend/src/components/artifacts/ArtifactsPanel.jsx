@@ -62,10 +62,10 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 	const { data: usage } = useArtifactUsage(projectId)
 
 	const createFolder = useCreateArtifactFolder()
-	const uploadFile   = useUploadArtifactFile()
-	const renameNode   = useRenameArtifactNode()
-	const moveNode     = useMoveArtifactNode()
-	const trashNode    = useTrashArtifactNode()
+	const uploadFile = useUploadArtifactFile()
+	const renameNode = useRenameArtifactNode()
+	const moveNode = useMoveArtifactNode()
+	const trashNode = useTrashArtifactNode()
 
 	const fileInputRef = useRef(null)
 	const dropZoneRef = useRef(null)
@@ -174,7 +174,6 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 		setUploading(files.length)
 		for (const file of files) {
 			try {
-				// eslint-disable-next-line no-await-in-loop
 				await uploadFile.mutateAsync({ projectId, parentId: effectiveParentId, file })
 			} catch (err) {
 				setSnack({ severity: 'error', message: artifactErrorMessage(err) })
@@ -194,7 +193,10 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 	// drop     → always preventDefault, then check if target is inside this
 	//            panel (via ref.contains) and upload if so
 	const uploadContextRef = useRef({ projectId, effectiveParentId })
-	uploadContextRef.current = { projectId, effectiveParentId }
+
+	useEffect(() => {
+		uploadContextRef.current = { projectId, effectiveParentId }
+	}, [projectId, effectiveParentId])
 
 	useEffect(() => {
 		let counter = 0
@@ -232,21 +234,21 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 			if (files.length) {
 				const ctx = uploadContextRef.current
 				setUploading(files.length)
-				;(async () => {
-					for (const file of files) {
-						try {
-							await uploadFile.mutateAsync({
-								projectId: ctx.projectId,
-								parentId: ctx.effectiveParentId,
-								file,
-							})
-						} catch (err) {
-							setSnack({ severity: 'error', message: artifactErrorMessage(err) })
-						} finally {
-							setUploading(c => Math.max(0, c - 1))
+					; (async () => {
+						for (const file of files) {
+							try {
+								await uploadFile.mutateAsync({
+									projectId: ctx.projectId,
+									parentId: ctx.effectiveParentId,
+									file,
+								})
+							} catch (err) {
+								setSnack({ severity: 'error', message: artifactErrorMessage(err) })
+							} finally {
+								setUploading(c => Math.max(0, c - 1))
+							}
 						}
-					}
-				})()
+					})()
 			}
 		}
 
@@ -261,8 +263,8 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 			window.removeEventListener('dragleave', onDragLeave)
 			window.removeEventListener('drop', onDrop)
 		}
-	// uploadFile is a stable mutation object from useMutation
-	// eslint-disable-next-line react-hooks/exhaustive-deps
+		// uploadFile is a stable mutation object from useMutation
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
 	// ── Drag-to-move (isolated DndContext) ─────────────────────────────────────
@@ -292,9 +294,9 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 	}
 
 	// ── Render ─────────────────────────────────────────────────────────────────
-	const usedBytes  = usage?.usedBytes ?? 0
+	const usedBytes = usage?.usedBytes ?? 0
 	const quotaBytes = usage?.quotaBytes ?? 0
-	const usedPct    = quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0
+	const usedPct = quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0
 
 	return (
 		<Box
@@ -338,199 +340,199 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 					onSnack={setSnack}
 				/>
 			) : (<>
-			{/* Toolbar */}
-			<Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5, py: 1, flexShrink: 0 }}>
-				<Tooltip title="Up one level">
-					<span>
-						<IconButton size="small" onClick={goUp} disabled={!currentFolder}>
-							<ArrowUpwardIcon fontSize="small" />
-						</IconButton>
-					</span>
-				</Tooltip>
-				<Button size="small" startIcon={<AddIcon />} onClick={() => setNewFolderOpen(true)}>
-					New folder
-				</Button>
-				<Button size="small" startIcon={<UploadFileIcon />} onClick={handleUploadClick}>
-					Upload
-				</Button>
-				<input
-					ref={fileInputRef}
-					type="file"
-					multiple
-					hidden
-					onChange={handleFilesChosen}
-				/>
-				<Box sx={{ flex: 1 }} />
-				{uploading > 0 && (
-					<Typography variant="caption" color="text.secondary">
-						Uploading {uploading}…
-					</Typography>
-				)}
-			</Stack>
-
-			{/* Breadcrumb */}
-			<Box sx={{ px: 1.75, pb: 1, flexShrink: 0 }}>
-				<Breadcrumbs separator="›" maxItems={6}>
-					<Link component="button" underline="hover" color={currentFolder ? 'inherit' : 'text.primary'}
-						onClick={() => navigateTo('root')} sx={{ fontSize: '0.82rem' }}>
-						Artifacts
-					</Link>
-					{trail.map((f, i) => {
-						const last = i === trail.length - 1
-						return last
-							? <Typography key={f.id} color="text.primary" sx={{ fontSize: '0.82rem' }}>{f.name}</Typography>
-							: <Link key={f.id} component="button" underline="hover" color="inherit"
-								onClick={() => navigateTo(f.id)} sx={{ fontSize: '0.82rem' }}>{f.name}</Link>
-					})}
-				</Breadcrumbs>
-			</Box>
-
-			{(uploading > 0 || createFolder.isPending) && <LinearProgress />}
-			<Divider />
-
-			{/* Details table */}
-			<Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-				{isLoading ? (
-					<Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}><CircularProgress size={24} /></Box>
-				) : (
-					<DndContext sensors={sensors} collisionDetection={closestCenter}
-						onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveDrag(null)}>
-						<TableContainer>
-							<Table size="small" stickyHeader>
-								<TableHead>
-									<TableRow>
-										<TableCell sx={{ fontWeight: 700 }}>Name</TableCell>
-										<TableCell sx={{ fontWeight: 700, width: 120 }}>Type</TableCell>
-										<TableCell sx={{ fontWeight: 700, width: 90 }} align="right">Size</TableCell>
-										<TableCell sx={{ fontWeight: 700, width: 180 }}>Modified</TableCell>
-									</TableRow>
-								</TableHead>
-								<TableBody>
-									{currentFolder && (
-										<UpRow onOpen={goUp} />
-									)}
-									{children.length === 0 && (
-										<TableRow>
-											<TableCell colSpan={4}>
-												<Typography variant="body2" color="text.disabled" sx={{ py: 2 }}>
-													This folder is empty. Use New folder or Upload to add items.
-												</Typography>
-											</TableCell>
-										</TableRow>
-									)}
-									{children.map((node) => (
-										<ArtifactRow
-											key={node.id}
-											node={node}
-											onOpenFolder={() => navigateTo(node.id)}
-											onContextMenu={(e) => {
-												e.preventDefault()
-												setRowMenu({ mouseX: e.clientX, mouseY: e.clientY, node })
-											}}
-											onDownload={() => handleDownload(node)}
-											onEdit={(n) => setSelection(prev => ({ ...prev, artifactEditingNodeId: n.id }))}
-										/>
-									))}
-								</TableBody>
-							</Table>
-						</TableContainer>
-
-						<DragOverlay dropAnimation={null}>
-							{activeDrag && (
-								<Box sx={{
-									display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 1.25, py: 0.5,
-									bgcolor: 'background.paper', border: '1px solid', borderColor: 'primary.main',
-									borderRadius: 1, boxShadow: 4, fontSize: 13,
-								}}>
-									{activeDrag.type === 'FOLDER'
-										? <FolderIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-										: <DescriptionIcon fontSize="small" sx={{ color: 'text.secondary' }} />}
-									{activeDrag.name}
-								</Box>
-							)}
-						</DragOverlay>
-					</DndContext>
-				)}
-			</Box>
-
-			{/* Usage footer */}
-			<Divider />
-			<Box sx={{ px: 1.75, py: 1, flexShrink: 0 }}>
-				<Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
-					<Typography variant="caption" color="text.secondary">
-						Storage: {formatBytes(usedBytes)} of {formatBytes(quotaBytes)} used
-					</Typography>
-					{usage?.maxFileSizeBytes != null && (
+				{/* Toolbar */}
+				<Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5, py: 1, flexShrink: 0 }}>
+					<Tooltip title="Up one level">
+						<span>
+							<IconButton size="small" onClick={goUp} disabled={!currentFolder}>
+								<ArrowUpwardIcon fontSize="small" />
+							</IconButton>
+						</span>
+					</Tooltip>
+					<Button size="small" startIcon={<AddIcon />} onClick={() => setNewFolderOpen(true)}>
+						New folder
+					</Button>
+					<Button size="small" startIcon={<UploadFileIcon />} onClick={handleUploadClick}>
+						Upload
+					</Button>
+					<input
+						ref={fileInputRef}
+						type="file"
+						multiple
+						hidden
+						onChange={handleFilesChosen}
+					/>
+					<Box sx={{ flex: 1 }} />
+					{uploading > 0 && (
 						<Typography variant="caption" color="text.secondary">
-							Max file size {formatBytes(usage.maxFileSizeBytes)}
+							Uploading {uploading}…
 						</Typography>
 					)}
 				</Stack>
-				<LinearProgress variant="determinate" value={usedPct}
-					color={usedPct > 90 ? 'error' : usedPct > 75 ? 'warning' : 'primary'}
-					sx={{ height: 6, borderRadius: 3 }} />
-			</Box>
 
-			{/* Row context menu */}
-			<Menu
-				open={!!rowMenu}
-				onClose={() => setRowMenu(null)}
-				anchorReference="anchorPosition"
-				anchorPosition={rowMenu ? { top: rowMenu.mouseY, left: rowMenu.mouseX } : undefined}
-			>
-				{rowMenu?.node?.type === 'FILE' && (
-					<MenuItem onClick={() => { handleDownload(rowMenu.node); setRowMenu(null) }}>
-						<ListItemIcon><FileDownloadIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Download</ListItemText>
-					</MenuItem>
-				)}
-				<MenuItem onClick={() => { setRenameTarget(rowMenu.node); setRowMenu(null) }}>
-					<ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
-					<ListItemText>Rename…</ListItemText>
-				</MenuItem>
-				<MenuItem onClick={() => { setMoveTarget(rowMenu.node); setRowMenu(null) }}>
-					<ListItemIcon><FolderIcon fontSize="small" /></ListItemIcon>
-					<ListItemText>Move to…</ListItemText>
-				</MenuItem>
+				{/* Breadcrumb */}
+				<Box sx={{ px: 1.75, pb: 1, flexShrink: 0 }}>
+					<Breadcrumbs separator="›" maxItems={6}>
+						<Link component="button" underline="hover" color={currentFolder ? 'inherit' : 'text.primary'}
+							onClick={() => navigateTo('root')} sx={{ fontSize: '0.82rem' }}>
+							Artifacts
+						</Link>
+						{trail.map((f, i) => {
+							const last = i === trail.length - 1
+							return last
+								? <Typography key={f.id} color="text.primary" sx={{ fontSize: '0.82rem' }}>{f.name}</Typography>
+								: <Link key={f.id} component="button" underline="hover" color="inherit"
+									onClick={() => navigateTo(f.id)} sx={{ fontSize: '0.82rem' }}>{f.name}</Link>
+						})}
+					</Breadcrumbs>
+				</Box>
+
+				{(uploading > 0 || createFolder.isPending) && <LinearProgress />}
 				<Divider />
-				<MenuItem onClick={() => { handleDelete(rowMenu.node); setRowMenu(null) }}>
-					<ListItemIcon><DeleteIcon fontSize="small" /></ListItemIcon>
-					<ListItemText>Move to Trash</ListItemText>
-				</MenuItem>
-			</Menu>
 
-			{/* Dialogs */}
-			{newFolderOpen && (
-				<NameDialog
-					title="New folder"
-					label="Folder name"
-					initial=""
-					confirmText="Create"
-					busy={createFolder.isPending}
-					onCancel={() => setNewFolderOpen(false)}
-					onConfirm={handleCreateFolder}
-				/>
-			)}
-			{renameTarget && (
-				<NameDialog
-					title="Rename"
-					label="Name"
-					initial={renameTarget.name}
-					confirmText="Rename"
-					busy={renameNode.isPending}
-					onCancel={() => setRenameTarget(null)}
-					onConfirm={handleRename}
-				/>
-			)}
-			{moveTarget && (
-				<MoveDialog
-					node={moveTarget}
-					nodes={nodes}
-					busy={moveNode.isPending}
-					onCancel={() => setMoveTarget(null)}
-					onConfirm={handleMove}
-				/>
-			)}
+				{/* Details table */}
+				<Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+					{isLoading ? (
+						<Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}><CircularProgress size={24} /></Box>
+					) : (
+						<DndContext sensors={sensors} collisionDetection={closestCenter}
+							onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveDrag(null)}>
+							<TableContainer>
+								<Table size="small" stickyHeader>
+									<TableHead>
+										<TableRow>
+											<TableCell sx={{ fontWeight: 700 }}>Name</TableCell>
+											<TableCell sx={{ fontWeight: 700, width: 120 }}>Type</TableCell>
+											<TableCell sx={{ fontWeight: 700, width: 90 }} align="right">Size</TableCell>
+											<TableCell sx={{ fontWeight: 700, width: 180 }}>Modified</TableCell>
+										</TableRow>
+									</TableHead>
+									<TableBody>
+										{currentFolder && (
+											<UpRow onOpen={goUp} />
+										)}
+										{children.length === 0 && (
+											<TableRow>
+												<TableCell colSpan={4}>
+													<Typography variant="body2" color="text.disabled" sx={{ py: 2 }}>
+														This folder is empty. Use New folder or Upload to add items.
+													</Typography>
+												</TableCell>
+											</TableRow>
+										)}
+										{children.map((node) => (
+											<ArtifactRow
+												key={node.id}
+												node={node}
+												onOpenFolder={() => navigateTo(node.id)}
+												onContextMenu={(e) => {
+													e.preventDefault()
+													setRowMenu({ mouseX: e.clientX, mouseY: e.clientY, node })
+												}}
+												onDownload={() => handleDownload(node)}
+												onEdit={(n) => setSelection(prev => ({ ...prev, artifactEditingNodeId: n.id }))}
+											/>
+										))}
+									</TableBody>
+								</Table>
+							</TableContainer>
+
+							<DragOverlay dropAnimation={null}>
+								{activeDrag && (
+									<Box sx={{
+										display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 1.25, py: 0.5,
+										bgcolor: 'background.paper', border: '1px solid', borderColor: 'primary.main',
+										borderRadius: 1, boxShadow: 4, fontSize: 13,
+									}}>
+										{activeDrag.type === 'FOLDER'
+											? <FolderIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+											: <DescriptionIcon fontSize="small" sx={{ color: 'text.secondary' }} />}
+										{activeDrag.name}
+									</Box>
+								)}
+							</DragOverlay>
+						</DndContext>
+					)}
+				</Box>
+
+				{/* Usage footer */}
+				<Divider />
+				<Box sx={{ px: 1.75, py: 1, flexShrink: 0 }}>
+					<Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
+						<Typography variant="caption" color="text.secondary">
+							Storage: {formatBytes(usedBytes)} of {formatBytes(quotaBytes)} used
+						</Typography>
+						{usage?.maxFileSizeBytes != null && (
+							<Typography variant="caption" color="text.secondary">
+								Max file size {formatBytes(usage.maxFileSizeBytes)}
+							</Typography>
+						)}
+					</Stack>
+					<LinearProgress variant="determinate" value={usedPct}
+						color={usedPct > 90 ? 'error' : usedPct > 75 ? 'warning' : 'primary'}
+						sx={{ height: 6, borderRadius: 3 }} />
+				</Box>
+
+				{/* Row context menu */}
+				<Menu
+					open={!!rowMenu}
+					onClose={() => setRowMenu(null)}
+					anchorReference="anchorPosition"
+					anchorPosition={rowMenu ? { top: rowMenu.mouseY, left: rowMenu.mouseX } : undefined}
+				>
+					{rowMenu?.node?.type === 'FILE' && (
+						<MenuItem onClick={() => { handleDownload(rowMenu.node); setRowMenu(null) }}>
+							<ListItemIcon><FileDownloadIcon fontSize="small" /></ListItemIcon>
+							<ListItemText>Download</ListItemText>
+						</MenuItem>
+					)}
+					<MenuItem onClick={() => { setRenameTarget(rowMenu.node); setRowMenu(null) }}>
+						<ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Rename…</ListItemText>
+					</MenuItem>
+					<MenuItem onClick={() => { setMoveTarget(rowMenu.node); setRowMenu(null) }}>
+						<ListItemIcon><FolderIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Move to…</ListItemText>
+					</MenuItem>
+					<Divider />
+					<MenuItem onClick={() => { handleDelete(rowMenu.node); setRowMenu(null) }}>
+						<ListItemIcon><DeleteIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Move to Trash</ListItemText>
+					</MenuItem>
+				</Menu>
+
+				{/* Dialogs */}
+				{newFolderOpen && (
+					<NameDialog
+						title="New folder"
+						label="Folder name"
+						initial=""
+						confirmText="Create"
+						busy={createFolder.isPending}
+						onCancel={() => setNewFolderOpen(false)}
+						onConfirm={handleCreateFolder}
+					/>
+				)}
+				{renameTarget && (
+					<NameDialog
+						title="Rename"
+						label="Name"
+						initial={renameTarget.name}
+						confirmText="Rename"
+						busy={renameNode.isPending}
+						onCancel={() => setRenameTarget(null)}
+						onConfirm={handleRename}
+					/>
+				)}
+				{moveTarget && (
+					<MoveDialog
+						node={moveTarget}
+						nodes={nodes}
+						busy={moveNode.isPending}
+						onCancel={() => setMoveTarget(null)}
+						onConfirm={handleMove}
+					/>
+				)}
 
 			</>)}
 
