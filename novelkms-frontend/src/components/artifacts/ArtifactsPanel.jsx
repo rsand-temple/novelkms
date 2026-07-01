@@ -79,6 +79,11 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 	const [uploading, setUploading] = useState(0)             // count remaining
 	const [snack, setSnack] = useState(null)                  // { severity, message }
 	const [nativeDragOver, setNativeDragOver] = useState(false) // OS file drag hovering
+	const [localEditingId, setLocalEditingId] = useState(null) // local text-editing state
+
+	// The active editing id: local state wins for immediate feedback; the prop
+	// carries the value back across navigation (set via setSelection).
+	const activeEditingId = localEditingId ?? editingNodeId ?? null
 
 	const nodes = tree ?? EMPTY_NODES
 
@@ -110,6 +115,11 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 		setSelection(prev => ({ ...prev, artifactFolderId: id ?? 'root' }))
 
 	const goUp = () => navigateTo(currentFolder?.parentId ?? 'root')
+
+	const handleOpenEditor = (node) => {
+		setLocalEditingId(node.id)
+		setSelection(prev => ({ ...prev, artifactFolderId: folderId ?? 'root', artifactEditingNodeId: node.id }))
+	}
 
 	// ── Actions ──────────────────────────────────────────────────────────────
 	const handleCreateFolder = (name) => {
@@ -193,10 +203,9 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 	// drop     → always preventDefault, then check if target is inside this
 	//            panel (via ref.contains) and upload if so
 	const uploadContextRef = useRef({ projectId, effectiveParentId })
-
 	useEffect(() => {
 		uploadContextRef.current = { projectId, effectiveParentId }
-	}, [projectId, effectiveParentId])
+	})
 
 	useEffect(() => {
 		let counter = 0
@@ -331,17 +340,20 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 				</Box>
 			</Box>
 
-			{editingNodeId ? (
+			{activeEditingId ? (
 				<ArtifactTextEditor
-					nodeId={editingNodeId}
+					nodeId={activeEditingId}
 					projectId={projectId}
 					nodes={nodes}
-					onClose={() => setSelection(prev => ({ ...prev, artifactEditingNodeId: null }))}
+					onClose={() => {
+						setLocalEditingId(null)
+						setSelection(prev => ({ ...prev, artifactFolderId: folderId ?? 'root', artifactEditingNodeId: null }))
+					}}
 					onSnack={setSnack}
 				/>
 			) : (<>
 				{/* Toolbar */}
-				<Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5, py: 1, flexShrink: 0 }}>
+				<Stack direction="row" spacing={1} sx={{ px: 1.5, py: 1, flexShrink: 0, alignItems: 'center' }}>
 					<Tooltip title="Up one level">
 						<span>
 							<IconButton size="small" onClick={goUp} disabled={!currentFolder}>
@@ -430,7 +442,7 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 													setRowMenu({ mouseX: e.clientX, mouseY: e.clientY, node })
 												}}
 												onDownload={() => handleDownload(node)}
-												onEdit={(n) => setSelection(prev => ({ ...prev, artifactEditingNodeId: n.id }))}
+												onEdit={handleOpenEditor}
 											/>
 										))}
 									</TableBody>
@@ -458,7 +470,7 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 				{/* Usage footer */}
 				<Divider />
 				<Box sx={{ px: 1.75, py: 1, flexShrink: 0 }}>
-					<Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
+					<Stack direction="row" sx={{ mb: 0.5, justifyContent: 'space-between' }}>
 						<Typography variant="caption" color="text.secondary">
 							Storage: {formatBytes(usedBytes)} of {formatBytes(quotaBytes)} used
 						</Typography>
@@ -484,6 +496,12 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 						<MenuItem onClick={() => { handleDownload(rowMenu.node); setRowMenu(null) }}>
 							<ListItemIcon><FileDownloadIcon fontSize="small" /></ListItemIcon>
 							<ListItemText>Download</ListItemText>
+						</MenuItem>
+					)}
+					{rowMenu?.node?.type === 'FILE' && isText(rowMenu?.node?.contentType) && (
+						<MenuItem onClick={() => { handleOpenEditor(rowMenu.node); setRowMenu(null) }}>
+							<ListItemIcon><DescriptionIcon fontSize="small" /></ListItemIcon>
+							<ListItemText>Edit</ListItemText>
 						</MenuItem>
 					)}
 					<MenuItem onClick={() => { setRenameTarget(rowMenu.node); setRowMenu(null) }}>
@@ -589,7 +607,7 @@ function ArtifactRow({ node, onOpenFolder, onContextMenu, onDownload, onEdit }) 
 			}}
 		>
 			<TableCell>
-				<Stack direction="row" spacing={1} alignItems="center">
+				<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
 					{isFolder
 						? <FolderIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 						: (isImage(node.contentType)
@@ -612,7 +630,7 @@ function UpRow({ onOpen }) {
 		<TableRow ref={setNodeRef} hover onDoubleClick={onOpen}
 			sx={{ cursor: 'pointer', bgcolor: isOver ? 'action.hover' : undefined }}>
 			<TableCell>
-				<Stack direction="row" spacing={1} alignItems="center">
+				<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
 					<ArrowUpwardIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 					<Typography variant="body2" color="text.secondary">..</Typography>
 				</Stack>
@@ -757,7 +775,7 @@ function ArtifactTextEditor({ nodeId, projectId, nodes, onClose, onSnack }) {
 	return (
 		<>
 			{/* Editor toolbar */}
-			<Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5, py: 1, flexShrink: 0 }}>
+			<Stack direction="row" spacing={1} sx={{ px: 1.5, py: 1, flexShrink: 0, alignItems: 'center' }}>
 				<DescriptionIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 				<Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }} noWrap>
 					{fileName}
