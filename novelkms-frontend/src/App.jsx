@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
 	Box, AppBar, Toolbar, Typography, Button, Menu, MenuItem,
-	IconButton, Tooltip, Divider,
+	IconButton, Tooltip, Divider, Link,
 	Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@mui/material'
 import DescriptionIcon from '@mui/icons-material/Description'
@@ -24,6 +24,7 @@ import ExportDialog from './components/nav/dialogs/ExportDialog'
 import SettingsDialog from './components/settings/SettingsDialog'
 import EditorSettingsDialog from './components/settings/EditorSettingsDialog'
 import UserMenu from './components/nav/UserMenu'
+import ContactSupportDialog from './components/nav/dialogs/ContactSupportDialog'
 import ArchiveImportDialog from './components/archive/ArchiveImportDialog'
 import { archiveApi } from './api/archive'
 import { LogoMark } from './components/branding/Logo'
@@ -188,12 +189,14 @@ export default function App() {
 	const [tplAnchor, setTplAnchor] = useState(null)
 	const [importAnchor, setImportAnchor] = useState(null)
 	const [exportAnchor, setExportAnchor] = useState(null)
+	const [helpAnchor, setHelpAnchor] = useState(null)
 	const [exportDialog, setExportDialog] = useState({ open: false, url: null, suggestedName: '' })
 	const [projectExportConfirmOpen, setProjectExportConfirmOpen] = useState(false)
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
 	const [kmsImportDialogOpen, setKmsImportDialogOpen] = useState(false)
 	const [settings, setSettings] = useState({ open: false, tab: 'document', subscriptionRequired: false })
 	const [ctxSettings, setCtxSettings] = useState({ open: false, scope: null })
+	const [contactSupportOpen, setContactSupportOpen] = useState(false)
 
 	const [navWidth, setNavWidth] = useState(() =>
 		clamp(readStoredNumber('novelkms.navWidth', DEFAULT_NAV_WIDTH), MIN_NAV_WIDTH, MAX_NAV_WIDTH)
@@ -210,8 +213,6 @@ export default function App() {
 
 	const resizeRef = useRef(null)
 
-	// Load per-user preferences once and hydrate the synchronous delete-confirm
-	// mirror that the nav/menu delete handlers read at click time.
 	const { data: preferences } = usePreferences()
 	useEffect(() => {
 		if (preferences) hydrateSkipDeleteConfirm(preferences.skipDeleteConfirm)
@@ -247,7 +248,6 @@ export default function App() {
 			window.removeEventListener('novelkms:subscription-required', handleSubscriptionRequired)
 		}
 	}, [])
-
 
 	useEffect(() => {
 		const handleMouseMove = (event) => {
@@ -289,9 +289,6 @@ export default function App() {
 
 	const setSelection = useCallback((update) => {
 		setSel(prev => {
-			// Remove transient panel modes before functional updaters spread prev.
-			// This prevents clicks on normal nav nodes from accidentally preserving
-			// trash/template/AI-doc mode.
 			const cleanPrev = {
 				...prev,
 				trashSelected: false,
@@ -408,6 +405,21 @@ export default function App() {
 	const editGlobalFromContext = () => {
 		setCtxSettings(s => ({ ...s, open: false }))
 		openSettings()
+	}
+
+	const openDocumentation = () => {
+		setHelpAnchor(null)
+		openHelp()
+	}
+
+	const openFaqPage = () => {
+		setHelpAnchor(null)
+		window.location.href = '/faq'
+	}
+
+	const openContactSupport = () => {
+		setHelpAnchor(null)
+		setContactSupportOpen(true)
 	}
 
 	const path = window.location.pathname
@@ -554,11 +566,23 @@ export default function App() {
 								color="inherit"
 								size="small"
 								startIcon={<MenuBookIcon fontSize="small" />}
-								onClick={() => openHelp()}
+								endIcon={<ArrowDropDownIcon />}
+								onClick={(e) => setHelpAnchor(e.currentTarget)}
 								sx={topBarButtonSx}
 							>
 								Help
 							</Button>
+							<Menu anchorEl={helpAnchor} open={!!helpAnchor} onClose={() => setHelpAnchor(null)}>
+								<MenuItem onClick={openDocumentation}>
+									Documentation
+								</MenuItem>
+								<MenuItem onClick={openFaqPage}>
+									FAQ
+								</MenuItem>
+								<MenuItem onClick={openContactSupport}>
+									Contact Us
+								</MenuItem>
+							</Menu>
 
 							<UserMenu onOpenSettings={openSettings} />
 						</Toolbar>
@@ -674,7 +698,6 @@ export default function App() {
 											color: 'warning.dark',
 										},
 
-										// Project rows — strongest anchors
 										'& .MuiListItemButton-root:has([data-testid="FolderIcon"])': {
 											minHeight: 40,
 											mt: 0.5,
@@ -692,7 +715,6 @@ export default function App() {
 											color: 'primary.main',
 										},
 
-										// Book rows — visible document anchors
 										'& .MuiListItemButton-root:has([data-testid="MenuBookIcon"])': {
 											minHeight: 38,
 											bgcolor: 'rgba(42, 57, 66, 0.018)',
@@ -704,7 +726,6 @@ export default function App() {
 											color: 'primary.light',
 										},
 
-										// Parts — sectional dividers
 										'& .MuiListItemButton-root:has([data-testid="BookmarksIcon"])': {
 											minHeight: 36,
 											mt: 0.35,
@@ -721,7 +742,6 @@ export default function App() {
 											color: 'secondary.main',
 										},
 
-										// Chapters — primary working outline entries
 										'& .MuiListItemButton-root:has([data-testid="ArticleIcon"]) .MuiListItemText-primary': {
 											fontWeight: 550,
 										},
@@ -729,7 +749,6 @@ export default function App() {
 											fontSize: 18,
 										},
 
-										// Scenes — quieter leaves
 										'& .MuiListItemButton-root:has([data-testid="TheatersIcon"])': {
 											minHeight: 31,
 											color: 'text.secondary',
@@ -746,7 +765,6 @@ export default function App() {
 											opacity: 0.72,
 										},
 
-										// Expand/collapse affordances
 										'& [data-testid="ChevronRightIcon"], & [data-testid="ExpandMoreIcon"]': {
 											fontSize: 18,
 											opacity: 0.62,
@@ -905,17 +923,46 @@ export default function App() {
 						justifyContent: 'space-between',
 						px: 2,
 					}}>
-						<Typography
-							variant="caption"
-							sx={{
-								fontSize: '0.65rem',
-								color: 'text.disabled',
-								letterSpacing: 0.3,
-								userSelect: 'none',
-							}}
-						>
-							© {new Date().getFullYear()} NovelKMS, LLC. All rights reserved.
-						</Typography>
+						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+							<Typography
+								variant="caption"
+								sx={{
+									fontSize: '0.65rem',
+									color: 'text.disabled',
+									letterSpacing: 0.3,
+									userSelect: 'none',
+									whiteSpace: 'nowrap',
+								}}
+							>
+								© {new Date().getFullYear()} NovelKMS, LLC. All rights reserved.
+							</Typography>
+							<Link
+								href="/terms"
+								underline="hover"
+								variant="caption"
+								sx={{
+									fontSize: '0.65rem',
+									color: 'text.disabled',
+									letterSpacing: 0.3,
+									whiteSpace: 'nowrap',
+								}}
+							>
+								Terms of Service
+							</Link>
+							<Link
+								href="/privacy"
+								underline="hover"
+								variant="caption"
+								sx={{
+									fontSize: '0.65rem',
+									color: 'text.disabled',
+									letterSpacing: 0.3,
+									whiteSpace: 'nowrap',
+								}}
+							>
+								Privacy Policy
+							</Link>
+						</Box>
 						<Typography
 							variant="caption"
 							sx={{
@@ -990,6 +1037,11 @@ export default function App() {
 						projectId={selection.projectId}
 						subscriptionRequired={settings.subscriptionRequired}
 						onClose={() => setSettings(s => ({ ...s, open: false, subscriptionRequired: false }))}
+					/>
+
+					<ContactSupportDialog
+						open={contactSupportOpen}
+						onClose={() => setContactSupportOpen(false)}
 					/>
 
 					<EditorSettingsDialog

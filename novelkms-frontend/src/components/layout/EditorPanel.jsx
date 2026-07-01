@@ -57,6 +57,13 @@ import ProjectShelf from '../editor/ProjectShelf';
 
 const AUTOSAVE_DELAY_MS = 1500;
 
+// ── Review-rail resize ────────────────────────────────────────────────────────
+const RAIL_STORAGE_KEY = 'novelkms.reviewRailWidth';
+const DEFAULT_RAIL_WIDTH = 332;
+const MIN_RAIL_WIDTH = 240;
+const MAX_RAIL_WIDTH = 600;
+const clampRail = (v) => Math.min(Math.max(v, MIN_RAIL_WIDTH), MAX_RAIL_WIDTH);
+
 // Fallback page dimensions used when the book record hasn't loaded yet, or
 // when the book has no page layout configured.  6" × 9" Trade Paperback at
 // 96 DPI is a neutral default that gives a recognisable page shape without
@@ -468,6 +475,14 @@ export default function EditorPanel({
 	const [isSaving, setIsSaving] = useState(false);
 	const [previewActive, setPreviewActive] = useState(false);
 
+	// ── Review-rail resize state ──────────────────────────────────────────────
+	const [railWidth, setRailWidth] = useState(() => {
+		const raw = window.localStorage.getItem(RAIL_STORAGE_KEY);
+		const parsed = Number(raw);
+		return Number.isFinite(parsed) ? clampRail(parsed) : DEFAULT_RAIL_WIDTH;
+	});
+	const railResizeRef = useRef(null);
+
 	const showEditorPreview = templateMode && previewActive;
 
 	// ── refs ─────────────────────────────────────────────────────────────────
@@ -520,6 +535,32 @@ export default function EditorPanel({
 	}, [activeScenes]);
 
 	useEffect(() => { if (activeScenes?.length) firstSceneIdRef.current = activeScenes[0].id; }, [activeScenes]);
+
+	// ── Rail resize — persist width and handle drag ───────────────────────────
+	useEffect(() => {
+		window.localStorage.setItem(RAIL_STORAGE_KEY, String(railWidth));
+	}, [railWidth]);
+
+	useEffect(() => {
+		const handleMouseMove = (e) => {
+			const state = railResizeRef.current;
+			if (!state) return;
+			const delta = e.clientX - state.startX;
+			setRailWidth(clampRail(state.startWidth - delta));
+		};
+		const handleMouseUp = () => { railResizeRef.current = null; };
+		window.addEventListener('mousemove', handleMouseMove);
+		window.addEventListener('mouseup', handleMouseUp);
+		return () => {
+			window.removeEventListener('mousemove', handleMouseMove);
+			window.removeEventListener('mouseup', handleMouseUp);
+		};
+	}, []);
+
+	const handleRailResizeMouseDown = useCallback((e) => {
+		e.preventDefault();
+		railResizeRef.current = { startX: e.clientX, startWidth: railWidth };
+	}, [railWidth]);
 
 	useEffect(() => {
 		if (singleSceneMode) {
@@ -1229,7 +1270,36 @@ export default function EditorPanel({
 				</Box>
 
 				{reviewRailVisible && (
-					<ReviewRail key={chapterId} chapterId={chapterId} sceneId={sceneId} bookId={bookId} editor={editor} setSelection={setSelection} />
+					<>
+						<Box
+							onMouseDown={handleRailResizeMouseDown}
+							role="separator"
+							aria-orientation="vertical"
+							sx={{
+								width: 8,
+								flexShrink: 0,
+								cursor: 'col-resize',
+								position: 'relative',
+								zIndex: 2,
+								'&::after': {
+									content: '""',
+									position: 'absolute',
+									top: 8,
+									bottom: 8,
+									left: '50%',
+									width: 2,
+									transform: 'translateX(-50%)',
+									borderRadius: 2,
+									bgcolor: 'transparent',
+									transition: 'background-color 120ms ease',
+								},
+								'&:hover::after': {
+									bgcolor: 'primary.main',
+								},
+							}}
+						/>
+						<ReviewRail key={chapterId} chapterId={chapterId} sceneId={sceneId} bookId={bookId} editor={editor} setSelection={setSelection} width={railWidth} />
+					</>
 				)}
 			</Box>
 

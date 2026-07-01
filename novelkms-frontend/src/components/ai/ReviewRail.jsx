@@ -91,7 +91,7 @@ function formatTime(iso) {
  *   sceneId   {string|null}   the selected scene, when one is selected
  *   editor    TipTap editor instance (for scroll-to-passage highlights)
  */
-export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSelection }) {
+export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSelection, width = RAIL_WIDTH }) {
 	const review = useReview()
 
 	const scope = sceneId ? 'SCENE' : 'CHAPTER'
@@ -452,7 +452,7 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 	return (
 		<Box
 			sx={{
-				width: RAIL_WIDTH,
+				width: width,
 				flexShrink: 0,
 				minHeight: 0,
 				borderLeft: '1px solid',
