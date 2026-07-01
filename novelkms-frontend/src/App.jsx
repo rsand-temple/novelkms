@@ -38,6 +38,7 @@ import AdminSupportConsole from './components/admin/AdminSupportConsole'
 import ToolsMenu from './components/tools/ToolsMenu'
 import FaqPage from './public/faq'
 import PrivacyPage from './public/privacy'
+import TermsPage from './public/terms'
 
 /* eslint-disable no-undef */
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
@@ -431,6 +432,10 @@ export default function App() {
 		return <PrivacyPage />
 	}
 
+	if (path === '/terms') {
+		return <TermsPage />
+	}
+
 	return (
 		<SearchProvider selection={selection}>
 			<ReviewProvider>
@@ -542,7 +547,7 @@ export default function App() {
 								<MenuItem onClick={() => openGlobalTemplate('cover')}>Cover Page</MenuItem>
 								<MenuItem onClick={() => openGlobalTemplate('part')}>Part Page</MenuItem>
 							</Menu>
-							
+
 							<ToolsMenu buttonSx={topBarButtonSx} />
 
 							<Button
@@ -909,7 +914,7 @@ export default function App() {
 								userSelect: 'none',
 							}}
 						>
-							© {new Date().getFullYear()} Richard A. Sand. All rights reserved.
+							© {new Date().getFullYear()} NovelKMS, LLC. All rights reserved.
 						</Typography>
 						<Typography
 							variant="caption"

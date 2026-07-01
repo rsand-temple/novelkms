@@ -96,12 +96,12 @@ const FAQ_SECTIONS = [
 			{
 				question: 'How do I report a bug or ask for help?',
 				answer:
-					'Use the support or contact channel provided in the app or on the NovelKMS website. Early users are especially encouraged to report rough edges and workflow friction.',
+					'Use the \'Contact Support\' page provided in the app, or e-mail us anytime at support@novelkms.com.',
 			},
 			{
 				question: 'Can I request features?',
 				answer:
-					'Yes. Early subscriber feedback will strongly influence the next development priorities.',
+					'Yes. Subscriber feedback will strongly influence the next development priorities.',
 			},
 		],
 	},
@@ -145,7 +145,7 @@ export default function FaqPage() {
 
 							<Typography color="text.secondary" sx={{ mt: 1.5, fontSize: '1.05rem' }}>
 								Answers about manuscript ownership, AI features, subscriptions, export, and the current
-								state of NovelKMS.
+								state of NovelKMS, LLC.
 							</Typography>
 
 							<Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 3 }}>

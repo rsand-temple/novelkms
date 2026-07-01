@@ -6,6 +6,7 @@ import { LogoLockup, LogoMark } from '../../components/branding/Logo'
 import EditorMockup from '../../components/marketing/EditorMockup'
 import FaqPage from '../../public/faq'
 import PrivacyPage from '../../public/privacy'
+import TermsPage from '../../public/terms'
 
 function ProviderIcon({ src, size = 20 }) {
 	return (
@@ -112,6 +113,10 @@ export default function LoginPage() {
 
 	if (location.pathname === '/privacy') {
 		return <PrivacyPage />
+	}
+
+	if (location.pathname === '/terms') {
+		return <TermsPage />
 	}
 
 	return (
@@ -253,7 +258,7 @@ export default function LoginPage() {
 							</Typography>
 						</Stack>
 						<Typography color="text.secondary" sx={{ fontSize: '1rem', fontStyle: 'italic' }}>
-							Questions about privacy, AI, subscriptions, or exporting your manuscript? Read our{' '}
+							Questions about privacy, AI, subscriptions, exporting your manuscript, or terms of use? Read our{' '}
 							<Box
 								component={RouterLink}
 								to="/faq"
@@ -266,7 +271,7 @@ export default function LoginPage() {
 							>
 								FAQ
 							</Box>
-							{' '}or{' '}
+							{', '}
 							<Box
 								component={RouterLink}
 								to="/privacy"
@@ -279,6 +284,20 @@ export default function LoginPage() {
 							>
 								Privacy Policy
 							</Box>
+							{', or '}
+							<Box
+								component={RouterLink}
+								to="/terms"
+								sx={{
+									color: 'primary.main',
+									fontWeight: 650,
+									textDecoration: 'none',
+									'&:hover': { textDecoration: 'underline' },
+								}}
+							>
+								Terms of Service
+							</Box>
+							.
 						</Typography>
 					</Stack>
 				</Paper>

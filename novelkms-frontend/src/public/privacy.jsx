@@ -53,7 +53,7 @@ export default function PrivacyPage() {
 							</Typography>
 
 							<Typography color="text.secondary" sx={{ mt: 1.5, fontSize: '1.05rem' }}>
-								This policy explains what NovelKMS collects, how it is used, and how manuscript and account data
+								This policy explains what NovelKMS, LLC collects, how it is used, and how manuscript and account data
 								are handled.
 							</Typography>
 
