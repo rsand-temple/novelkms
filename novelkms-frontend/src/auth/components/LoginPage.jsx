@@ -1,8 +1,10 @@
 import { Box, Button, Divider, Paper, Stack, Typography } from '@mui/material'
+import { Link as RouterLink, useLocation } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { authApi } from '../../api/auth'
 import { LogoLockup, LogoMark } from '../../components/branding/Logo'
 import EditorMockup from '../../components/marketing/EditorMockup'
+import FaqPage from '../../public/faq'
 
 function ProviderIcon({ src, size = 20 }) {
 	return (
@@ -71,6 +73,7 @@ function FeatureRow({ title, body }) {
 }
 
 export default function LoginPage() {
+	const location = useLocation()
 	const [providers, setProviders] = useState({
 		google: false,
 		microsoft: false,
@@ -101,6 +104,10 @@ export default function LoginPage() {
 		() => PROVIDERS.filter((p) => providers[p.key]),
 		[providers]
 	)
+
+	if (location.pathname === '/faq') {
+		return <FaqPage />
+	}
 
 	return (
 		<Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: 'background.paper' }}>
@@ -154,6 +161,21 @@ export default function LoginPage() {
 				<Box sx={{ width: '100%', maxWidth: 760 }}>
 					<EditorMockup />
 				</Box>
+				<Typography color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+					Questions about privacy, AI, subscriptions, or exporting your manuscript?{' '}
+					<Box
+						component={RouterLink}
+						to="/faq"
+						sx={{
+							color: 'primary.main',
+							fontWeight: 650,
+							textDecoration: 'none',
+							'&:hover': { textDecoration: 'underline' },
+						}}
+					>
+						Read the FAQ.
+					</Box>
+				</Typography>
 			</Box>
 
 			{/* Sign-in column */}

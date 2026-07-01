@@ -1,7 +1,9 @@
 package com.richardsand.novelkms.service;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
@@ -264,6 +266,99 @@ public class ArtifactService {
                 .orElseThrow(() -> new ArtifactException(404, "not_found", "File contents are missing."));
         InputStream stream = storage.open(blob.storageKey());
         return new Download(node.getName(), node.getContentType(), node.getSizeBytes(), stream);
+    }
+
+    // =========================================================================
+    // In-place text save
+    // =========================================================================
+
+    /**
+     * Replaces the content of a text file with new UTF-8 text. Stages the bytes,
+     * checks the per-file cap and per-user quota (delta = new − old), then swaps
+     * the blob reference in a single transaction and removes the old blob from
+     * disk after commit.
+     */
+    public ArtifactNode replaceText(UUID userId, UUID nodeId, String text) throws SQLException, IOException {
+        ArtifactNode node = nodeDao.findLiveById(nodeId)
+                .orElseThrow(() -> new ArtifactException(404, "not_found", "Artifact not found."));
+        if (!ArtifactNodeDao.TYPE_FILE.equals(node.getType())) {
+            throw new ArtifactException(400, "not_a_file", "Only files can be edited.");
+        }
+        if (node.getContentType() == null || !node.getContentType().startsWith("text/")) {
+            throw new ArtifactException(400, "not_text", "Only text files can be edited in-app.");
+        }
+
+        byte[] bytes = (text != null ? text : "").getBytes(StandardCharsets.UTF_8);
+
+        // Stage the new content through the same cap-enforced path as upload.
+        ArtifactStorage.Staged staged;
+        try (InputStream in = new ByteArrayInputStream(bytes)) {
+            staged = storage.stage(in, maxFileSizeBytes);
+        } catch (ArtifactStorage.FileTooLargeException e) {
+            throw new ArtifactException(400, "file_too_large",
+                    "File exceeds the maximum allowed size.", e.maxBytes(), null, null, null);
+        }
+
+        long newSize = staged.sizeBytes();
+        long oldSize = node.getSizeBytes();
+        boolean committed = false;
+        String newStorageKey = null;
+
+        try {
+            // Quota check on the delta (growth only — shrinking never fails).
+            if (newSize > oldSize) {
+                long used  = blobDao.usedBytes(userId);
+                long quota = resolveQuota(userId);
+                if (used + (newSize - oldSize) > quota) {
+                    throw new ArtifactException(400, "storage_quota_exceeded",
+                            "This save would exceed your storage quota.", null, used, quota, newSize);
+                }
+            }
+
+            newStorageKey = storage.commit(staged);
+            committed = true;
+
+            // Resolve the old blob for cleanup after commit.
+            UUID   oldBlobId     = nodeDao.blobIdOf(nodeId).orElse(null);
+            String oldStorageKey = null;
+            if (oldBlobId != null) {
+                oldStorageKey = blobDao.findById(oldBlobId).map(BlobRef::storageKey).orElse(null);
+            }
+
+            try (Connection c = ds.getConnection()) {
+                c.setAutoCommit(false);
+                try {
+                    BlobRef newBlob = blobDao.insert(c, userId, staged.sha256(), newSize,
+                            node.getContentType(), newStorageKey);
+                    nodeDao.updateBlob(c, nodeId, newBlob.id(), newSize);
+                    if (oldBlobId != null) {
+                        blobDao.delete(c, oldBlobId);
+                    }
+                    c.commit();
+                } catch (SQLException e) {
+                    c.rollback();
+                    throw e;
+                } finally {
+                    c.setAutoCommit(true);
+                }
+            }
+
+            // Disk cleanup of the old blob (after the DB commit, best-effort).
+            if (oldStorageKey != null) {
+                storage.delete(oldStorageKey);
+            }
+
+            logger.info("Replaced text content: nodeId={}, oldBytes={}, newBytes={}", nodeId, oldSize, newSize);
+            return nodeDao.findLiveById(nodeId).orElse(node);
+
+        } catch (SQLException | RuntimeException e) {
+            if (committed && newStorageKey != null) {
+                storage.delete(newStorageKey);
+            } else {
+                storage.discard(staged);
+            }
+            throw e;
+        }
     }
 
     // =========================================================================

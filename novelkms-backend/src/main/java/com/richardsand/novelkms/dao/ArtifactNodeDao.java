@@ -320,4 +320,20 @@ public class ArtifactNodeDao {
             return ps.executeUpdate() > 0;
         }
     }
+
+    /**
+     * Swaps the blob backing a FILE node (in-place text save). Runs on the
+     * caller's connection so old-blob-delete + new-blob-reference commit together.
+     */
+    public boolean updateBlob(Connection c, UUID nodeId, UUID blobId, long sizeBytes) throws SQLException {
+        String sql = "UPDATE artifact_node SET blob_id = ?, size_bytes = ?, updated_at = ? "
+                + "WHERE id = ? AND deleted_at IS NULL";
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, blobId);
+            ps.setLong(2, sizeBytes);
+            ps.setTimestamp(3, Timestamp.from(Instant.now()));
+            ps.setObject(4, nodeId);
+            return ps.executeUpdate() > 0;
+        }
+    }
 }

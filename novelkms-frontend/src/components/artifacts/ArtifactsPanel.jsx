@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
 	Box, Breadcrumbs, Button, CircularProgress, Dialog, DialogActions, DialogContent,
 	DialogContentText, DialogTitle, Divider, IconButton, LinearProgress, Link, List,
@@ -21,16 +21,22 @@ import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutli
 import DeleteIcon from '@mui/icons-material/Delete'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import {
-	useArtifactTree, useArtifactUsage, useCreateArtifactFolder, useUploadArtifactFile,
+	useArtifactTree, useArtifactUsage, useArtifactText, useSaveArtifactText,
+	useCreateArtifactFolder, useUploadArtifactFile,
 	useRenameArtifactNode, useMoveArtifactNode, useTrashArtifactNode, artifactErrorMessage,
 } from '../../hooks/useArtifacts'
 import { artifactsApi } from '../../api/artifacts'
 import { formatBytes } from '../../utils/formatBytes'
 
 const PANEL_HEADER_HEIGHT = 48
+const EMPTY_NODES = []
 
 function isImage(ct) {
 	return typeof ct === 'string' && ct.startsWith('image/')
+}
+
+function isText(ct) {
+	return typeof ct === 'string' && ct.startsWith('text/')
 }
 
 function formatWhen(iso) {
@@ -51,17 +57,18 @@ function formatWhen(iso) {
  * folderId is null at the project root, otherwise a folder node id. Navigation
  * is driven through setSelection so the nav tree and breadcrumb stay in sync.
  */
-export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
+export default function ArtifactsPanel({ projectId, folderId, editingNodeId, setSelection }) {
 	const { data: tree, isLoading } = useArtifactTree(projectId)
 	const { data: usage } = useArtifactUsage(projectId)
 
 	const createFolder = useCreateArtifactFolder()
-	const uploadFile = useUploadArtifactFile()
-	const renameNode = useRenameArtifactNode()
-	const moveNode = useMoveArtifactNode()
-	const trashNode = useTrashArtifactNode()
+	const uploadFile   = useUploadArtifactFile()
+	const renameNode   = useRenameArtifactNode()
+	const moveNode     = useMoveArtifactNode()
+	const trashNode    = useTrashArtifactNode()
 
 	const fileInputRef = useRef(null)
+	const dropZoneRef = useRef(null)
 	const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
 	const [activeDrag, setActiveDrag] = useState(null)        // node being dragged (overlay)
@@ -71,8 +78,9 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 	const [moveTarget, setMoveTarget] = useState(null)        // node
 	const [uploading, setUploading] = useState(0)             // count remaining
 	const [snack, setSnack] = useState(null)                  // { severity, message }
+	const [nativeDragOver, setNativeDragOver] = useState(false) // OS file drag hovering
 
-	const nodes = useMemo(() => tree ?? [], [tree])
+	const nodes = tree ?? EMPTY_NODES
 
 	// The folder whose contents we are showing (null object => virtual root).
 	const currentFolder = folderId ? nodes.find(n => n.id === folderId && n.type === 'FOLDER') ?? null : null
@@ -158,9 +166,15 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 		const files = Array.from(e.target.files ?? [])
 		e.target.value = ''  // allow re-choosing the same file later
 		if (!files.length) return
+		await doUploadFiles(files)
+	}
+
+	const doUploadFiles = async (files) => {
+		if (!files.length) return
 		setUploading(files.length)
 		for (const file of files) {
 			try {
+				// eslint-disable-next-line no-await-in-loop
 				await uploadFile.mutateAsync({ projectId, parentId: effectiveParentId, file })
 			} catch (err) {
 				setSnack({ severity: 'error', message: artifactErrorMessage(err) })
@@ -169,6 +183,87 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 			}
 		}
 	}
+
+	// ── Native OS file drag-and-drop ──────────────────────────────────────────
+	// Registers on `window` directly — NOT on the panel element, NOT via React
+	// props. This is the only approach guaranteed to call preventDefault() before
+	// the browser navigates to the dropped file, regardless of React Compiler
+	// transformations, MUI Box forwarding, or ref timing.
+	//
+	// dragover → always preventDefault (prevents browser file-open)
+	// drop     → always preventDefault, then check if target is inside this
+	//            panel (via ref.contains) and upload if so
+	const uploadContextRef = useRef({ projectId, effectiveParentId })
+	uploadContextRef.current = { projectId, effectiveParentId }
+
+	useEffect(() => {
+		let counter = 0
+
+		const onDragEnter = (e) => {
+			e.preventDefault()
+			counter++
+			if (counter === 1 && e.dataTransfer?.types?.includes('Files')) {
+				setNativeDragOver(true)
+			}
+		}
+
+		const onDragOver = (e) => {
+			// This single line is what prevents the browser from opening the file.
+			e.preventDefault()
+			if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+		}
+
+		const onDragLeave = (e) => {
+			e.preventDefault()
+			counter--
+			if (counter <= 0) { counter = 0; setNativeDragOver(false) }
+		}
+
+		const onDrop = (e) => {
+			e.preventDefault()
+			counter = 0
+			setNativeDragOver(false)
+
+			// Only upload if the drop landed inside this panel.
+			const el = dropZoneRef.current
+			if (!el || !el.contains(e.target)) return
+
+			const files = Array.from(e.dataTransfer?.files ?? [])
+			if (files.length) {
+				const ctx = uploadContextRef.current
+				setUploading(files.length)
+				;(async () => {
+					for (const file of files) {
+						try {
+							await uploadFile.mutateAsync({
+								projectId: ctx.projectId,
+								parentId: ctx.effectiveParentId,
+								file,
+							})
+						} catch (err) {
+							setSnack({ severity: 'error', message: artifactErrorMessage(err) })
+						} finally {
+							setUploading(c => Math.max(0, c - 1))
+						}
+					}
+				})()
+			}
+		}
+
+		window.addEventListener('dragenter', onDragEnter)
+		window.addEventListener('dragover', onDragOver)
+		window.addEventListener('dragleave', onDragLeave)
+		window.addEventListener('drop', onDrop)
+
+		return () => {
+			window.removeEventListener('dragenter', onDragEnter)
+			window.removeEventListener('dragover', onDragOver)
+			window.removeEventListener('dragleave', onDragLeave)
+			window.removeEventListener('drop', onDrop)
+		}
+	// uploadFile is a stable mutation object from useMutation
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// ── Drag-to-move (isolated DndContext) ─────────────────────────────────────
 	const handleDragStart = ({ active }) => setActiveDrag(active.data.current?.node ?? null)
@@ -197,12 +292,29 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 	}
 
 	// ── Render ─────────────────────────────────────────────────────────────────
-	const usedBytes = usage?.usedBytes ?? 0
+	const usedBytes  = usage?.usedBytes ?? 0
 	const quotaBytes = usage?.quotaBytes ?? 0
-	const usedPct = quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0
+	const usedPct    = quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0
 
 	return (
-		<Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+		<Box
+			ref={dropZoneRef}
+			sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, position: 'relative' }}
+		>
+			{/* Native file-drop overlay */}
+			{nativeDragOver && (
+				<Box sx={{
+					position: 'absolute', inset: 0, zIndex: 20,
+					display: 'flex', alignItems: 'center', justifyContent: 'center',
+					bgcolor: 'action.hover',
+					border: '3px dashed', borderColor: 'primary.main', borderRadius: 2,
+					pointerEvents: 'none',
+				}}>
+					<Typography variant="h6" color="primary" sx={{ fontWeight: 600 }}>
+						Drop files here to upload
+					</Typography>
+				</Box>
+			)}
 			{/* Header */}
 			<Box sx={{
 				height: PANEL_HEADER_HEIGHT, flexShrink: 0, display: 'flex', alignItems: 'center',
@@ -217,8 +329,17 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 				</Box>
 			</Box>
 
+			{editingNodeId ? (
+				<ArtifactTextEditor
+					nodeId={editingNodeId}
+					projectId={projectId}
+					nodes={nodes}
+					onClose={() => setSelection(prev => ({ ...prev, artifactEditingNodeId: null }))}
+					onSnack={setSnack}
+				/>
+			) : (<>
 			{/* Toolbar */}
-			<Stack direction="row" spacing={1} sx={{ alignItems: 'center', px: 1.5, py: 1, flexShrink: 0 }}>
+			<Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5, py: 1, flexShrink: 0 }}>
 				<Tooltip title="Up one level">
 					<span>
 						<IconButton size="small" onClick={goUp} disabled={!currentFolder}>
@@ -307,6 +428,7 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 												setRowMenu({ mouseX: e.clientX, mouseY: e.clientY, node })
 											}}
 											onDownload={() => handleDownload(node)}
+											onEdit={(n) => setSelection(prev => ({ ...prev, artifactEditingNodeId: n.id }))}
 										/>
 									))}
 								</TableBody>
@@ -334,7 +456,7 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 			{/* Usage footer */}
 			<Divider />
 			<Box sx={{ px: 1.75, py: 1, flexShrink: 0 }}>
-				<Stack direction="row" sx={{ justifyContent: 'space-between', mb: 0.5 }}>
+				<Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
 					<Typography variant="caption" color="text.secondary">
 						Storage: {formatBytes(usedBytes)} of {formatBytes(quotaBytes)} used
 					</Typography>
@@ -410,6 +532,8 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 				/>
 			)}
 
+			</>)}
+
 			<Snackbar
 				open={!!snack}
 				autoHideDuration={6000}
@@ -427,7 +551,7 @@ export default function ArtifactsPanel({ projectId, folderId, setSelection }) {
 }
 
 // ── A draggable / droppable details row ──────────────────────────────────────
-function ArtifactRow({ node, onOpenFolder, onContextMenu, onDownload }) {
+function ArtifactRow({ node, onOpenFolder, onContextMenu, onDownload, onEdit }) {
 	const isFolder = node.type === 'FOLDER'
 	const { attributes, listeners, setNodeRef: dragRef, isDragging } = useDraggable({
 		id: node.id,
@@ -440,12 +564,18 @@ function ArtifactRow({ node, onOpenFolder, onContextMenu, onDownload }) {
 
 	const setRefs = (el) => { dragRef(el); if (isFolder) dropRef(el) }
 
+	const handleDoubleClick = () => {
+		if (isFolder) { onOpenFolder(); return }
+		if (isText(node.contentType) && onEdit) { onEdit(node); return }
+		onDownload()
+	}
+
 	return (
 		<TableRow
 			ref={setRefs}
 			hover
 			onContextMenu={onContextMenu}
-			onDoubleClick={() => { if (isFolder) onOpenFolder(); else onDownload() }}
+			onDoubleClick={handleDoubleClick}
 			{...attributes}
 			{...listeners}
 			sx={{
@@ -457,7 +587,7 @@ function ArtifactRow({ node, onOpenFolder, onContextMenu, onDownload }) {
 			}}
 		>
 			<TableCell>
-				<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+				<Stack direction="row" spacing={1} alignItems="center">
 					{isFolder
 						? <FolderIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 						: (isImage(node.contentType)
@@ -480,7 +610,7 @@ function UpRow({ onOpen }) {
 		<TableRow ref={setNodeRef} hover onDoubleClick={onOpen}
 			sx={{ cursor: 'pointer', bgcolor: isOver ? 'action.hover' : undefined }}>
 			<TableCell>
-				<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+				<Stack direction="row" spacing={1} alignItems="center">
 					<ArrowUpwardIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 					<Typography variant="body2" color="text.secondary">..</Typography>
 				</Stack>
@@ -563,5 +693,112 @@ function MoveDialog({ node, nodes, busy, onCancel, onConfirm }) {
 				<Button variant="contained" disabled={busy} onClick={() => onConfirm(dest)}>Move</Button>
 			</DialogActions>
 		</Dialog>
+	)
+}
+
+// ── Text file editor (modal within the artifacts space) ──────────────────────
+function ArtifactTextEditor({ nodeId, projectId, nodes, onClose, onSnack }) {
+	const { data: loadedText, isLoading, isError } = useArtifactText(nodeId)
+	const saveMutation = useSaveArtifactText()
+	const [text, setText] = useState(null) // null until loaded text arrives
+	const [savedText, setSavedText] = useState(null)
+
+	const node = nodes.find(n => n.id === nodeId)
+	const fileName = node?.name ?? 'Untitled'
+
+	// Seed the textarea once data arrives (no useEffect setState — conditional mount).
+	if (loadedText != null && text === null) {
+		setText(loadedText)
+		setSavedText(loadedText)
+	}
+
+	const changed = text !== null && text !== savedText
+
+	const handleSave = () => {
+		saveMutation.mutate(
+			{ nodeId, text, projectId },
+			{
+				onSuccess: () => { setSavedText(text) },
+				onError: (e) => onSnack({ severity: 'error', message: artifactErrorMessage(e) }),
+			},
+		)
+	}
+
+	const handleCancel = () => {
+		setText(savedText)
+	}
+
+	const handleClose = () => {
+		if (changed && !window.confirm('You have unsaved changes. Discard them and close?')) {
+			return
+		}
+		onClose()
+	}
+
+	if (isLoading) {
+		return (
+			<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+				<CircularProgress size={24} />
+			</Box>
+		)
+	}
+
+	if (isError) {
+		return (
+			<Box sx={{ flex: 1, p: 3 }}>
+				<Typography color="error">Failed to load file contents.</Typography>
+				<Button onClick={onClose} sx={{ mt: 2 }}>Close</Button>
+			</Box>
+		)
+	}
+
+	return (
+		<>
+			{/* Editor toolbar */}
+			<Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5, py: 1, flexShrink: 0 }}>
+				<DescriptionIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+				<Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }} noWrap>
+					{fileName}
+					{changed && <Typography component="span" color="warning.main" sx={{ ml: 0.75, fontWeight: 400, fontSize: '0.75rem' }}>• unsaved</Typography>}
+				</Typography>
+				<Button size="small" variant="contained" onClick={handleSave}
+					disabled={!changed || saveMutation.isPending}>
+					Save
+				</Button>
+				<Button size="small" onClick={handleCancel} disabled={!changed}>
+					Cancel
+				</Button>
+				<Button size="small" onClick={handleClose}>
+					Close
+				</Button>
+			</Stack>
+			{saveMutation.isPending && <LinearProgress />}
+			<Divider />
+
+			{/* Monospace textarea */}
+			<Box
+				component="textarea"
+				value={text ?? ''}
+				onChange={(e) => setText(e.target.value)}
+				spellCheck
+				sx={{
+					flex: 1,
+					minHeight: 0,
+					m: 0,
+					p: 2,
+					border: 'none',
+					outline: 'none',
+					resize: 'none',
+					fontFamily: '"Cascadia Code", "Fira Code", "Consolas", "Monaco", monospace',
+					fontSize: '0.875rem',
+					lineHeight: 1.7,
+					whiteSpace: 'pre-wrap',
+					overflowWrap: 'break-word',
+					bgcolor: 'background.default',
+					color: 'text.primary',
+					overflowY: 'auto',
+				}}
+			/>
+		</>
 	)
 }

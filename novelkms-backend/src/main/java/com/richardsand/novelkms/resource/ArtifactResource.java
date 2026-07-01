@@ -257,6 +257,32 @@ public class ArtifactResource {
     }
 
     // -------------------------------------------------------------------------
+    // In-place text save (UUID-only path → in-resource ownership check)
+    // -------------------------------------------------------------------------
+
+    @PUT
+    @Path("/artifacts/files/{nodeId}/content")
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response saveText(@PathParam("nodeId") UUID nodeId, String body,
+            @Context ContainerRequestContext request) {
+        Response denied = requireOwnership(nodeId, request);
+        if (denied != null) {
+            return denied;
+        }
+        try {
+            return Response.ok(artifacts.replaceText(CurrentUser.id(request), nodeId, body)).build();
+        } catch (ArtifactException e) {
+            return artifactError(e);
+        } catch (SQLException e) {
+            return serverError(e, "save text artifact");
+        } catch (Exception e) {
+            logger.error("Artifact text save failed: {}", e.getMessage(), e);
+            return Response.serverError().entity(Map.of("error", "server_error")).build();
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 

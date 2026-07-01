@@ -6,6 +6,8 @@ import FolderSpecialIcon from '@mui/icons-material/FolderSpecial'
 import { useArtifactTree } from '../../hooks/useArtifacts'
 import ArtifactFolderItem from './ArtifactFolderItem'
 
+const EMPTY_NODES = []
+
 /**
  * The "Artifacts" root node for a project — a per-project store for
  * non-manuscript files (query letters, research, cover-art sources). Rendered
@@ -22,7 +24,7 @@ export default function ArtifactsSection({ projectId, open, selection, setSelect
 
 	if (!open) return null
 
-	const topFolders = (tree ?? [])
+	const topFolders = (tree ?? EMPTY_NODES)
 		.filter(n => n.parentId == null && n.type === 'FOLDER')
 		.sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name))
 
@@ -72,7 +74,7 @@ export default function ArtifactsSection({ projectId, open, selection, setSelect
 						<ArtifactFolderItem
 							key={folder.id}
 							folder={folder}
-							tree={tree ?? []}
+							tree={tree ?? EMPTY_NODES}
 							depth={1}
 							projectId={projectId}
 							selection={selection}

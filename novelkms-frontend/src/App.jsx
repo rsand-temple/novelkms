@@ -77,6 +77,7 @@ const EMPTY_SELECTION = {
 	templateScope: null,  // 'global' | 'book' | null
 	aiDocType: null,       // 'memory' | 'chapterSummary' | 'bookSummary' | null
 	artifactFolderId: null, // 'root' | <folderId> | null — active Artifacts Explorer folder
+	artifactEditingNodeId: null, // text file open for editing (persists across nav)
 }
 
 function WorkspacePanelHeader({ icon, title, subtitle, actions }) {
@@ -323,6 +324,10 @@ export default function App() {
 				templateScope: base.templateScope ?? null,
 				aiDocType: base.aiDocType ?? null,
 				artifactFolderId: base.artifactFolderId ?? null,
+				// Preserve editing state across nav unless explicitly cleared (Close button sets null).
+				artifactEditingNodeId: base.artifactEditingNodeId !== undefined
+					? base.artifactEditingNodeId
+					: (prev.artifactEditingNodeId ?? null),
 			}
 		})
 	}, [])
@@ -773,6 +778,7 @@ export default function App() {
 								<ArtifactsPanel
 									projectId={selection.projectId}
 									folderId={selection.artifactFolderId === 'root' ? null : selection.artifactFolderId}
+									editingNodeId={selection.artifactEditingNodeId}
 									setSelection={setSelection}
 								/>
 							) : (

@@ -86,6 +86,31 @@ export function useTrashArtifactNode() {
 	})
 }
 
+// ── Text editing ──────────────────────────────────────────────────────────────
+
+export function useArtifactText(nodeId) {
+	return useQuery({
+		queryKey: ['artifacts', 'text', nodeId],
+		queryFn:  () => artifactsApi.readText(nodeId),
+		enabled:  !!nodeId,
+		// Don't refetch on window focus — the user may have unsaved edits.
+		refetchOnWindowFocus: false,
+	})
+}
+
+export function useSaveArtifactText() {
+	const qc = useQueryClient()
+	return useMutation({
+		mutationFn: ({ nodeId, text }) => artifactsApi.writeText(nodeId, text),
+		onSuccess:  (updatedNode, { nodeId, text, projectId }) => {
+			// Update the cached text so the editor's "changed" detection resets.
+			qc.setQueryData(['artifacts', 'text', nodeId], text)
+			qc.invalidateQueries({ queryKey: ARTIFACT_KEYS.tree(projectId) })
+			qc.invalidateQueries({ queryKey: ARTIFACT_KEYS.usage(projectId) })
+		},
+	})
+}
+
 // ── Error helper ──────────────────────────────────────────────────────────────
 // Maps a backend artifact error body to a friendly message for snackbars.
 

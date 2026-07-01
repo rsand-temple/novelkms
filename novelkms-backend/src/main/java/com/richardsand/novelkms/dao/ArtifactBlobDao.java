@@ -98,4 +98,12 @@ public class ArtifactBlobDao {
             }
         }
     }
+
+    /** Deletes a blob row. Runs on the caller's connection for transactional safety. */
+    public void delete(Connection c, UUID id) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("DELETE FROM artifact_blob WHERE id = ?")) {
+            ps.setObject(1, id);
+            ps.executeUpdate();
+        }
+    }
 }

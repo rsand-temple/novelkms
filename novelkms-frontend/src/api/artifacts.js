@@ -33,6 +33,12 @@ export const artifactsApi = {
 	move:   (nodeId, parentId) => client.put(`/artifacts/nodes/${nodeId}/move`, { parentId: parentId ?? null }).then(r => r.data),
 	trash:  (nodeId)           => client.delete(`/artifacts/nodes/${nodeId}`).then(r => r.data),
 
+	/** Reads a text file's content as a UTF-8 string. */
+	readText: (nodeId) => client.get(`/artifacts/files/${nodeId}/content`, { responseType: 'text', transformResponse: [(d) => d] }).then(r => r.data),
+
+	/** Replaces a text file's content (full save). */
+	writeText: (nodeId, text) => client.put(`/artifacts/files/${nodeId}/content`, text, { headers: { 'Content-Type': 'text/plain; charset=UTF-8' } }).then(r => r.data),
+
 	// Direct browser download target (session cookie is sent automatically).
 	downloadUrl: (nodeId) => `/api/artifacts/files/${nodeId}/content`,
 }
