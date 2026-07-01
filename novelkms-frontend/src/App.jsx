@@ -36,6 +36,8 @@ import { hydrateSkipDeleteConfirm } from './utils/deleteConfirmPrefs'
 import BillingReturnPage from './components/subscription/BillingReturnPage'
 import AdminSupportConsole from './components/admin/AdminSupportConsole'
 import ToolsMenu from './components/tools/ToolsMenu'
+import FaqPage from './public/faq'
+import PrivacyPage from './public/privacy'
 
 /* eslint-disable no-undef */
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
@@ -77,7 +79,6 @@ const EMPTY_SELECTION = {
 	templateScope: null,  // 'global' | 'book' | null
 	aiDocType: null,       // 'memory' | 'chapterSummary' | 'bookSummary' | null
 	artifactFolderId: null, // 'root' | <folderId> | null — active Artifacts Explorer folder
-	artifactEditingNodeId: null, // text file open for editing (persists across nav)
 }
 
 function WorkspacePanelHeader({ icon, title, subtitle, actions }) {
@@ -246,19 +247,6 @@ export default function App() {
 		}
 	}, [])
 
-	const path = window.location.pathname
-
-	if (path === '/admin') {
-		return <AdminSupportConsole />
-	}
-	
-	if (path === '/billing/success') {
-		return <BillingReturnPage result="success" />
-	}
-
-	if (path === '/billing/cancel') {
-		return <BillingReturnPage result="cancel" />
-	}
 
 	useEffect(() => {
 		const handleMouseMove = (event) => {
@@ -324,10 +312,6 @@ export default function App() {
 				templateScope: base.templateScope ?? null,
 				aiDocType: base.aiDocType ?? null,
 				artifactFolderId: base.artifactFolderId ?? null,
-				// Preserve editing state across nav unless explicitly cleared (Close button sets null).
-				artifactEditingNodeId: base.artifactEditingNodeId !== undefined
-					? base.artifactEditingNodeId
-					: (prev.artifactEditingNodeId ?? null),
 			}
 		})
 	}, [])
@@ -423,6 +407,28 @@ export default function App() {
 	const editGlobalFromContext = () => {
 		setCtxSettings(s => ({ ...s, open: false }))
 		openSettings()
+	}
+
+	const path = window.location.pathname
+
+	if (path === '/admin') {
+		return <AdminSupportConsole />
+	}
+
+	if (path === '/billing/success') {
+		return <BillingReturnPage result="success" />
+	}
+
+	if (path === '/billing/cancel') {
+		return <BillingReturnPage result="cancel" />
+	}
+
+	if (path === '/faq') {
+		return <FaqPage />
+	}
+
+	if (path === '/privacy') {
+		return <PrivacyPage />
 	}
 
 	return (
@@ -778,7 +784,6 @@ export default function App() {
 								<ArtifactsPanel
 									projectId={selection.projectId}
 									folderId={selection.artifactFolderId === 'root' ? null : selection.artifactFolderId}
-									editingNodeId={selection.artifactEditingNodeId}
 									setSelection={setSelection}
 								/>
 							) : (

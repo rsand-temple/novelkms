@@ -5,6 +5,7 @@ import { authApi } from '../../api/auth'
 import { LogoLockup, LogoMark } from '../../components/branding/Logo'
 import EditorMockup from '../../components/marketing/EditorMockup'
 import FaqPage from '../../public/faq'
+import PrivacyPage from '../../public/privacy'
 
 function ProviderIcon({ src, size = 20 }) {
 	return (
@@ -109,6 +110,10 @@ export default function LoginPage() {
 		return <FaqPage />
 	}
 
+	if (location.pathname === '/privacy') {
+		return <PrivacyPage />
+	}
+
 	return (
 		<Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: 'background.paper' }}>
 			{/* Marketing column - desktop only */}
@@ -116,20 +121,21 @@ export default function LoginPage() {
 				sx={{
 					display: { xs: 'none', md: 'flex' },
 					flexDirection: 'column',
-					justifyContent: 'center',
-					gap: 3,
+					justifyContent: 'flex-start',
+					gap: 2.5,
 					width: '58%',
 					px: { md: 6, lg: 8, xl: 10 },
-					py: 5,
+					pt: { md: 5, lg: 6 },
+					pb: 4,
 				}}
 			>
 				<Box sx={{ width: '100%' }}>
-					<LogoLockup width={340} />
+					<LogoLockup width={260} />
 
 					<Typography
 						variant="h4"
 						sx={{
-							mt: 2.5,
+							mt: 1.75,
 							fontWeight: 750,
 							lineHeight: 1.15,
 							color: 'text.primary',
@@ -145,9 +151,12 @@ export default function LoginPage() {
 					</Typography>
 				</Box>
 
-				<Stack
-					spacing={2}
+				<Box
 					sx={{
+						display: 'grid',
+						gridTemplateColumns: { md: '1fr', lg: '1fr 1fr' },
+						columnGap: 3,
+						rowGap: 1.75,
 						width: '100%',
 						maxWidth: 'none',
 						pr: { md: 1, lg: 2 },
@@ -156,35 +165,22 @@ export default function LoginPage() {
 					{FEATURES.map((f) => (
 						<FeatureRow key={f.title} {...f} />
 					))}
-				</Stack>
+				</Box>
 
-				<Box sx={{ width: '100%', maxWidth: 760 }}>
+				<Box sx={{ width: '100%', maxWidth: 760, mt: 0.5 }}>
 					<EditorMockup />
 				</Box>
-				<Typography color="text.secondary" sx={{ fontSize: '0.875rem' }}>
-					Questions about privacy, AI, subscriptions, or exporting your manuscript?{' '}
-					<Box
-						component={RouterLink}
-						to="/faq"
-						sx={{
-							color: 'primary.main',
-							fontWeight: 650,
-							textDecoration: 'none',
-							'&:hover': { textDecoration: 'underline' },
-						}}
-					>
-						Read the FAQ.
-					</Box>
-				</Typography>
 			</Box>
 
 			{/* Sign-in column */}
 			<Box
 				sx={{
 					flex: 1,
-					display: 'grid',
-					placeItems: 'center',
+					display: 'flex',
+					alignItems: { xs: 'center', md: 'flex-start' },
+					justifyContent: 'center',
 					p: 2,
+					pt: { xs: 2, md: 20, lg: 22 },
 					borderLeft: { md: '1px solid' },
 					borderColor: { md: 'divider' },
 				}}
@@ -251,19 +247,39 @@ export default function LoginPage() {
 						<Divider />
 
 						<Stack spacing={1.25}>
-							<Typography color="text.secondary" sx={{ fontSize: '0.875rem' }}>
-								Founders access is open: start with a 14-day trial, then continue for $9/month as an early
-								subscriber.
+							<Typography color="text.secondary" sx={{ fontSize: '1rem', fontStyle: 'italic' }}>
+								Founders access is open! Start your 14-day trial, then continue for $9/month
+								as an early subscriber.
 							</Typography>
-
-							<Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, color: 'text.secondary' }}>
-								<LogoMark size={16} onDark={false} />
-								<Typography variant="caption">
-									Your manuscript stays yours. NovelKMS is built around author control, portability, and
-									structured revision. AI features use your own OpenAI key.
-								</Typography>
-							</Box>
 						</Stack>
+						<Typography color="text.secondary" sx={{ fontSize: '1rem', fontStyle: 'italic' }}>
+							Questions about privacy, AI, subscriptions, or exporting your manuscript? Read our{' '}
+							<Box
+								component={RouterLink}
+								to="/faq"
+								sx={{
+									color: 'primary.main',
+									fontWeight: 650,
+									textDecoration: 'none',
+									'&:hover': { textDecoration: 'underline' },
+								}}
+							>
+								FAQ
+							</Box>
+							{' '}or{' '}
+							<Box
+								component={RouterLink}
+								to="/privacy"
+								sx={{
+									color: 'primary.main',
+									fontWeight: 650,
+									textDecoration: 'none',
+									'&:hover': { textDecoration: 'underline' },
+								}}
+							>
+								Privacy Policy
+							</Box>
+						</Typography>
 					</Stack>
 				</Paper>
 			</Box>

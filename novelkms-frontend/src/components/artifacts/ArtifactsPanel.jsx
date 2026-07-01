@@ -796,7 +796,7 @@ function ArtifactTextEditor({ nodeId, projectId, nodes, onClose, onSnack }) {
 					lineHeight: 1.7,
 					whiteSpace: 'pre-wrap',
 					overflowWrap: 'break-word',
-					bgcolor: 'background.default',
+					bgcolor: 'background.paper',
 					color: 'text.primary',
 					overflowY: 'auto',
 				}}

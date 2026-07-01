@@ -148,9 +148,14 @@ export default function FaqPage() {
 								state of NovelKMS.
 							</Typography>
 
-							<Button component={RouterLink} to="/login" variant="contained" sx={{ mt: 3 }}>
-								Back to sign in
-							</Button>
+							<Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 3 }}>
+								<Button component={RouterLink} to="/login" variant="contained">
+									Back to sign in
+								</Button>
+								<Button component={RouterLink} to="/privacy" variant="outlined">
+									Privacy Policy
+								</Button>
+							</Stack>
 						</Box>
 
 						<Divider />
