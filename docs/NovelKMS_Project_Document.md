@@ -159,6 +159,7 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 - Isolated dnd-kit DndContext for row-drag-to-folder moves, fully decoupled from manuscript DnD.
 - EditorPanel and manuscript DnD untouched — center-pane branches at App level: trash → artifacts → editor.
 - Designing toward Dropbox-style versioning: `sha256` captured on blobs, `artifact_file_version` additive.
+- Double-clicking an image artifact opens a read-only preview modal (Download + Close) instead of downloading; a right-click "Preview" item mirrors it. Non-image files are unchanged (text → in-place editor, other → direct download).
 
 ## Known issues / watchlist
 

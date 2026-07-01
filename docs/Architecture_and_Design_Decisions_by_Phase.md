@@ -466,3 +466,4 @@ A per-project non-manuscript file/folder area — the first feature that stores 
 - D9: Designing toward versioning (sha256 captured, artifact_file_version additive).
 - D10: Nav-pane folder drag deferred (additive fast-follow).
 - D11: Native OS file drop handled with document-level prevention + panel-level overlay.
+- D12: Image artifacts get an in-pane read-only preview modal (double-click or right-click "Preview"); image bytes are served from the existing cookie-authenticated `downloadUrl` as an `<img src>`, so no new endpoint. This is the first in-app rendering of an artifact — the "download only" rule now means "no editing/round-trip," not "never displayed." Text (editor) and all other types (download) dispatch unchanged.
