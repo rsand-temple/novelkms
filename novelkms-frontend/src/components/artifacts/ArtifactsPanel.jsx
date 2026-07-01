@@ -76,14 +76,10 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 	const [newFolderOpen, setNewFolderOpen] = useState(false)
 	const [renameTarget, setRenameTarget] = useState(null)    // node
 	const [moveTarget, setMoveTarget] = useState(null)        // node
+	const [previewNode, setPreviewNode] = useState(null)      // image node being previewed
 	const [uploading, setUploading] = useState(0)             // count remaining
 	const [snack, setSnack] = useState(null)                  // { severity, message }
 	const [nativeDragOver, setNativeDragOver] = useState(false) // OS file drag hovering
-	const [localEditingId, setLocalEditingId] = useState(null) // local text-editing state
-
-	// The active editing id: local state wins for immediate feedback; the prop
-	// carries the value back across navigation (set via setSelection).
-	const activeEditingId = localEditingId ?? editingNodeId ?? null
 
 	const nodes = tree ?? EMPTY_NODES
 
@@ -115,11 +111,6 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 		setSelection(prev => ({ ...prev, artifactFolderId: id ?? 'root' }))
 
 	const goUp = () => navigateTo(currentFolder?.parentId ?? 'root')
-
-	const handleOpenEditor = (node) => {
-		setLocalEditingId(node.id)
-		setSelection(prev => ({ ...prev, artifactFolderId: folderId ?? 'root', artifactEditingNodeId: node.id }))
-	}
 
 	// ── Actions ──────────────────────────────────────────────────────────────
 	const handleCreateFolder = (name) => {
@@ -203,9 +194,10 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 	// drop     → always preventDefault, then check if target is inside this
 	//            panel (via ref.contains) and upload if so
 	const uploadContextRef = useRef({ projectId, effectiveParentId })
+
 	useEffect(() => {
 		uploadContextRef.current = { projectId, effectiveParentId }
-	})
+	}, [projectId, effectiveParentId])
 
 	useEffect(() => {
 		let counter = 0
@@ -340,20 +332,17 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 				</Box>
 			</Box>
 
-			{activeEditingId ? (
+			{editingNodeId ? (
 				<ArtifactTextEditor
-					nodeId={activeEditingId}
+					nodeId={editingNodeId}
 					projectId={projectId}
 					nodes={nodes}
-					onClose={() => {
-						setLocalEditingId(null)
-						setSelection(prev => ({ ...prev, artifactFolderId: folderId ?? 'root', artifactEditingNodeId: null }))
-					}}
+					onClose={() => setSelection(prev => ({ ...prev, artifactEditingNodeId: null }))}
 					onSnack={setSnack}
 				/>
 			) : (<>
 				{/* Toolbar */}
-				<Stack direction="row" spacing={1} sx={{ px: 1.5, py: 1, flexShrink: 0, alignItems: 'center' }}>
+				<Stack direction="row" spacing={1} sx={{ alignItems: "center", px: 1.5, py: 1, flexShrink: 0 }}>
 					<Tooltip title="Up one level">
 						<span>
 							<IconButton size="small" onClick={goUp} disabled={!currentFolder}>
@@ -442,7 +431,8 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 													setRowMenu({ mouseX: e.clientX, mouseY: e.clientY, node })
 												}}
 												onDownload={() => handleDownload(node)}
-												onEdit={handleOpenEditor}
+												onPreview={() => setPreviewNode(node)}
+												onEdit={(n) => setSelection(prev => ({ ...prev, artifactEditingNodeId: n.id }))}
 											/>
 										))}
 									</TableBody>
@@ -470,7 +460,7 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 				{/* Usage footer */}
 				<Divider />
 				<Box sx={{ px: 1.75, py: 1, flexShrink: 0 }}>
-					<Stack direction="row" sx={{ mb: 0.5, justifyContent: 'space-between' }}>
+					<Stack direction="row" sx={{ justifyContent: "space-between", mb: 0.5 }}>
 						<Typography variant="caption" color="text.secondary">
 							Storage: {formatBytes(usedBytes)} of {formatBytes(quotaBytes)} used
 						</Typography>
@@ -492,16 +482,16 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 					anchorReference="anchorPosition"
 					anchorPosition={rowMenu ? { top: rowMenu.mouseY, left: rowMenu.mouseX } : undefined}
 				>
+					{rowMenu?.node?.type === 'FILE' && isImage(rowMenu.node.contentType) && (
+						<MenuItem onClick={() => { setPreviewNode(rowMenu.node); setRowMenu(null) }}>
+							<ListItemIcon><ImageIcon fontSize="small" /></ListItemIcon>
+							<ListItemText>Preview</ListItemText>
+						</MenuItem>
+					)}
 					{rowMenu?.node?.type === 'FILE' && (
 						<MenuItem onClick={() => { handleDownload(rowMenu.node); setRowMenu(null) }}>
 							<ListItemIcon><FileDownloadIcon fontSize="small" /></ListItemIcon>
 							<ListItemText>Download</ListItemText>
-						</MenuItem>
-					)}
-					{rowMenu?.node?.type === 'FILE' && isText(rowMenu?.node?.contentType) && (
-						<MenuItem onClick={() => { handleOpenEditor(rowMenu.node); setRowMenu(null) }}>
-							<ListItemIcon><DescriptionIcon fontSize="small" /></ListItemIcon>
-							<ListItemText>Edit</ListItemText>
 						</MenuItem>
 					)}
 					<MenuItem onClick={() => { setRenameTarget(rowMenu.node); setRowMenu(null) }}>
@@ -552,6 +542,14 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 					/>
 				)}
 
+				{previewNode && (
+					<PreviewDialog
+						node={previewNode}
+						onDownload={() => handleDownload(previewNode)}
+						onClose={() => setPreviewNode(null)}
+					/>
+				)}
+
 			</>)}
 
 			<Snackbar
@@ -571,7 +569,7 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 }
 
 // ── A draggable / droppable details row ──────────────────────────────────────
-function ArtifactRow({ node, onOpenFolder, onContextMenu, onDownload, onEdit }) {
+function ArtifactRow({ node, onOpenFolder, onContextMenu, onDownload, onPreview, onEdit }) {
 	const isFolder = node.type === 'FOLDER'
 	const { attributes, listeners, setNodeRef: dragRef, isDragging } = useDraggable({
 		id: node.id,
@@ -586,6 +584,7 @@ function ArtifactRow({ node, onOpenFolder, onContextMenu, onDownload, onEdit }) 
 
 	const handleDoubleClick = () => {
 		if (isFolder) { onOpenFolder(); return }
+		if (isImage(node.contentType) && onPreview) { onPreview(node); return }
 		if (isText(node.contentType) && onEdit) { onEdit(node); return }
 		onDownload()
 	}
@@ -607,7 +606,7 @@ function ArtifactRow({ node, onOpenFolder, onContextMenu, onDownload, onEdit }) 
 			}}
 		>
 			<TableCell>
-				<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+				<Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
 					{isFolder
 						? <FolderIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 						: (isImage(node.contentType)
@@ -630,7 +629,7 @@ function UpRow({ onOpen }) {
 		<TableRow ref={setNodeRef} hover onDoubleClick={onOpen}
 			sx={{ cursor: 'pointer', bgcolor: isOver ? 'action.hover' : undefined }}>
 			<TableCell>
-				<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+				<Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
 					<ArrowUpwardIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 					<Typography variant="body2" color="text.secondary">..</Typography>
 				</Stack>
@@ -716,7 +715,58 @@ function MoveDialog({ node, nodes, busy, onCancel, onConfirm }) {
 	)
 }
 
-// ── Text file editor (modal within the artifacts space) ──────────────────────
+// ── Image preview dialog (read-only, download + close) ───────────────────────
+function PreviewDialog({ node, onDownload, onClose }) {
+	// loaded/error are driven by the <img> element's own events, not effects.
+	const [loaded, setLoaded] = useState(false)
+	const [errored, setErrored] = useState(false)
+	const src = artifactsApi.downloadUrl(node.id)
+
+	return (
+		<Dialog open onClose={onClose} maxWidth="md" fullWidth>
+			<DialogTitle sx={{ pr: 6 }}>
+				<Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+					<ImageIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+					<Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>{node.name}</Typography>
+				</Stack>
+			</DialogTitle>
+			<DialogContent
+				dividers
+				sx={{
+					display: 'flex', alignItems: 'center', justifyContent: 'center',
+					minHeight: 200, bgcolor: 'action.hover', p: 2,
+				}}
+			>
+				{errored ? (
+					<Typography color="error" variant="body2">
+						Couldn’t load this image for preview. Try downloading it instead.
+					</Typography>
+				) : (
+					<>
+						{!loaded && <CircularProgress size={28} />}
+						<Box
+							component="img"
+							src={src}
+							alt={node.name}
+							onLoad={() => setLoaded(true)}
+							onError={() => setErrored(true)}
+							sx={{
+								display: loaded ? 'block' : 'none',
+								maxWidth: '100%',
+								maxHeight: '70vh',
+								objectFit: 'contain',
+							}}
+						/>
+					</>
+				)}
+			</DialogContent>
+			<DialogActions>
+				<Button startIcon={<FileDownloadIcon />} onClick={onDownload}>Download</Button>
+				<Button variant="contained" onClick={onClose}>Close</Button>
+			</DialogActions>
+		</Dialog>
+	)
+}
 function ArtifactTextEditor({ nodeId, projectId, nodes, onClose, onSnack }) {
 	const { data: loadedText, isLoading, isError } = useArtifactText(nodeId)
 	const saveMutation = useSaveArtifactText()
@@ -775,7 +825,7 @@ function ArtifactTextEditor({ nodeId, projectId, nodes, onClose, onSnack }) {
 	return (
 		<>
 			{/* Editor toolbar */}
-			<Stack direction="row" spacing={1} sx={{ px: 1.5, py: 1, flexShrink: 0, alignItems: 'center' }}>
+			<Stack direction="row" spacing={1} sx={{ alignItems: "center", px: 1.5, py: 1, flexShrink: 0 }}>
 				<DescriptionIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 				<Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }} noWrap>
 					{fileName}

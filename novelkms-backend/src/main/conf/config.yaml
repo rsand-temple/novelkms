@@ -109,8 +109,8 @@ billing:
   stripeSecretKey: {{STRIPE_SECRET_KEY}}
   stripeWebhookSecret: {{STRIPE_WEBHOOK_SECRET}}
   stripePriceId: {{STRIPE_PRICE_ID}}
-  successUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:3000', true)}}/billing/success
-  cancelUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:3000', true)}}/billing/cancel
+  successUrl: "{{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:3000', true)}}/billing/success"
+  cancelUrl: "{{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:3000', true)}}/billing/cancel"
   enforceSubscriptions: true
 
 # Artifacts: per-project store for non-manuscript files (query letters, research,
