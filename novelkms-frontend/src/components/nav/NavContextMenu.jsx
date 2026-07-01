@@ -24,6 +24,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import CloseIcon from '@mui/icons-material/Close'
+import ScheduleIcon from '@mui/icons-material/Schedule'
 
 import AddBookDialog from './dialogs/AddBookDialog'
 import AddChapterDialog from './dialogs/AddChapterDialog'
@@ -38,6 +39,7 @@ import PreReviewMemoryDialog from '../ai/PreReviewMemoryDialog'
 import { flaggedPreceding } from '../ai/memoryStatus'
 import BookSummaryDialog from '../ai/BookSummaryDialog'
 import ManageAiContextDialog from '../ai/ManageAiContextDialog'
+import ChapterReviewHistoryDialog from '../ai/ChapterReviewHistoryDialog'
 
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
 import { useChapters, useReorderChapters, useDeleteChapter } from '../../hooks/useChapters'
@@ -151,6 +153,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const [entryDialogOpen, setEntryDialogOpen] = useState(false)
 	const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
 	const [reviewError, setReviewError] = useState(null)
+	const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
 
 	// ── Sibling lists for Move Up / Down ──────────────────────────────────────
 	// These queries hit the TanStack Query cache already populated by the nav
@@ -811,6 +814,18 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
+				{/* Review history — chapter nodes only (scene reviews are part of the
+				    parent chapter's history; right-click the chapter to see them). */}
+				{isManuscriptNode && reviewNodeType === 'chapter' && (
+					<MenuItem
+						dense
+						onClick={() => { closeMenu(); setHistoryDialogOpen(true) }}
+					>
+						<ListItemIcon><ScheduleIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Review history…</ListItemText>
+					</MenuItem>
+				)}
+
 				{/* Chapter memory document — chapter manuscript nodes only */}
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
 					<MenuItem
@@ -976,6 +991,13 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</Button>
 				</DialogActions>
 			</Dialog>
+
+			{/* ── AI Review history ──────────────────────────────────────── */}
+			<ChapterReviewHistoryDialog
+				open={historyDialogOpen}
+				onClose={() => setHistoryDialogOpen(false)}
+				chapterId={reviewNodeType === 'chapter' ? menuNode?.id : null}
+			/>
 
 			<Snackbar
 				open={!!memorySnack}

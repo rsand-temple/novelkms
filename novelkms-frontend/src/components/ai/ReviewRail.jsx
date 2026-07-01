@@ -19,7 +19,6 @@ import {
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import CloseIcon from '@mui/icons-material/Close'
-import DeleteIcon from '@mui/icons-material/Delete'
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
 import { useQueries } from '@tanstack/react-query'
 import {
@@ -29,7 +28,6 @@ import {
 	useRunSceneReview,
 	useSetRecommendationStatus,
 	usePromoteRecommendation,
-	useDeleteReview,
 	AI_REVIEW_KEYS,
 } from '../../hooks/useAiReviews'
 import { useChapterMemoryStatus } from '../../hooks/useChapterMemory'
@@ -47,7 +45,6 @@ import {
 	reviewScope,
 } from './recommendationUtils'
 import ReviewCard from './ReviewCard'
-import ChapterMemoryEditor from './ChapterMemoryEditor'
 import PreReviewMemoryDialog from './PreReviewMemoryDialog'
 import { isFlagged } from './memoryStatus'
 import { HelpButton } from '../../help'
@@ -55,16 +52,9 @@ import { HelpButton } from '../../help'
 const RAIL_WIDTH = 332
 const RAIL_COLLAPSED_WIDTH = 44
 
-const ALL_REVIEWS = '__ALL__'
-
 function errMessage(err) {
 	const data = err?.response?.data
 	return data?.message ?? (typeof data === 'string' ? data : null) ?? err?.message ?? 'The review could not be run.'
-}
-
-function formatTime(iso) {
-	if (!iso) return ''
-	try { return new Date(iso).toLocaleString() } catch { return iso }
 }
 
 /**
@@ -74,37 +64,42 @@ function formatTime(iso) {
  * Bound to exactly one chapter (mounted with key={chapterId}). The current
  * scope is driven by whether a scene is also selected:
  *
- *   • scene selected  → Run reviews that scene; show only that scene's reviews
- *                       and their recommendations.
+ *   • scene selected   → Run reviews that scene; show only that scene's reviews
+ *                        and their recommendations.
  *   • chapter selected → Run reviews the whole chapter; show ALL reviews under
- *                       the chapter (chapter- and scene-scope) and AGGREGATE
- *                       their recommendations into one working list.
+ *                        the chapter (chapter- and scene-scope) and AGGREGATE
+ *                        their recommendations into one working list.
  *
  * Findings are triaged bug-tracker style across three tabs:
  *
- *   • Active   — OPEN + DEFERRED (what still needs attention)
+ *   • Active   — OPEN only (what needs attention right now)
+ *   • Deferred — DEFERRED (parked; valid but not now — stays out of Active so
+ *                the queue can be fully cleared)
  *   • Resolved — DONE + DISMISSED + PROMOTED (handled, kept for reference)
- *   • History  — the review runs themselves; focus one or move it to Trash.
+ *
+ * Review run history (audit / trash) is accessible via the chapter nav
+ * context menu → "Review history…".
+ *
+ * The pre-review memory gate (warning when a preceding chapter's memory
+ * document is missing or stale) remains here even though the Memory editing
+ * surface moved to the nav tree.
  *
  * Props:
  *   chapterId {string}        the (parent) chapter
  *   sceneId   {string|null}   the selected scene, when one is selected
+ *   bookId    {string|null}   the parent book (for memory status and context)
  *   editor    TipTap editor instance (for scroll-to-passage highlights)
  */
-export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSelection, width = RAIL_WIDTH }) {
+export default function ReviewRail({ chapterId, sceneId, bookId, editor, width = RAIL_WIDTH }) {
 	const review = useReview()
 
 	const scope = sceneId ? 'SCENE' : 'CHAPTER'
 	const scopeKey = sceneId ?? 'CHAPTER'
 
-	// When the user explicitly picks a review in History. At chapter scope the
-	// default is ALL_REVIEWS (aggregate); at scene scope the default is the
-	// newest review (null falls through to reviews[0]).
-	const [explicit, setExplicit] = useState(null) // { id, scopeKey } | null
 	const [credentialId, setCredentialId] = useState(null)
 	const [runError, setRunError] = useState(null)
 	const [promotingId, setPromotingId] = useState(null)
-	const [tab, setTab] = useState('ACTIVE') // ACTIVE | RESOLVED | HISTORY | MEMORY
+	const [tab, setTab] = useState('ACTIVE') // ACTIVE | DEFERRED | RESOLVED
 	const [memWarnOpen, setMemWarnOpen] = useState(false)
 
 	const { data: credentials = [] } = useAiCredentials()
@@ -157,17 +152,18 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 		[filteredReviews],
 	)
 
-	// ── Selection: aggregate vs single review ───────────────────────────────
-	const explicitId = explicit && explicit.scopeKey === scopeKey ? explicit.id : null
-	const isAggregateMode = scope === 'CHAPTER' && (explicitId === ALL_REVIEWS || explicitId == null)
-	const selectedReviewId = isAggregateMode ? null : (explicitId ?? filteredReviews[0]?.id ?? null)
+	// ── Selection: aggregate (chapter scope) vs single review (scene scope) ─
+	// Chapter scope always aggregates every completed review for this chapter.
+	// Scene scope always uses the most recent review for the selected scene.
+	const isAggregateMode = scope === 'CHAPTER'
+	const selectedReviewId = isAggregateMode ? null : (filteredReviews[0]?.id ?? null)
 
-	// ── Detail fetch: single review (scene scope or explicitly selected) ────
+	// ── Detail fetch: single review (scene scope) ────────────────────────────
 	const { data: singleDetail, isLoading: loadingSingleDetail } = useAiReview(
 		selectedReviewId, !!selectedReviewId,
 	)
 
-	// ── Detail fetch: ALL completed reviews (chapter scope aggregate) ───────
+	// ── Detail fetch: ALL completed reviews (chapter scope aggregate) ────────
 	const aggregateQueries = useQueries({
 		queries: isAggregateMode
 			? completedReviews.map(r => ({
@@ -184,7 +180,6 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 	const { mutate: runScene, isPending: runningScene } = useRunSceneReview()
 	const { mutate: setRecStatus } = useSetRecommendationStatus()
 	const { mutate: promote } = usePromoteRecommendation()
-	const { mutate: deleteReview, isPending: deleting } = useDeleteReview()
 
 	const running = scope === 'SCENE' ? runningScene : runningChapter
 
@@ -217,18 +212,25 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 			.map(rec => ({ ...rec, _reviewId: singleDetail.id, _review: singleDetail }))
 	}, [isAggregateMode, aggregateQueries, singleDetail])
 
-	// Active = OPEN + DEFERRED, with OPEN listed first (DEFERRED is parked).
-	const activeRecs = useMemo(() => {
-		const open = allScopeRecs.filter(r => normalizeStatus(r.status) === STATUS.OPEN)
-		const deferred = allScopeRecs.filter(r => normalizeStatus(r.status) === STATUS.DEFERRED)
-		return [...open, ...deferred]
-	}, [allScopeRecs])
+	// Active = OPEN only. Deferring an item parks it in the Deferred tab,
+	// keeping the Active queue clearable.
+	const activeRecs = useMemo(
+		() => allScopeRecs.filter(r => normalizeStatus(r.status) === STATUS.OPEN),
+		[allScopeRecs],
+	)
+
+	// Deferred = DEFERRED. Parked findings the author wants to revisit later.
+	const deferredRecs = useMemo(
+		() => allScopeRecs.filter(r => normalizeStatus(r.status) === STATUS.DEFERRED),
+		[allScopeRecs],
+	)
 
 	const resolvedRecs = useMemo(
 		() => allScopeRecs.filter(r => isResolvedStatus(r.status)),
 		[allScopeRecs],
 	)
 
+	// Collapsed badge and header counter track OPEN findings only.
 	const openCount = useMemo(
 		() => allScopeRecs.filter(r => normalizeStatus(r.status) === STATUS.OPEN).length,
 		[allScopeRecs],
@@ -238,20 +240,24 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 	const anyCompleted = completedReviews.length > 0
 
 	// ── Handlers ────────────────────────────────────────────────────────────
-	const onRunSuccess = (r) => { setExplicit({ id: r.id, scopeKey }); setTab('ACTIVE') }
+	const onRunSuccess = () => setTab('ACTIVE')
 	const onRunError = (e) => setRunError(errMessage(e))
 
 	const doRunChapter = () => {
 		setRunError(null)
-		runChapter({ chapterId, credentialId: effectiveCredId, model: null, userGuidance: guidance.trim() || null, includePinnedContext: includePinned },
-			{ onSuccess: onRunSuccess, onError: onRunError })
+		runChapter(
+			{ chapterId, credentialId: effectiveCredId, model: null, userGuidance: guidance.trim() || null, includePinnedContext: includePinned },
+			{ onSuccess: onRunSuccess, onError: onRunError },
+		)
 	}
 
 	const handleRun = () => {
 		setRunError(null)
 		if (scope === 'SCENE') {
-			runScene({ sceneId, credentialId: effectiveCredId, model: null, userGuidance: guidance.trim() || null, includePinnedContext: includePinned },
-				{ onSuccess: onRunSuccess, onError: onRunError })
+			runScene(
+				{ sceneId, credentialId: effectiveCredId, model: null, userGuidance: guidance.trim() || null, includePinnedContext: includePinned },
+				{ onSuccess: onRunSuccess, onError: onRunError },
+			)
 			return
 		}
 		// Chapter scope: warn first if a preceding chapter's memory is missing/stale.
@@ -280,24 +286,7 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 		editor.commands.highlightAnchor(anchorText)
 	}, [editor])
 
-	const focusRun = (id) => {
-		setExplicit({ id, scopeKey })
-		setTab('ACTIVE')
-	}
-
-	const handleDeleteRun = (reviewId) => {
-		setRunError(null)
-		deleteReview(reviewId, {
-			onSuccess: () => setExplicit(null),
-			onError: (e) => setRunError(errMessage(e)),
-		})
-	}
-
-	// Whether a History row is the one currently focused.
-	const isFocused = (id) =>
-		id === ALL_REVIEWS ? isAggregateMode : (!isAggregateMode && id === selectedReviewId)
-
-	// ── Findings renderer (shared by Active / Resolved tabs) ────────────────
+	// ── Findings renderer (shared by Active / Deferred / Resolved tabs) ─────
 	const renderFindings = (list, emptyMessage) => {
 		if (loadingReviews && reviews.length === 0) {
 			return <Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
@@ -352,69 +341,6 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 				/>
 			</Box>
 		))
-	}
-
-	// ── History renderer ────────────────────────────────────────────────────
-	const renderHistory = () => {
-		if (loadingReviews && reviews.length === 0) {
-			return <Box sx={{ py: 1 }}><CircularProgress size={18} /></Box>
-		}
-		if (filteredReviews.length === 0) {
-			return <Typography variant="body2" color="text.secondary">No reviews yet.</Typography>
-		}
-		return (
-			<Box>
-				{scope === 'CHAPTER' && (
-					<Box
-						onClick={() => focusRun(ALL_REVIEWS)}
-						sx={{
-							p: 1, mb: 0.5, borderRadius: 1, cursor: 'pointer',
-							bgcolor: isFocused(ALL_REVIEWS) ? 'action.selected' : 'transparent',
-							'&:hover': { bgcolor: 'action.hover' },
-						}}
-					>
-						<Typography variant="body2">All reviews ({completedReviews.length})</Typography>
-						<Typography variant="caption" color="text.secondary">
-							Aggregate every finding in this chapter
-						</Typography>
-					</Box>
-				)}
-
-				{filteredReviews.map(r => (
-					<Box
-						key={r.id}
-						onClick={() => focusRun(r.id)}
-						sx={{
-							display: 'flex', alignItems: 'center', gap: 0.5,
-							p: 1, mb: 0.5, borderRadius: 1, cursor: 'pointer',
-							bgcolor: isFocused(r.id) ? 'action.selected' : 'transparent',
-							'&:hover': { bgcolor: 'action.hover' },
-						}}
-					>
-						<Box sx={{ minWidth: 0, flexGrow: 1 }}>
-							<Typography variant="body2" noWrap>
-								{originLabel(r, scenes)} · {r.model || '—'}
-							</Typography>
-							<Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-								{formatTime(r.submittedAt)} · {r.status}
-							</Typography>
-						</Box>
-						<Tooltip title="Move this review to Trash">
-							<span>
-								<IconButton
-									size="small"
-									disabled={deleting}
-									aria-label="Move review to trash"
-									onClick={(e) => { e.stopPropagation(); handleDeleteRun(r.id) }}
-								>
-									<DeleteIcon fontSize="small" />
-								</IconButton>
-							</span>
-						</Tooltip>
-					</Box>
-				))}
-			</Box>
-		)
 	}
 
 	// ── Collapsed strip ───────────────────────────────────────────────────
@@ -585,34 +511,15 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, setSele
 								'& .MuiTab-root': { minHeight: 36, py: 0.5, textTransform: 'none', fontSize: '0.78rem' },
 							}}
 						>
-							<Tab value="ACTIVE" label={`Active (${activeRecs.length})`} />
+							<Tab value="ACTIVE"   label={`Active (${activeRecs.length})`} />
+							<Tab value="DEFERRED" label={`Deferred (${deferredRecs.length})`} />
 							<Tab value="RESOLVED" label={`Resolved (${resolvedRecs.length})`} />
-							<Tab value="HISTORY" label="History" />
-							<Tab value="MEMORY" label="Memory" />
 						</Tabs>
 
 						<Box sx={{ mt: 1.5 }}>
-							{tab === 'ACTIVE' && renderFindings(activeRecs, 'Nothing active — the queue is clear.')}
+							{tab === 'ACTIVE'   && renderFindings(activeRecs,   'Queue is clear.')}
+							{tab === 'DEFERRED' && renderFindings(deferredRecs, 'No deferred findings.')}
 							{tab === 'RESOLVED' && renderFindings(resolvedRecs, 'No resolved findings yet.')}
-							{tab === 'HISTORY' && renderHistory()}
-							{tab === 'MEMORY' && (
-								<ChapterMemoryEditor
-									chapterId={chapterId}
-									bookId={bookId}
-									credentialId={effectiveCredId}
-									sceneScopeNote={scope === 'SCENE'}
-									onEditInDocument={() => setSelection?.((prev) => ({
-										...prev,
-										bookId,
-										partId: null,
-										chapterId,
-										sceneId: null,
-										codexId: null,
-										codexCategory: null,
-										aiDocType: 'memory',
-									}))}
-								/>
-							)}
 						</Box>
 					</>
 				)}

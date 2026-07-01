@@ -26,13 +26,14 @@ export const CATEGORY_OPTIONS = [
 // Bug-tracker style: the author's goal is to clear the Active queue.
 //
 //   OPEN       new / undecided
-//   DEFERRED   valid, but not now (stays Active — unfinished by definition)
+//   DEFERRED   valid, but not now — parked in its own Deferred tab so Active
+//              stays clear; unfinished by definition
 //   DONE       acted on, or the manuscript now addresses it
 //   DISMISSED  disagree / false positive / stylistic / not applicable
 //   PROMOTED   converted into a Codex entry (inert; auditable)
 //   DELETED    legacy / admin cleanup only; never set from the finding UI
 //
-// Tabs:  Active = OPEN + DEFERRED      Resolved = DONE + DISMISSED + PROMOTED
+// Tabs:  Active = OPEN    Deferred = DEFERRED    Resolved = DONE + DISMISSED + PROMOTED
 
 export const STATUS = {
 	OPEN: 'OPEN',
@@ -43,10 +44,11 @@ export const STATUS = {
 	DELETED: 'DELETED',
 }
 
-export const ACTIVE_STATUSES = new Set([STATUS.OPEN, STATUS.DEFERRED])
+export const ACTIVE_STATUSES   = new Set([STATUS.OPEN])
+export const DEFERRED_STATUSES = new Set([STATUS.DEFERRED])
 export const RESOLVED_STATUSES = new Set([STATUS.DONE, STATUS.DISMISSED, STATUS.PROMOTED])
 
-// Statuses that should never appear in either working tab (History/admin only).
+// Statuses that should never appear in any working tab (History/admin only).
 export const HIDDEN_STATUSES = new Set([STATUS.DELETED])
 
 export function normalizeStatus(value) {
@@ -56,6 +58,10 @@ export function normalizeStatus(value) {
 
 export function isActiveStatus(value) {
 	return ACTIVE_STATUSES.has(normalizeStatus(value))
+}
+
+export function isDeferredStatus(value) {
+	return DEFERRED_STATUSES.has(normalizeStatus(value))
 }
 
 export function isResolvedStatus(value) {
