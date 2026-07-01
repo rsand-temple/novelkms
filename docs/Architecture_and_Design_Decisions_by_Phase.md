@@ -429,3 +429,40 @@ A frontend-only feature adding a full help center, context-sensitive help button
 - D6: Section grouping/ordering in `helpSections.js`; per-topic `section`+`order` in frontmatter.
 - D7: Static validator in `scripts/check-help.mjs`.
 - D8: Client-side search over title + body included.
+
+### V32 — Artifacts (per-project file/folder store)
+
+A per-project non-manuscript file/folder area — the first feature that stores opaque binary content outside PostgreSQL. Manuscript scenes/chapters/templates remain in the database; artifact file bytes live on a host-mounted disk volume keyed by an opaque blob id, so the SQL tree owns names/hierarchy/trash/ordering and the on-disk store owns nothing but bytes.
+
+**Schema (V32, identical in both dialects).** `artifact_blob` (content-store index: `user_id` for the quota SUM, `sha256` captured for future content-addressed dedup, `storage_key` for the on-disk path) and `artifact_node` (self-referential tree: `parent_id NULL` = virtual project root — no root row; `node_type` FOLDER|FILE; `name`/`name_normalized` for case-preserving/case-insensitive uniqueness; `blob_id` FK → `artifact_blob` for FILE nodes; denormalized `size_bytes`/`content_type` so the Explorer details view and the tree read need no blob join; standard `deleted_at`/`deleted_batch_id` columns for the root-stamping trash pattern). `app_user.artifact_quota_bytes` added as a nullable per-user override (NULL = config default); forward-prep for a future admin "grant more storage" action.
+
+**Blob store (`ArtifactStorage`).** Uploads stream to a `.staging` file under the root directory (cap enforced mid-stream via `FileTooLargeException`; SHA-256 computed in the same pass), then `commit()` does an atomic same-volume rename into a sharded location (`shard/blobId`). Staging and final share a root so the move is a filesystem rename, not a copy. `discard()` cleans up staged bytes on cap/quota rejection. `delete()` is best-effort post-purge (an unreferenced leftover file is harmless). Blank `storageDir` falls back to a temp directory with a startup warning — the same dev-fallback idiom as the encryption key.
+
+**Case convention.** Windows-style: `name` stored exactly as authored; `name_normalized = lower(name)` drives case-insensitive sibling uniqueness within a folder. Uniqueness is enforced in the DAO inside the mutating transaction (collision → 409 `name_conflict`), NOT by a DB unique index: H2 cannot express a filtered unique index, and trashed siblings must not block name reuse.
+
+**Quota model.** Per-user (summed across all their projects via `artifact_blob.user_id`), not per-project. Quota = `COALESCE(app_user.artifact_quota_bytes, config.artifacts.defaultUserQuotaBytes)`. Usage counts trashed-but-not-purged files (trashing frees nothing; only purge does). Two structured error responses: `file_too_large` (400, includes `maxBytes`) and `storage_quota_exceeded` (400, includes `usedBytes`/`quotaBytes`/`fileBytes`).
+
+**Upload transaction.** Stream → stage (cap check) → quota check → `storage.commit()` → single JDBC transaction (insert `artifact_blob` + insert `artifact_node` on the same connection) → return. On DB failure: rollback connection, then `storage.delete(storageKey)` for the committed-but-unreferenced blob. On cap/quota failure: `storage.discard(staged)`. Two error classes, one cleanup path, no leaked bytes.
+
+**Trash integration.** Two new root types: `ARTIFACT_FOLDER`, `ARTIFACT_FILE`. `TrashDao.trashArtifactNode` resolves name/type/project/child-count via the project ownership join and calls the shared `doTrash`. `TrashDao.purgeArtifactNode` uses a recursive CTE to collect all blob ids and storage keys before cascade-deleting the node subtree, then batch-deletes the orphaned blob rows, and returns the storage keys so `TrashService` can delete the on-disk bytes after the DB commit. `sweepOrphans` extended with `ARTIFACT_FOLDER`/`ARTIFACT_FILE` clauses. Restore: resolves parent liveness (root-level needs live project, nested needs live parent folder), case-insensitive Windows-style name de-dup via `dedupeArtifactName`, append `display_order`.
+
+**Tenant authorization.** `TenantAccessDao.ownsArtifactNode` added (joins `artifact_node → project`); folded into `ownsAnyEntity` so the tenant filter's generic JSON-body inspector accepts an artifact `parentId` on `/move` requests without rejecting it as an unknown entity. Project-scoped paths (`/projects/{id}/artifacts/...`) are authorized by the existing `projects/{uuid}` segment check. Node/file-scoped paths (`/artifacts/nodes/{id}/...`, `/artifacts/files/{id}/...`) carry only their own UUID; ownership is enforced in-resource via `requireOwnership`, following the established "UUID-only paths enforce ownership in the resource" rule.
+
+**Configuration.** New `artifacts:` block in `config.yaml`: `enabled` (true), `storageDir` (env `NOVELKMS_ARTIFACT_DIR`), `maxFileSizeBytes` (50 MB), `defaultUserQuotaBytes` (1 GB). `NovelKmsConfig.Artifacts` nested class with Lombok `@Getter`.
+
+**Frontend — nav.** `ArtifactsSection` (per-project root node, structural slot after `CodexSection` in `ProjectItem`): fixed, non-draggable, expandable. `ArtifactFolderItem` recursive folder nodes underneath. Files are intentionally NOT in the nav tree — folders only, mirroring the Windows two-pane model. Selecting any artifact node sets `selection.artifactFolderId` (`'root'` | folderId | null), added to `EMPTY_SELECTION` and stripped by `setSelection`'s transient-cleanup exactly like `aiDocType`.
+
+**Frontend — Explorer.** `ArtifactsPanel` replaces `EditorPanel` in the center pane when `artifactFolderId` is set (branched at the App level so EditorPanel is byte-for-byte untouched). Details table (Name/Type/Size/Modified), breadcrumb, toolbar (Up / New folder / Upload), right-click row menu (Download / Rename / Move to… / Move to Trash), per-user storage usage bar. Its own isolated `DndContext` for drag-a-row-onto-a-folder (and onto the `..` row to move up), fully separate from the manuscript `NavPanel` `DndContext`. Native OS file drag-and-drop with a `useEffect` document-level `dragover`/`drop` prevention (no browser navigation on mis-aimed drops) and a visual drop-zone overlay.
+
+**Decisions.**
+- D1: Scope = per-project (not global).
+- D2: Single `artifact_node` self-referential tree; no root row.
+- D3: External filesystem blob store (not Postgres LOB/bytea).
+- D4: Case-preserving, case-insensitive uniqueness via DAO check, not DB unique index.
+- D5: Integrated into existing Trash (same root-stamping pattern).
+- D6: Jersey multipart upload (existing `MultiPartFeature` registration).
+- D7: Quota per-user (not per-project).
+- D8: Files not in nav tree; Explorer in center pane with its own DndContext.
+- D9: Designing toward versioning (sha256 captured, artifact_file_version additive).
+- D10: Nav-pane folder drag deferred (additive fast-follow).
+- D11: Native OS file drop handled with document-level prevention + panel-level overlay.

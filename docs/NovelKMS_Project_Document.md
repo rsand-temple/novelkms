@@ -145,6 +145,21 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 - 26 starter topics covering the full product surface across 7 sections.
 - Zero-dependency Markdown renderer; no backend or migration required.
 
+### Artifacts (per-project file store)
+
+- Per-project file/folder tree for non-manuscript material: query letters, research PDFs, cover-art source images, etc.
+- File bytes live on a host-mounted disk volume outside PostgreSQL; renames and moves are pure metadata.
+- Windows-style case-preserving, case-insensitive names within a folder; collision enforcement in the DAO transaction, not a DB unique index (H2 cannot express filtered unique; trashed siblings must not block name reuse).
+- Upload: streaming to a staging file (SHA-256 computed, per-file 50 MB cap enforced mid-stream), then quota check, then atomic commit of blob + node in one transaction.
+- Per-user storage quota (default 1 GB via config; per-user `artifact_quota_bytes` override column for future admin "grant more storage"). Trashing frees nothing; only purge frees space.
+- Integrated into existing per-user Trash with two new root types (ARTIFACT_FOLDER, ARTIFACT_FILE); purge collects blob storage keys via recursive CTE before cascade-deleting the subtree, then removes on-disk bytes after commit.
+- Download: streaming with `Content-Disposition: attachment`; no in-app rendering.
+- Frontend: "Artifacts" root node per project in nav tree (fixed, non-draggable section node after Codex), sub-folders recursively underneath. Files appear only in the center-pane Explorer details view (Windows tree-pane model).
+- ArtifactsPanel Explorer: breadcrumb, Up / New folder / Upload toolbar, Name/Type/Size/Modified table, right-click row menu (Download / Rename / Move to… / Move to Trash), per-user storage usage bar, native OS file drag-and-drop.
+- Isolated dnd-kit DndContext for row-drag-to-folder moves, fully decoupled from manuscript DnD.
+- EditorPanel and manuscript DnD untouched — center-pane branches at App level: trash → artifacts → editor.
+- Designing toward Dropbox-style versioning: `sha256` captured on blobs, `artifact_file_version` additive.
+
 ## Known issues / watchlist
 
 - Billing/admin support now has a minimal console and family-access grant flow. Remaining billing work: extend trial, revoke/remove family access with a defined restoration policy, plan mapping, webhook diagnostics, and eventual Stripe reconciliation.
@@ -160,6 +175,9 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 - Delete confirmation dialog wording update: change "cannot be undone" language to "move to trash," and fix codex entries being referred to as "scenes" in that dialog.
 - Help topics are seed content; expand and refine as the product matures. The validator ensures cross-links stay valid.
 - `HelpButton` is wired into `SettingsDialog` as a reference example; wire into remaining dialogs and toolbars as help content is authored.
+- Artifacts: blob storage directory must be included in the backup set alongside `pg_dump` (blobs are NOT in PostgreSQL). Caddy/Dropwizard max request body should be ≥ 50 MB. Podman Quadlet needs a host volume mapped to `NOVELKMS_ARTIFACT_DIR`.
+- Artifacts: restore de-dup appends " (n)" to the whole name, not before the extension (`report.pdf` → `report.pdf (1)`) — consistent with manuscript pattern, acceptable for v1.
+- Artifacts: nav-pane folder drag (drag-to-reorder/reparent folders in the tree itself) deferred — moves are fully covered by the Explorer's drag-to-folder and right-click Move to… dialog.
 
 ## Near-term next actions
 
