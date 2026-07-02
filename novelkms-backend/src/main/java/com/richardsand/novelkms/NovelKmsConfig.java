@@ -88,9 +88,30 @@ public class NovelKmsConfig extends Configuration {
     public static class Artifacts {
         public boolean enabled               = true;
         public String  storageDir;
-        public long    maxFileSizeBytes      = 52_428_800L;     // 50 MB
-        public long    defaultUserQuotaBytes = 1_073_741_824L;  // 1 GB
+        public long    maxFileSizeBytes      = 52_428_800L;    // 50 MB
+        public long    defaultUserQuotaBytes = 1_073_741_824L; // 1 GB
     }
+
+    public static class Notifications {
+        public Registration registration = new Registration();
+
+        @Getter
+        public static class Registration {
+            public boolean enabled        = false;
+            public String  smtpHost;
+            public int     smtpPort       = 587;
+            public String  smtpUsername;
+            public String  smtpPassword;
+            public boolean startTls       = true;
+            public boolean ssl            = false;
+            public String  fromAddress;
+            public String  supportAddress = "support@novelkms.com";
+            public String  subjectPrefix  = "[NovelKMS]";
+        }
+    }
+
+    @JsonProperty
+    Notifications notifications = new Notifications();
 
     @JsonProperty
     Database database;

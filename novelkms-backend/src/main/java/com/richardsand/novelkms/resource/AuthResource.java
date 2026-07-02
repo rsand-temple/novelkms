@@ -13,6 +13,7 @@ import com.richardsand.novelkms.auth.CryptoTokens;
 import com.richardsand.novelkms.auth.OAuthService;
 import com.richardsand.novelkms.auth.SessionService;
 import com.richardsand.novelkms.dao.AuthDao;
+import com.richardsand.novelkms.service.RegistrationNotificationService;
 
 import jakarta.inject.Inject;
 import jakarta.servlet.http.HttpServletRequest;
@@ -44,16 +45,23 @@ public class AuthResource {
             String mobileNumber) {
     }
 
-    private final OAuthService        oauth;
-    private final SessionService      sessions;
-    private final AuthDao             dao;
-    private final NovelKmsConfig.Auth config;
+    private final OAuthService                    oauth;
+    private final SessionService                  sessions;
+    private final AuthDao                         dao;
+    private final NovelKmsConfig.Auth             config;
+    private final RegistrationNotificationService registrationNotifications;
 
     @Inject
-    public AuthResource(OAuthService oauth, SessionService sessions, AuthDao dao, NovelKmsConfig config) {
+    public AuthResource(
+            OAuthService oauth,
+            SessionService sessions,
+            AuthDao dao,
+            RegistrationNotificationService registrationNotifications,
+            NovelKmsConfig config) {
         this.oauth = oauth;
         this.sessions = sessions;
         this.dao = dao;
+        this.registrationNotifications = registrationNotifications;
         this.config = config.getAuth();
     }
 
@@ -176,8 +184,13 @@ public class AuthResource {
             return Response.status(Response.Status.UNAUTHORIZED).entity(Map.of("error", "registration_expired")).build();
         if (body.displayName() == null || body.displayName().isBlank() || body.displayName().trim().length() > 200)
             return Response.status(Response.Status.BAD_REQUEST).entity(Map.of("error", "display_name_required")).build();
-        var user = dao.register(pending.get(), body.firstName(), body.lastName(), body.displayName(), body.mobileNumber());
+
+        var pendingRegistration = pending.get();
+        var user                = dao.register(pendingRegistration, body.firstName(), body.lastName(), body.displayName(), body.mobileNumber());
         logger.info("Registration completed: userId={}, email={}", user.id(), user.emailAddress());
+
+        registrationNotifications.notifyRegistration(user, pendingRegistration, request.getRemoteAddr(), request.getHeader("User-Agent"));
+
         String session = sessions.create(user, request.getRemoteAddr(), request.getHeader("User-Agent"));
         return Response.ok(
                 Map.of(

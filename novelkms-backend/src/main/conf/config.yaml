@@ -63,6 +63,19 @@ database:
 #   Generate one with:  openssl rand -base64 32
 security:
   encryptionKey: {{NOVELKMS_ENCRYPTION_KEY | d('')}}
+  
+notifications:
+  registration:
+    enabled: ${REGISTRATION_NOTIFICATION_ENABLED:-false}
+    smtpHost: ${SMTP_HOST}
+    smtpPort: ${SMTP_PORT:-587}
+    smtpUsername: ${SMTP_USERNAME}
+    smtpPassword: ${SMTP_PASSWORD}
+    startTls: true
+    ssl: false
+    fromAddress: ${SMTP_FROM_ADDRESS:-support@novelkms.com}
+    supportAddress: ${SMTP_SUPPORT_ADDRESS:-support@novelkms.com}
+    subjectPrefix: "[NovelKMS]"
 
 auth:
   publicBaseUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:8080', true)}}

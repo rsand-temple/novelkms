@@ -81,8 +81,8 @@ import com.richardsand.novelkms.resource.StripeWebhookResource;
 import com.richardsand.novelkms.resource.StyleResource;
 import com.richardsand.novelkms.resource.SummaryResource;
 import com.richardsand.novelkms.resource.TemplateResource;
-import com.richardsand.novelkms.resource.TrashResource;
 import com.richardsand.novelkms.resource.ToolsResource;
+import com.richardsand.novelkms.resource.TrashResource;
 import com.richardsand.novelkms.resource.UserPreferenceResource;
 import com.richardsand.novelkms.resource.admin.AdminAuditResource;
 import com.richardsand.novelkms.resource.admin.AdminBillingResource;
@@ -97,6 +97,7 @@ import com.richardsand.novelkms.service.BillingService;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
+import com.richardsand.novelkms.service.RegistrationNotificationService;
 import com.richardsand.novelkms.service.TrashService;
 import com.richardsand.novelkms.service.admin.AdminBillingService;
 import com.richardsand.novelkms.service.tools.CalendarToolsService;
@@ -209,24 +210,25 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         StripeWebhookEventDao stripeWebhookEventDao = new StripeWebhookEventDao(ds);
 
         // Services
-        AdminBillingService adminBillingService = new AdminBillingService(userSubscriptionDao,
+        AdminBillingService             adminBillingService             = new AdminBillingService(userSubscriptionDao,
                 adminAuditDao,
                 adminUserDao,
                 authDao,
                 mapper);
-        ArchiveService      archiveService      = new ArchiveService(archiveDao);
-        BillingService      billingService      = new BillingService(userSubscriptionDao, config);
-        EpubExportService   epubExportService   = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        ExportService       exportService       = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
-        ImportService       importService       = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
-        OAuthService        oauthService        = new OAuthService(config.getAuth(), authDao);
-        SessionService      sessionService      = new SessionService(authDao, config.getAuth());
-        ArtifactStorage     artifactStorage     = new ArtifactStorage(
+        ArchiveService                  archiveService                  = new ArchiveService(archiveDao);
+        ArtifactStorage                 artifactStorage                 = new ArtifactStorage(
                 config.getArtifacts() != null ? config.getArtifacts().storageDir : null);
-        ArtifactService     artifactService     = new ArtifactService(ds, artifactNodeDao, artifactBlobDao, artifactStorage, config);
-        TrashService        trashService        = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao,
+        ArtifactService                 artifactService                 = new ArtifactService(ds, artifactNodeDao, artifactBlobDao, artifactStorage, config);
+        BillingService                  billingService                  = new BillingService(userSubscriptionDao, config);
+        EpubExportService               epubExportService               = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
+        ExportService                   exportService                   = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
+        ImportService                   importService                   = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
+        OAuthService                    oauthService                    = new OAuthService(config.getAuth(), authDao);
+        RegistrationNotificationService registrationNotificationService = new RegistrationNotificationService(config.getNotifications());
+        SessionService                  sessionService                  = new SessionService(authDao, config.getAuth());
+        TrashService                    trashService                    = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao,
                 artifactNodeDao, artifactStorage);
-
+        
         // AI Credential DAO
         SecretCipher    secretCipher    = new SecretCipher(
                 config.getSecurity() != null ? config.getSecurity().encryptionKey : null);
@@ -346,6 +348,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(pageLayoutDao).to(PageLayoutDao.class);
                 bind(partDao).to(PartDao.class);
                 bind(projectDao).to(ProjectDao.class);
+                bind(registrationNotificationService).to(RegistrationNotificationService.class);
                 bind(sceneDao).to(SceneDao.class);
                 bind(sessionService).to(SessionService.class);
                 bind(stripeWebhookEventDao).to(StripeWebhookEventDao.class);
