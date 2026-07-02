@@ -100,6 +100,7 @@ import com.richardsand.novelkms.service.ImportService;
 import com.richardsand.novelkms.service.RegistrationNotificationService;
 import com.richardsand.novelkms.service.TrashService;
 import com.richardsand.novelkms.service.admin.AdminBillingService;
+import com.richardsand.novelkms.service.admin.AdminUserDeleteService;
 import com.richardsand.novelkms.service.tools.CalendarToolsService;
 import com.richardsand.novelkms.service.tools.OpenMeteoWeatherProvider;
 import com.richardsand.novelkms.service.tools.WeatherLookupService;
@@ -210,16 +211,27 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         StripeWebhookEventDao stripeWebhookEventDao = new StripeWebhookEventDao(ds);
 
         // Services
-        AdminBillingService             adminBillingService             = new AdminBillingService(userSubscriptionDao,
+        AdminBillingService adminBillingService = new AdminBillingService(userSubscriptionDao,
                 adminAuditDao,
                 adminUserDao,
                 authDao,
                 mapper);
-        ArchiveService                  archiveService                  = new ArchiveService(archiveDao);
-        ArtifactStorage                 artifactStorage                 = new ArtifactStorage(
+        ArchiveService  archiveService  = new ArchiveService(archiveDao);
+        ArtifactStorage artifactStorage = new ArtifactStorage(
                 config.getArtifacts() != null ? config.getArtifacts().storageDir : null);
-        ArtifactService                 artifactService                 = new ArtifactService(ds, artifactNodeDao, artifactBlobDao, artifactStorage, config);
-        BillingService                  billingService                  = new BillingService(userSubscriptionDao, config);
+        ArtifactService artifactService = new ArtifactService(ds, artifactNodeDao, artifactBlobDao,
+                artifactStorage, config);
+        BillingService  billingService  = new BillingService(userSubscriptionDao, config);
+
+        AdminUserDeleteService adminUserDeleteService = new AdminUserDeleteService(
+                ds,
+                adminUserDao,
+                adminAuditDao,
+                userSubscriptionDao,
+                artifactStorage,
+                config,
+                mapper);
+
         EpubExportService               epubExportService               = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
         ExportService                   exportService                   = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
         ImportService                   importService                   = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
@@ -228,7 +240,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         SessionService                  sessionService                  = new SessionService(authDao, config.getAuth());
         TrashService                    trashService                    = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao,
                 artifactNodeDao, artifactStorage);
-        
+
         // AI Credential DAO
         SecretCipher    secretCipher    = new SecretCipher(
                 config.getSecurity() != null ? config.getSecurity().encryptionKey : null);
@@ -318,6 +330,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(adminBillingService).to(AdminBillingService.class);
                 bind(adminMetricsDao).to(AdminMetricsDao.class);
                 bind(adminUserDao).to(AdminUserDao.class);
+                bind(adminUserDeleteService).to(AdminUserDeleteService.class);
                 bind(aiCredentialDao).to(AiCredentialDao.class);
                 bind(aiFormInstructionsDao).to(AiFormInstructionsDao.class);
                 bind(aiReviewDao).to(AiReviewDao.class);

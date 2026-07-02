@@ -24,6 +24,7 @@ import {
 } from '@mui/material'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
 import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom'
 import SearchIcon from '@mui/icons-material/Search'
 import { adminApi } from '../../api/admin'
@@ -426,6 +427,94 @@ function GrantFamilyAccessDialog({ open, user, saving, onClose, onSubmit }) {
 	)
 }
 
+/**
+ * Confirmation dialog for the irreversible hard-delete action.
+ *
+ * The admin must type the target user's email address verbatim before the
+ * Delete button becomes active — same pattern GitHub uses for dangerous
+ * destructive actions.
+ */
+function HardDeleteUserDialog({ open, user, saving, onClose, onSubmit }) {
+	const [reason, setReason] = useState('')
+	const [confirmEmail, setConfirmEmail] = useState('')
+
+	const targetEmail = user?.emailAddress ?? ''
+	const emailMatches = confirmEmail.trim().toLowerCase() === targetEmail.toLowerCase()
+	const canSubmit = !saving && emailMatches && targetEmail !== ''
+
+	return (
+		<Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
+			<DialogTitle sx={{ color: 'error.main' }}>
+				Permanently delete user
+			</DialogTitle>
+			<DialogContent>
+				<Stack spacing={2} sx={{ mt: 1 }}>
+					<Alert severity="error">
+						This action is <strong>irreversible</strong>. It will permanently delete all
+						manuscripts, codex entries, AI reviews, artifacts, billing records, and
+						credentials for this account. Any active Stripe subscription will be
+						canceled immediately.
+					</Alert>
+
+					<Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'action.hover' }}>
+						<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+							Account to be deleted
+						</Typography>
+						<Typography variant="body2" sx={{ fontWeight: 700 }}>
+							{user?.displayName ?? '—'}
+						</Typography>
+						<Typography variant="body2" color="text.secondary">
+							{targetEmail}
+						</Typography>
+						<Typography variant="caption" color="text.secondary">
+							{user?.id}
+						</Typography>
+					</Paper>
+
+					<TextField
+						label="Reason for deletion"
+						value={reason}
+						onChange={(event) => setReason(event.target.value)}
+						placeholder="spam_account, abuse, gdpr_request"
+						fullWidth
+						size="small"
+					/>
+
+					<Box>
+						<Typography variant="body2" sx={{ mb: 1 }}>
+							Type <strong>{targetEmail}</strong> to confirm:
+						</Typography>
+						<TextField
+							value={confirmEmail}
+							onChange={(event) => setConfirmEmail(event.target.value)}
+							placeholder={targetEmail}
+							fullWidth
+							size="small"
+							error={confirmEmail !== '' && !emailMatches}
+							autoComplete="off"
+							inputProps={{ spellCheck: false }}
+						/>
+					</Box>
+				</Stack>
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={onClose} disabled={saving}>
+					Cancel
+				</Button>
+				<Button
+					variant="contained"
+					color="error"
+					onClick={() => onSubmit({ reason })}
+					disabled={!canSubmit}
+					startIcon={saving ? <CircularProgress size={16} /> : <DeleteForeverIcon />}
+				>
+					Delete permanently
+				</Button>
+			</DialogActions>
+		</Dialog>
+	)
+}
+
 export default function AdminSupportConsole() {
 	const [query, setQuery] = useState('')
 	const [users, setUsers] = useState([])
@@ -436,7 +525,9 @@ export default function AdminSupportConsole() {
 	const [loadingUsers, setLoadingUsers] = useState(true)
 	const [loadingDetail] = useState(false)
 	const [savingFamilyAccess, setSavingFamilyAccess] = useState(false)
+	const [deletingUser, setDeletingUser] = useState(false)
 	const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
+	const [hardDeleteDialogOpen, setHardDeleteDialogOpen] = useState(false)
 	const [error, setError] = useState(null)
 	const [success, setSuccess] = useState(null)
 	const [tab, setTab] = useState('overview')
@@ -594,6 +685,31 @@ export default function AdminSupportConsole() {
 		}
 	}
 
+	async function handleHardDeleteUser(body) {
+		if (!selectedUserId) return
+
+		setDeletingUser(true)
+		setError(null)
+		setSuccess(null)
+
+		try {
+			await adminApi.hardDeleteUser(selectedUserId, body.reason)
+
+			// Remove the deleted user from the list and clear selection
+			setUsers((prev) => prev.filter((u) => u.id !== selectedUserId))
+			setSelectedUserId(null)
+			setSelectedUser(null)
+			setBilling(null)
+			setAuditRows([])
+			setSuccess('User permanently deleted.')
+			setHardDeleteDialogOpen(false)
+		} catch (err) {
+			setError(err.response?.data?.message ?? 'Could not delete user.')
+		} finally {
+			setDeletingUser(false)
+		}
+	}
+
 	const userForHeader = selectedUser ?? selectedSummary
 
 	return (
@@ -728,7 +844,21 @@ export default function AdminSupportConsole() {
 								</Paper>
 							) : (
 								<>
-									<Section title="User">
+									<Section
+										title="User"
+										actions={
+											<Button
+												size="small"
+												variant="outlined"
+												color="error"
+												startIcon={<DeleteForeverIcon />}
+												onClick={() => setHardDeleteDialogOpen(true)}
+												disabled={!selectedUserId}
+											>
+												Delete user
+											</Button>
+										}
+									>
 										<Stack
 											direction="row"
 											spacing={1}
@@ -828,6 +958,16 @@ export default function AdminSupportConsole() {
 					saving={savingFamilyAccess}
 					onClose={() => setFamilyDialogOpen(false)}
 					onSubmit={handleGrantFamilyAccess}
+				/>
+			)}
+
+			{hardDeleteDialogOpen && (
+				<HardDeleteUserDialog
+					open={hardDeleteDialogOpen}
+					user={userForHeader}
+					saving={deletingUser}
+					onClose={() => setHardDeleteDialogOpen(false)}
+					onSubmit={handleHardDeleteUser}
 				/>
 			)}
 		</Box>

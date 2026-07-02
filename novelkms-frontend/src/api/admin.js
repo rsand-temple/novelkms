@@ -20,6 +20,14 @@ export const adminApi = {
 		await client.post(`/admin/billing/users/${encodeURIComponent(userId)}/family-access`, body)
 	).data,
 
+	/**
+	 * Permanently deletes a user and all their data. Irreversible.
+	 * Returns nothing on success (204 No Content).
+	 */
+	hardDeleteUser: async (userId, reason) => {
+		await client.post(`/admin/users/${encodeURIComponent(userId)}/hard-delete`, { reason })
+	},
+
 	getUserAudit: async (userId, limit = 25) => (
 		await client.get(`/admin/audit/users/${encodeURIComponent(userId)}`, { params: { limit } })
 	).data,
