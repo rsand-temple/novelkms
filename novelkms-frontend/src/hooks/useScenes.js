@@ -54,6 +54,21 @@ export const useUpdateSceneContent = () => {
 	})
 }
 
+/**
+ * Saves a codex entry's structured field values (the schema-driven form).
+ * structuredData is a JSON string. The mutation seeds the returned scene into
+ * the detail cache so the form stays in sync on remount without a refetch.
+ */
+export const useSaveSceneStructured = () => {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: ({ id, structuredData }) => scenesApi.updateStructured(id, structuredData),
+		onSuccess: (saved, { id }) => {
+			if (saved) queryClient.setQueryData(SCENE_KEYS.detail(id), saved)
+		},
+	})
+}
+
 export const useDeleteScene = () => {
 	const queryClient = useQueryClient()
 	return useMutation({

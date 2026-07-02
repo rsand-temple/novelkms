@@ -3,12 +3,23 @@ package com.richardsand.novelkms.service;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.slf4j.Logger;
@@ -30,6 +41,12 @@ import com.richardsand.novelkms.model.ArtifactNode;
  *
  * <p>Trash / restore / purge are delegated to {@code TrashService}, which
  * co-injects this store's DAOs and {@link ArtifactStorage}.
+ *
+ * <p>The {@link #exportZip} method streams the full project artifact tree into a
+ * {@link ZipOutputStream} without writing a temp file on disk. Folder entries
+ * are written first (so extractors reconstruct empty directories); file bytes
+ * are streamed directly from the blob store. Missing blobs are logged and
+ * skipped rather than aborting the whole archive.
  */
 public class ArtifactService {
 
@@ -362,6 +379,92 @@ public class ArtifactService {
     }
 
     // =========================================================================
+    // Zip export
+    // =========================================================================
+
+    /**
+     * Returns a safe filename for the project's artifact zip, derived from the
+     * project title. Non-filename characters are replaced with hyphens.
+     */
+    public String zipFilename(UUID projectId) throws SQLException {
+        String title = findProjectTitle(projectId);
+        // Keep alphanumerics, periods, underscores, hyphens, and spaces; replace everything else.
+        String safe = title
+                .replaceAll("[^A-Za-z0-9._\\- ]", "-")
+                .replaceAll("\\s+", "-")
+                .replaceAll("-+", "-")
+                .replaceAll("^-|-$", "");
+        if (safe.isEmpty()) {
+            safe = "artifacts";
+        }
+        return safe + "-artifacts.zip";
+    }
+
+    /**
+     * Streams all live (non-trashed) artifacts for the project into {@code out}
+     * as a zip archive, preserving the folder hierarchy. Folder entries are
+     * written first so empty directories survive extraction. File bytes are read
+     * directly from the blob store without staging to disk. Missing blobs are
+     * logged and skipped rather than aborting the whole archive.
+     *
+     * <p>The caller is responsible for wrapping {@code out} in a
+     * {@code StreamingOutput} and setting the appropriate HTTP headers.
+     */
+    public void exportZip(UUID projectId, OutputStream out) throws SQLException, IOException {
+        List<ArtifactNode> nodes = nodeDao.findLiveByProject(projectId);
+
+        // Build an id→node map for O(1) parent-chain traversal.
+        Map<UUID, ArtifactNode> byId = nodes.stream()
+                .collect(Collectors.toMap(ArtifactNode::getId, n -> n));
+
+        // Fetch all blob refs in one query (avoids N round-trips during streaming).
+        Map<UUID, BlobRef> blobs = blobDao.findByProject(projectId);
+
+        // Build the list of (zipPath, node) pairs.
+        record PathEntry(String zipPath, ArtifactNode node) {}
+        List<PathEntry> entries = new ArrayList<>();
+        for (ArtifactNode node : nodes) {
+            String basePath = buildPath(node, byId);
+            // Zip convention: directory entries end with '/'.
+            String zipPath = ArtifactNodeDao.TYPE_FOLDER.equals(node.getType())
+                    ? basePath + "/" : basePath;
+            entries.add(new PathEntry(zipPath, node));
+        }
+
+        // Sort: folder entries before file entries (by type), then alphabetically
+        // within each group, so extractors encounter parent directories first.
+        entries.sort(Comparator
+                .comparingInt((PathEntry e) -> ArtifactNodeDao.TYPE_FILE.equals(e.node().getType()) ? 1 : 0)
+                .thenComparing(PathEntry::zipPath));
+
+        try (ZipOutputStream zos = new ZipOutputStream(out)) {
+            for (PathEntry entry : entries) {
+                ZipEntry ze = new ZipEntry(entry.zipPath());
+                ze.setTime(entry.node().getUpdatedAt().toEpochMilli());
+                zos.putNextEntry(ze);
+
+                if (ArtifactNodeDao.TYPE_FILE.equals(entry.node().getType())) {
+                    BlobRef blob = blobs.get(entry.node().getId());
+                    if (blob == null) {
+                        logger.warn("Artifact export: no blob found for file node {} ({}), skipping entry",
+                                entry.node().getId(), entry.zipPath());
+                        zos.closeEntry();
+                        continue;
+                    }
+                    try (InputStream in = storage.open(blob.storageKey())) {
+                        in.transferTo(zos);
+                    } catch (IOException e) {
+                        logger.warn("Artifact export: could not read blob {} for node {} ({}), skipping: {}",
+                                blob.storageKey(), entry.node().getId(), entry.zipPath(), e.getMessage());
+                    }
+                }
+
+                zos.closeEntry();
+            }
+        }
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 
@@ -378,6 +481,38 @@ public class ArtifactService {
             throw new ArtifactException(400, "invalid_parent", "Files cannot contain other items.");
         }
         return parent;
+    }
+
+    /**
+     * Reconstructs the full zip path for a node by walking its parent chain.
+     * Segments are joined with {@code /}. Loops are guarded against corrupt trees.
+     */
+    private String buildPath(ArtifactNode node, Map<UUID, ArtifactNode> byId) {
+        Deque<String> parts = new ArrayDeque<>();
+        parts.addFirst(node.getName());
+        UUID parentId = node.getParentId();
+        int guard = 0;
+        while (parentId != null && guard++ < 10_000) {
+            ArtifactNode parent = byId.get(parentId);
+            if (parent == null) {
+                break;
+            }
+            parts.addFirst(parent.getName());
+            parentId = parent.getParentId();
+        }
+        return String.join("/", parts);
+    }
+
+    /** Looks up the project title for use in the zip filename. */
+    private String findProjectTitle(UUID projectId) throws SQLException {
+        String sql = "SELECT title FROM project WHERE id = ?";
+        try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, projectId);
+            try (ResultSet rs = ps.executeQuery()) {
+                String title = rs.next() ? rs.getString(1) : null;
+                return (title == null || title.isBlank()) ? "artifacts" : title.trim();
+            }
+        }
     }
 
     private static String validateName(String raw) {

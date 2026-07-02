@@ -3,6 +3,7 @@ package com.richardsand.novelkms.service;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -14,6 +15,8 @@ import org.jsoup.nodes.Element;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.richardsand.novelkms.ai.AiProvider;
 import com.richardsand.novelkms.ai.AiProviderException;
 import com.richardsand.novelkms.ai.BookSummaryRequest;
@@ -49,6 +52,8 @@ import com.richardsand.novelkms.model.ChapterSummary;
 import com.richardsand.novelkms.model.ChapterSummaryStatus;
 import com.richardsand.novelkms.model.Codex;
 import com.richardsand.novelkms.model.CodexCategory;
+import com.richardsand.novelkms.model.CodexField;
+import com.richardsand.novelkms.model.CodexSchema;
 import com.richardsand.novelkms.model.Scene;
 
 import jakarta.ws.rs.core.Response.Status;
@@ -70,6 +75,9 @@ import jakarta.ws.rs.core.Response.Status;
  */
 public class AiReviewService {
     private static final Logger logger = LoggerFactory.getLogger(AiReviewService.class);
+
+    /** Shared JSON mapper for parsing codex entry structured-field values. */
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /** Default review categories sent to the provider. */
     public static final List<String> DEFAULT_CATEGORIES = List.of(
@@ -442,11 +450,13 @@ public class AiReviewService {
         if (entries.isEmpty()) {
             return null;
         }
-        StringBuilder sb       = new StringBuilder();
-        String        lastCat  = null;
+        Map<String, CodexSchema> schemaByKey = schemasByCategoryKey();
+        StringBuilder            sb          = new StringBuilder();
+        String                   lastCat     = null;
         for (CodexDao.AiContextEntry e : entries) {
-            String plain = htmlToPlainText(e.content());
-            if (plain.isBlank()) {
+            String structured = renderStructuredFields(schemaByKey.get(e.categoryKey()), e.structuredData());
+            String plain      = htmlToPlainText(e.content());
+            if (structured.isBlank() && plain.isBlank()) {
                 continue;
             }
             String category = (e.categoryTitle() == null || e.categoryTitle().isBlank())
@@ -456,10 +466,68 @@ public class AiReviewService {
                 lastCat = category;
             }
             String title = (e.title() == null || e.title().isBlank()) ? "Untitled" : e.title().trim();
-            sb.append("=== ").append(title).append(" ===\n").append(plain).append("\n\n");
+            sb.append("=== ").append(title).append(" ===\n");
+            if (!structured.isBlank()) {
+                sb.append(structured).append("\n");
+            }
+            if (!plain.isBlank()) {
+                sb.append(plain).append("\n");
+            }
+            sb.append("\n");
         }
         String result = sb.toString().strip();
         return result.isEmpty() ? null : result;
+    }
+
+    /**
+     * Category key → schema, from the master category list, so a pinned entry's
+     * structured fields can be rendered with their labels and feedsAi gating.
+     * Categories with no schema are omitted.
+     */
+    private Map<String, CodexSchema> schemasByCategoryKey() throws SQLException {
+        Map<String, CodexSchema> byKey = new HashMap<>();
+        for (CodexCategory cat : codexCategoryDao.findAll()) {
+            if (cat.getSchema() != null) {
+                byKey.put(cat.getCategoryKey(), cat.getSchema());
+            }
+        }
+        return byKey;
+    }
+
+    /**
+     * Renders a codex entry's structured fields as labeled "Label: value" lines,
+     * including only fields the schema marks feedsAi and whose stored value is
+     * present and non-blank, in schema (display) order. Returns an empty string
+     * when there is nothing to render — no schema, no values, or every relevant
+     * field private or blank.
+     */
+    private String renderStructuredFields(CodexSchema schema, String structuredJson) {
+        if (schema == null || schema.getFields() == null
+                || structuredJson == null || structuredJson.isBlank()) {
+            return "";
+        }
+        Map<String, Object> values;
+        try {
+            values = MAPPER.readValue(structuredJson, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception ex) {
+            logger.warn("Ignoring malformed scene.structured_data JSON: {}", ex.getMessage());
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (CodexField field : schema.getFields()) {
+            if (!field.isFeedsAi()) {
+                continue;
+            }
+            Object raw   = values.get(field.getKey());
+            String value = raw == null ? "" : raw.toString().trim();
+            if (value.isEmpty()) {
+                continue;
+            }
+            String label = (field.getLabel() == null || field.getLabel().isBlank())
+                    ? field.getKey() : field.getLabel().trim();
+            sb.append(label).append(": ").append(value).append("\n");
+        }
+        return sb.toString().strip();
     }
 
     /**

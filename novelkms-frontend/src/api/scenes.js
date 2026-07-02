@@ -33,6 +33,16 @@ export const scenesApi = {
 		return response.data
 	},
 
+	/**
+	 * Saves a codex entry's structured field values.
+	 * structuredData is a JSON string (an object keyed by the category schema's
+	 * field keys). Independent of the content save path.
+	 */
+	updateStructured: async (id, structuredData) => {
+		const response = await client.put(`/scenes/${id}/structured-data`, { structuredData })
+		return response.data
+	},
+
 	delete: async (id) => {
 		await client.delete(`/scenes/${id}`)
 	},

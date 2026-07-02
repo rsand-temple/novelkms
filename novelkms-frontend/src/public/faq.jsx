@@ -31,7 +31,7 @@ const FAQ_SECTIONS = [
 			{
 				question: 'What happens if I cancel?',
 				answer:
-					'You should export your manuscript and project materials before leaving the service. The goal is to make leaving possible without losing control of your work.',
+					'You should export your manuscript and project materials before leaving the service. We are committed to making leaving as easy as joining, without losing control of your work.',
 			},
 		],
 	},
@@ -41,7 +41,7 @@ const FAQ_SECTIONS = [
 			{
 				question: 'Does NovelKMS write my book for me?',
 				answer:
-					'No. NovelKMS uses AI for review, summaries, memory documents, and organization. It does not automatically rewrite your manuscript or insert AI prose into your book.',
+					'No. NovelKMS uses AI for review, summaries, memory documents, and organization. It does not write or rewrite your manuscript or ever directly touch the content of your book.',
 			},
 			{
 				question: 'What does bring your own OpenAI key mean?',
@@ -51,7 +51,7 @@ const FAQ_SECTIONS = [
 			{
 				question: 'Can I use NovelKMS without AI?',
 				answer:
-					'Yes. The manuscript editor, project structure, Codex, import, export, and organization features are useful without enabling AI.',
+					'Absolutely! The manuscript editor, project structure, Codex, import, export, and organization features are all useful regardless of AI.',
 			},
 		],
 	},
@@ -61,7 +61,7 @@ const FAQ_SECTIONS = [
 			{
 				question: 'Is there a free trial?',
 				answer:
-					'Founders access currently includes a 14-day trial. After the trial, early subscribers can continue on the founders plan.',
+					'All users are granted a 14-day trial.',
 			},
 			{
 				question: 'Can I cancel anytime?',
@@ -81,7 +81,7 @@ const FAQ_SECTIONS = [
 			{
 				question: 'Is NovelKMS finished?',
 				answer:
-					'NovelKMS is actively developed. The core manuscript, AI review, summaries, Codex, authentication, billing, and administration foundations are in place, but the product will continue to evolve based on real author feedback.',
+					'NovelKMS is actively developed. The core manuscript, AI review, summaries, Codex, authentication, billing, and administration featurers are in place. The product will continue to evolve based on user feedback.',
 			},
 			{
 				question: 'Who is NovelKMS best for right now?',

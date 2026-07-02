@@ -124,12 +124,13 @@ public class CodexDao {
             String title,
             int wordCount,
             boolean pinned,
-            String content) {
+            String content,
+            String structuredData) {
     }
 
     private static final String AI_CONTEXT_SELECT =
             "SELECT s.id AS scene_id, s.chapter_id, ch.codex_category, ch.title AS category_title, " +
-            "       s.title, s.word_count, s.ai_context_pinned, s.content " +
+            "       s.title, s.word_count, s.ai_context_pinned, s.content, s.structured_data " +
             "FROM scene s " +
             "JOIN chapter ch ON ch.id = s.chapter_id " +
             "WHERE ch.codex_id = ? AND ch.deleted_at IS NULL AND s.deleted_at IS NULL ";
@@ -143,7 +144,8 @@ public class CodexDao {
                 rs.getString("title"),
                 rs.getInt("word_count"),
                 rs.getBoolean("ai_context_pinned"),
-                rs.getString("content"));
+                rs.getString("content"),
+                rs.getString("structured_data"));
     }
 
     /**

@@ -12,6 +12,7 @@ import {
 } from '@dnd-kit/core'
 import FolderSpecialIcon from '@mui/icons-material/FolderSpecial'
 import FolderIcon from '@mui/icons-material/Folder'
+import FolderZipIcon from '@mui/icons-material/FolderZip'
 import DescriptionIcon from '@mui/icons-material/Description'
 import ImageIcon from '@mui/icons-material/Image'
 import AddIcon from '@mui/icons-material/Add'
@@ -159,6 +160,14 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 		document.body.appendChild(a)
 		a.click()
 		a.remove()
+	}
+
+	// Triggers a browser download of all project artifacts as a zip archive.
+	// The server streams the zip on the fly — no temp file persists after the
+	// response completes. The browser handles the download natively; no React
+	// state or mutation is needed.
+	const handleExportAll = () => {
+		window.location.href = artifactsApi.exportUrl(projectId)
 	}
 
 	const handleUploadClick = () => fileInputRef.current?.click()
@@ -363,6 +372,11 @@ export default function ArtifactsPanel({ projectId, folderId, editingNodeId, set
 						hidden
 						onChange={handleFilesChosen}
 					/>
+					<Tooltip title="Download all artifacts as a zip file">
+						<Button size="small" startIcon={<FolderZipIcon />} onClick={handleExportAll}>
+							Download all
+						</Button>
+					</Tooltip>
 					<Box sx={{ flex: 1 }} />
 					{uploading > 0 && (
 						<Typography variant="caption" color="text.secondary">
@@ -689,7 +703,7 @@ function MoveDialog({ node, nodes, busy, onCancel, onConfirm }) {
 
 	return (
 		<Dialog open onClose={onCancel} maxWidth="xs" fullWidth>
-			<DialogTitle>Move “{node.name}”</DialogTitle>
+			<DialogTitle>Move "{node.name}"</DialogTitle>
 			<DialogContent dividers sx={{ p: 0 }}>
 				<DialogContentText sx={{ px: 2, pt: 1.5, pb: 0.5, fontSize: '0.8rem' }}>
 					Choose a destination folder:
@@ -739,7 +753,7 @@ function PreviewDialog({ node, onDownload, onClose }) {
 			>
 				{errored ? (
 					<Typography color="error" variant="body2">
-						Couldn’t load this image for preview. Try downloading it instead.
+						Couldn't load this image for preview. Try downloading it instead.
 					</Typography>
 				) : (
 					<>

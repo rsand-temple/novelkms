@@ -59,7 +59,7 @@ public class OpenAiProvider implements AiProvider {
     // chapter-review-v6: generation calls can now carry an optional one-time
     // userGuidance addendum from the author, alongside the existing "story so
     // far" and reference blocks. The JSON output contract is unchanged from v4.
-    public static final  String PROMPT_VERSION = "chapter-review-v6";
+    public static final  String PROMPT_VERSION = "chapter-review-v7";
     /** Memory-document generation prompt version (free-text output; no JSON contract). */
     public static final  String MEMORY_PROMPT_VERSION = "memory-v2";
     /** Chapter-summary generation prompt version (free-text paragraph; no JSON contract). */
@@ -439,6 +439,7 @@ public class OpenAiProvider implements AiProvider {
         // to be reviewed. Reference material first, then the running "story so far".
         if (request.referenceContext() != null && !request.referenceContext().isBlank()) {
             sb.append("Reference material — established canon and voice the manuscript must respect. ")
+              .append("Entries may list structured canonical fields (labeled) and a description. ")
               .append("Use it to judge the ").append(unit).append(", but do not review it:\n\n")
               .append(request.referenceContext().strip()).append("\n\n")
               .append("----------------------------------------\n\n");

@@ -36,6 +36,7 @@ public class SceneDao {
                 .content(rs.getString("content"))
                 .wordCount(rs.getInt("word_count"))
                 .aiContextPinned(rs.getBoolean("ai_context_pinned"))
+                .structuredData(rs.getString("structured_data"))
                 .notes(rs.getString("notes"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .updatedAt(rs.getTimestamp("updated_at").toInstant())
@@ -249,6 +250,27 @@ public class SceneDao {
             ps.setObject(3, chapterId);
             return ps.executeUpdate();
         }
+    }
+
+    /**
+     * Saves the structured-field JSON for a codex entry. Independent of the
+     * rich-text {@code content} save path so the schema-driven form and the
+     * long-form body autosave without clobbering each other. Only meaningful for
+     * codex entries; the column is inert for manuscript scenes. Returns the
+     * refreshed scene, or empty if no row matched.
+     */
+    public Optional<Scene> saveStructuredData(UUID id, String structuredData) throws SQLException {
+        String sql = "UPDATE scene SET structured_data = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, structuredData);
+            ps.setTimestamp(2, Timestamp.from(Instant.now()));
+            ps.setObject(3, id);
+            if (ps.executeUpdate() == 0) {
+                return Optional.empty();
+            }
+        }
+        return findById(id);
     }
 
     public void moveScene(UUID sceneId, UUID newChapterId,

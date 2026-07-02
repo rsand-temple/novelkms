@@ -44,10 +44,12 @@ import jakarta.ws.rs.core.StreamingOutput;
  *
  * <p>Authorization: project-rooted paths ({@code projects/{id}/...}) are checked
  * by the tenant filter on the {@code projects/{uuid}} segment. The node- and
- * file-scoped paths ({@code artifacts/nodes/{id}}, {@code artifacts/files/{id}})
- * carry only their own UUID, which the filter does not recognize, so this
- * resource enforces ownership in-line via {@link TenantAccessDao#ownsArtifactNode}
- * (the established "UUID-only paths enforce ownership in the resource" rule).
+ * file-scoped paths ({@code artifacts/nodes/{id}}, {@code artifacts/files/{id}}),
+ * and the export path, carry only their own UUID, which the filter does not
+ * recognize, so this resource enforces ownership in-line via
+ * {@link TenantAccessDao#ownsArtifactNode} (the established "UUID-only paths
+ * enforce ownership in the resource" rule). The zip-export path is project-rooted
+ * and therefore covered by the tenant filter on the {@code projects/{uuid}} segment.
  */
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
@@ -109,6 +111,38 @@ public class ArtifactResource {
                     "maxFileSizeBytes", artifacts.maxFileSizeBytes())).build();
         } catch (SQLException e) {
             return serverError(e, "read storage usage");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Zip export (project-scoped; tenant filter covers the projects/{uuid} segment)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Streams all live artifacts for the project as a zip archive. The hierarchy
+     * is preserved: a file at {@code Research/Notes/ref.pdf} appears at that path
+     * inside the zip. Folder entries are included so empty directories survive
+     * extraction. The zip is assembled on the fly — no temp file is written.
+     */
+    @GET
+    @Path("/projects/{projectId}/artifacts/export")
+    @Produces("application/zip")
+    public Response export(@PathParam("projectId") UUID projectId) {
+        try {
+            String filename = artifacts.zipFilename(projectId);
+            StreamingOutput body = out -> {
+                try {
+                    artifacts.exportZip(projectId, out);
+                } catch (SQLException e) {
+                    throw new RuntimeException("Database error during artifact export", e);
+                }
+            };
+            return Response.ok(body)
+                    .type("application/zip")
+                    .header("Content-Disposition", "attachment; filename=\"" + sanitizeHeader(filename) + "\"")
+                    .build();
+        } catch (SQLException e) {
+            return serverError(e, "export artifacts");
         }
     }
 

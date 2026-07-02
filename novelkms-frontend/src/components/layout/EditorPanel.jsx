@@ -20,6 +20,7 @@ import { useProjectSettings } from '../../hooks/useProjectSettings';
 import { useScenes, useScene, useDeleteScene, SCENE_KEYS } from '../../hooks/useScenes';
 import { useDraftDocument, flattenDraftScenes } from '../../hooks/useDraftDocument';
 import { useChapter } from '../../hooks/useChapters';
+import { useCodexCategories } from '../../hooks/useCodex';
 import { useGlobalTemplate, useBookTemplate, TEMPLATE_KEYS } from '../../hooks/useTemplates';
 import { useBook } from '../../hooks/useBooks';
 import client from '../../api/client';
@@ -54,6 +55,7 @@ import { countHtmlOccurrences } from '../../search/searchUtils';
 import BookCoverPreview from '../editor/BookCoverPreview';
 import PartPagePreview from '../editor/PartPagePreview';
 import ProjectShelf from '../editor/ProjectShelf';
+import CodexEntryFields from '../codex/CodexEntryFields';
 
 const AUTOSAVE_DELAY_MS = 1500;
 
@@ -517,6 +519,17 @@ export default function EditorPanel({
 	const codexEntryHeadingTitle = isCodexEntry
 		? (singleScene?.title?.trim() || 'Untitled Entry')
 		: null;
+
+	// Structured-field schema for a codex entry's category (e.g. CHARACTER,
+	// VOICE), if any. Categories are a data table returned with an optional
+	// JSON `schema`; an unstructured category resolves to null and the entry is
+	// plain title-plus-body, unchanged.
+	const { data: codexCategories } = useCodexCategories();
+	const codexEntrySchema = useMemo(() => {
+		if (!isCodexEntry) return null;
+		const cat = (codexCategories || []).find((c) => c.categoryKey === chapterData?.codexCategory);
+		return cat?.schema || null;
+	}, [isCodexEntry, codexCategories, chapterData?.codexCategory]);
 
 	useEffect(() => { chapterIdRef.current = chapterId; }, [chapterId]);
 	useEffect(() => { singleSceneModeRef.current = singleSceneMode; }, [singleSceneMode]);
@@ -1215,6 +1228,15 @@ export default function EditorPanel({
 									</Box>
 								)}
 
+								{isCodexEntry && codexEntrySchema?.fields?.length > 0 && singleScene && (
+									<CodexEntryFields
+										key={sceneId}
+										sceneId={sceneId}
+										schema={codexEntrySchema}
+										initialData={singleScene.structuredData}
+									/>
+								)}
+
 								{aiDocMode && (
 									<Box
 										sx={{
@@ -1248,7 +1270,30 @@ export default function EditorPanel({
 									</Box>
 								)}
 
-								<EditorContent editor={editor} />
+								{isCodexEntry && codexEntrySchema ? (
+									<Box
+										sx={{
+											maxWidth: '72ch',
+											mx: 'auto',
+											width: '100%',
+											p: 2.5,
+											border: '1px solid',
+											borderColor: 'divider',
+											borderRadius: 2,
+											bgcolor: 'background.paper',
+										}}
+									>
+										<Typography
+											variant="overline"
+											sx={{ color: 'text.secondary', letterSpacing: 1, display: 'block', mb: 1.5 }}
+										>
+											Description
+										</Typography>
+										<EditorContent editor={editor} />
+									</Box>
+								) : (
+									<EditorContent editor={editor} />
+								)}
 							</Box>
 
 							{showEditorPreview && (

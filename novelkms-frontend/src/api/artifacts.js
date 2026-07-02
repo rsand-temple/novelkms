@@ -7,8 +7,8 @@ import client from './client'
  * Project-scoped paths are authorized by the tenant filter on the
  * projects/{id} segment; node/file paths carry only their own UUID and are
  * authorized inside the resource. The shared axios client mounts /api, so paths
- * here omit it — except downloadUrl, which is a real browser navigation target
- * and therefore includes /api.
+ * here omit it — except downloadUrl and exportUrl, which are real browser
+ * navigation targets and therefore include /api.
  */
 export const artifactsApi = {
 	tree:  (projectId) => client.get(`/projects/${projectId}/artifacts`).then(r => r.data),
@@ -39,6 +39,13 @@ export const artifactsApi = {
 	/** Replaces a text file's content (full save). */
 	writeText: (nodeId, text) => client.put(`/artifacts/files/${nodeId}/content`, text, { headers: { 'Content-Type': 'text/plain; charset=UTF-8' } }).then(r => r.data),
 
-	// Direct browser download target (session cookie is sent automatically).
+	// Direct browser download targets (session cookie is sent automatically).
 	downloadUrl: (nodeId) => `/api/artifacts/files/${nodeId}/content`,
+
+	/**
+	 * Returns the URL for downloading all project artifacts as a zip archive.
+	 * The zip is streamed on the fly — no temp file is written on the server.
+	 * Use window.location.href or an <a download> to trigger the browser download.
+	 */
+	exportUrl: (projectId) => `/api/projects/${projectId}/artifacts/export`,
 }

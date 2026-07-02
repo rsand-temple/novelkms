@@ -49,6 +49,17 @@ public class Scene {
     @JsonProperty
     private boolean aiContextPinned;
 
+    /**
+     * Meaningful only for codex entries. Holds a JSON object of structured field
+     * values keyed by the field keys defined in the parent category's
+     * {@link CodexCategory#getSchema()} (e.g. a CHARACTER entry's role, want,
+     * arc). Null for manuscript scenes and for entries in unstructured
+     * categories. The free {@link #content} body remains the long-form
+     * description alongside these fields.
+     */
+    @JsonProperty
+    private String structuredData;
+
     @JsonProperty
     private String notes;
 

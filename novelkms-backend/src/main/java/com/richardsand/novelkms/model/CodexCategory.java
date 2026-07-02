@@ -32,4 +32,13 @@ public class CodexCategory {
 
     @JsonProperty("isDefault")
     private boolean isDefault;
+
+    /**
+     * Optional structured-field schema for this category's entries. Null for
+     * plain title-plus-body categories; non-null (e.g. CHARACTER, VOICE) drives
+     * a schema-driven form in the codex-entry editor and the labeled fields fed
+     * into AI review reference context.
+     */
+    @JsonProperty
+    private CodexSchema schema;
 }

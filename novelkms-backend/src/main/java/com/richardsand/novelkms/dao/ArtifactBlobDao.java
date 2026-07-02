@@ -6,6 +6,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.apache.commons.dbcp2.BasicDataSource;
@@ -56,16 +59,16 @@ public class ArtifactBlobDao {
     }
 
     /** The user's per-user quota override (app_user.artifact_quota_bytes), or empty for the config default. */
-    public java.util.Optional<Long> userQuotaOverride(UUID userId) throws SQLException {
+    public Optional<Long> userQuotaOverride(UUID userId) throws SQLException {
         String sql = "SELECT artifact_quota_bytes FROM app_user WHERE id = ?";
         try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
-                    return java.util.Optional.empty();
+                    return Optional.empty();
                 }
                 long v = rs.getLong(1);
-                return rs.wasNull() ? java.util.Optional.empty() : java.util.Optional.of(v);
+                return rs.wasNull() ? Optional.empty() : Optional.of(v);
             }
         }
     }
@@ -82,21 +85,51 @@ public class ArtifactBlobDao {
     }
 
     /** Resolves a file node's blob for download. */
-    public java.util.Optional<BlobRef> findById(UUID id) throws SQLException {
+    public Optional<BlobRef> findById(UUID id) throws SQLException {
         String sql = "SELECT id, storage_key, size_bytes, content_type FROM artifact_blob WHERE id = ?";
         try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
-                    return java.util.Optional.empty();
+                    return Optional.empty();
                 }
-                return java.util.Optional.of(new BlobRef(
+                return Optional.of(new BlobRef(
                         rs.getObject("id", UUID.class),
                         rs.getString("storage_key"),
                         rs.getLong("size_bytes"),
                         rs.getString("content_type")));
             }
         }
+    }
+
+    /**
+     * All blob references for live file nodes in a project, keyed by node id.
+     * Used by the zip-export path to fetch all blob metadata in a single query
+     * instead of one round-trip per file.
+     */
+    public Map<UUID, BlobRef> findByProject(UUID projectId) throws SQLException {
+        String sql = """
+                SELECT n.id AS node_id, b.id, b.storage_key, b.size_bytes, b.content_type
+                FROM artifact_node n
+                JOIN artifact_blob b ON b.id = n.blob_id
+                WHERE n.project_id = ? AND n.node_type = 'FILE' AND n.deleted_at IS NULL
+                """;
+        Map<UUID, BlobRef> out = new HashMap<>();
+        try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, projectId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    UUID nodeId = rs.getObject("node_id", UUID.class);
+                    BlobRef ref = new BlobRef(
+                            rs.getObject("id", UUID.class),
+                            rs.getString("storage_key"),
+                            rs.getLong("size_bytes"),
+                            rs.getString("content_type"));
+                    out.put(nodeId, ref);
+                }
+            }
+        }
+        return out;
     }
 
     /** Deletes a blob row. Runs on the caller's connection for transactional safety. */

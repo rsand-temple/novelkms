@@ -51,11 +51,6 @@ logging:
       archivedFileCount: 14
 #{% endif %}
   
-database:
-  url: {{DB_URL | d('jdbc:h2:C:/dev/temp/novelkmsdb;MODE=PostgreSQL;AUTO_SERVER=TRUE')}}
-  adminUser: {{DB_USER | d('admin')}}
-  adminPwd: {{DB_PASSWORD | d('admin123')}}
-
 # Master key for encrypting secrets at rest (BYOK AI provider API keys).
 # Set NOVELKMS_ENCRYPTION_KEY to a Base64-encoded 32-byte key in any real
 # deployment. When left blank, an INSECURE development key is used and a
@@ -63,19 +58,24 @@ database:
 #   Generate one with:  openssl rand -base64 32
 security:
   encryptionKey: {{NOVELKMS_ENCRYPTION_KEY | d('')}}
-  
+
+database:
+  url: {{DB_URL | d('jdbc:h2:C:/dev/temp/novelkmsdb;MODE=PostgreSQL;AUTO_SERVER=TRUE')}}
+  adminUser: {{DB_USER | d('admin')}}
+  adminPwd: {{DB_PASSWORD | d('admin123')}}
+
 notifications:
   registration:
-    enabled: ${REGISTRATION_NOTIFICATION_ENABLED:-false}
-    smtpHost: ${SMTP_HOST}
-    smtpPort: ${SMTP_PORT:-587}
-    smtpUsername: ${SMTP_USERNAME}
-    smtpPassword: ${SMTP_PASSWORD}
+    enabled: {{REGISTRATION_NOTIFICATION_ENABLED | d('false', true)}}
+    smtpHost: {{SMTP_HOST}}
+    smtpPort: {{SMTP_PORT | d('587')}}
+    smtpUsername: {{SMTP_USERNAME}}
+    smtpPassword: {{SMTP_PASSWORD}}
+    fromAddress: {{SMTP_FROM_ADDRESS | d('support@novelkms.com', true)}}
+    supportAddress: {{SMTP_SUPPORT_ADDRESS | d('support@novelkms.com', true)}}
+    subjectPrefix: "[NovelKMS]"
     startTls: true
     ssl: false
-    fromAddress: ${SMTP_FROM_ADDRESS:-support@novelkms.com}
-    supportAddress: ${SMTP_SUPPORT_ADDRESS:-support@novelkms.com}
-    subjectPrefix: "[NovelKMS]"
 
 auth:
   publicBaseUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:8080', true)}}

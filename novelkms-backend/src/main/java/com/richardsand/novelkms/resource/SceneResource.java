@@ -68,6 +68,11 @@ public class SceneResource {
         public int    wordCount;
     }
 
+    public static class SaveStructuredRequest {
+        @JsonProperty
+        public String structuredData;
+    }
+
     // -------------------------------------------------------------------------
     // Endpoints
     // -------------------------------------------------------------------------
@@ -148,6 +153,28 @@ public class SceneResource {
         }
         try {
             return sceneDao.saveContent(id, req.content, req.wordCount)
+                    .map(s -> Response.ok(s).build())
+                    .orElse(Response.noContent().build());
+        } catch (SQLException sqle) {
+            return serverError(sqle);
+        }
+    }
+
+    /**
+     * Dedicated endpoint for saving a codex entry's structured field values
+     * (the schema-driven form JSON). Separate from the content save path so the
+     * form and the rich-text body autosave independently. Only meaningful for
+     * codex entries; harmless for manuscript scenes.
+     */
+    @PUT
+    @Path("/scenes/{id}/structured-data")
+    public Response saveStructuredData(@PathParam("id") UUID id, SaveStructuredRequest req) {
+        logger.debug("SceneResource.saveStructuredData invoked: id={}", id);
+        if (req == null) {
+            return Response.status(Response.Status.BAD_REQUEST).build();
+        }
+        try {
+            return sceneDao.saveStructuredData(id, req.structuredData)
                     .map(s -> Response.ok(s).build())
                     .orElse(Response.noContent().build());
         } catch (SQLException sqle) {
