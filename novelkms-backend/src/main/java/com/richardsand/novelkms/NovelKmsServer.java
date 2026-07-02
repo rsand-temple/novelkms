@@ -37,6 +37,7 @@ import com.richardsand.novelkms.dao.AuthDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.BookSummaryDao;
 import com.richardsand.novelkms.dao.ChapterDao;
+import com.richardsand.novelkms.dao.ChapterEditorialDao;
 import com.richardsand.novelkms.dao.ChapterMemoryDao;
 import com.richardsand.novelkms.dao.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.CodexCategoryDao;
@@ -67,6 +68,7 @@ import com.richardsand.novelkms.resource.AuthResource;
 import com.richardsand.novelkms.resource.BillingResource;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterMemoryResource;
+import com.richardsand.novelkms.resource.EditorialResource;
 import com.richardsand.novelkms.resource.ChapterResource;
 import com.richardsand.novelkms.resource.CodexResource;
 import com.richardsand.novelkms.resource.EditorSettingsResource;
@@ -189,6 +191,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         ChapterDao            chapterDao            = new ChapterDao(ds);
         ChapterMemoryDao      chapterMemoryDao      = new ChapterMemoryDao(ds);
         ChapterSummaryDao     chapterSummaryDao     = new ChapterSummaryDao(ds);
+        ChapterEditorialDao   chapterEditorialDao   = new ChapterEditorialDao(ds);
         CodexDao              codexDao              = new CodexDao(ds);
         CodexCategoryDao      codexCategoryDao      = new CodexCategoryDao(ds);
         EditorSettingsDao     editorSettingsDao     = new EditorSettingsDao(ds);
@@ -253,6 +256,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao,
                 aiFormInstructionsDao, chapterMemoryDao, memoryTemplateDao,
                 chapterSummaryDao, bookSummaryDao,
+                chapterEditorialDao,
                 codexDao, codexCategoryDao, aiProviders);
 
         // Author utility tools
@@ -293,6 +297,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(BillingResource.class);
         env.jersey().register(BookResource.class);
         env.jersey().register(ChapterMemoryResource.class);
+        env.jersey().register(EditorialResource.class);
         env.jersey().register(ChapterResource.class);
         env.jersey().register(CodexResource.class);
         env.jersey().register(EditorSettingsResource.class);
@@ -347,6 +352,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(chapterDao).to(ChapterDao.class);
                 bind(chapterMemoryDao).to(ChapterMemoryDao.class);
                 bind(chapterSummaryDao).to(ChapterSummaryDao.class);
+                bind(chapterEditorialDao).to(ChapterEditorialDao.class);
                 bind(codexCategoryDao).to(CodexCategoryDao.class);
                 bind(codexDao).to(CodexDao.class);
                 bind(config).to(NovelKmsConfig.class);

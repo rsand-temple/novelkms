@@ -20,6 +20,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.richardsand.novelkms.ai.AiProvider;
 import com.richardsand.novelkms.ai.AiProviderException;
 import com.richardsand.novelkms.ai.BookSummaryRequest;
+import com.richardsand.novelkms.ai.EditorialRequest;
+import com.richardsand.novelkms.ai.EditorialResult;
 import com.richardsand.novelkms.ai.MemoryRequest;
 import com.richardsand.novelkms.ai.MemoryResult;
 import com.richardsand.novelkms.ai.ReviewException;
@@ -33,6 +35,7 @@ import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.BookSummaryDao;
 import com.richardsand.novelkms.dao.ChapterDao;
+import com.richardsand.novelkms.dao.ChapterEditorialDao;
 import com.richardsand.novelkms.dao.ChapterMemoryDao;
 import com.richardsand.novelkms.dao.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.CodexCategoryDao;
@@ -46,6 +49,7 @@ import com.richardsand.novelkms.model.Book;
 import com.richardsand.novelkms.model.BookSummary;
 import com.richardsand.novelkms.model.BookSummaryStatus;
 import com.richardsand.novelkms.model.Chapter;
+import com.richardsand.novelkms.model.ChapterEditorial;
 import com.richardsand.novelkms.model.ChapterMemory;
 import com.richardsand.novelkms.model.ChapterMemoryStatus;
 import com.richardsand.novelkms.model.ChapterSummary;
@@ -95,6 +99,7 @@ public class AiReviewService {
     private final ChapterMemoryDao        chapterMemoryDao;
     private final MemoryTemplateDao       memoryTemplateDao;
     private final ChapterSummaryDao       chapterSummaryDao;
+    private final ChapterEditorialDao     chapterEditorialDao;
     private final BookSummaryDao          bookSummaryDao;
     private final CodexDao                codexDao;
     private final CodexCategoryDao        codexCategoryDao;
@@ -105,6 +110,7 @@ public class AiReviewService {
             AiFormInstructionsDao formInstructionsDao,
             ChapterMemoryDao chapterMemoryDao, MemoryTemplateDao memoryTemplateDao,
             ChapterSummaryDao chapterSummaryDao, BookSummaryDao bookSummaryDao,
+            ChapterEditorialDao chapterEditorialDao,
             CodexDao codexDao, CodexCategoryDao codexCategoryDao,
             Map<String, AiProvider> providers) {
         this.chapterDao = chapterDao;
@@ -116,6 +122,7 @@ public class AiReviewService {
         this.chapterMemoryDao = chapterMemoryDao;
         this.memoryTemplateDao = memoryTemplateDao;
         this.chapterSummaryDao = chapterSummaryDao;
+        this.chapterEditorialDao = chapterEditorialDao;
         this.bookSummaryDao = bookSummaryDao;
         this.codexDao = codexDao;
         this.codexCategoryDao = codexCategoryDao;
@@ -342,6 +349,94 @@ public class AiReviewService {
     /** Clears a chapter's memory document. Returns false if there was none. */
     public boolean deleteChapterMemory(UUID chapterId) throws SQLException {
         return chapterMemoryDao.delete(chapterId);
+    }
+
+    // ── Editorials ────────────────────────────────────────────────────────────
+    //
+    // An editorial is a short, author-facing editorial reading of one chapter
+    // (tone, genre drift, character arcs, storyline evolution). It is generated
+    // from the chapter prose plus the SAME context a chapter review uses — the
+    // preceding chapters' memory documents ("story so far") and, when opted in,
+    // pinned Codex reference entries — but, unlike a memory document, its output
+    // is never consumed by any other AI function. One per chapter, overwrite on
+    // regenerate, no book-wide aggregate or staleness view.
+
+    /**
+     * Generates (or regenerates) the editorial for a chapter from its prose and
+     * the same prior/reference context a chapter review uses, then stores it (one
+     * editorial per chapter, overwriting). Chapter ownership is enforced upstream
+     * by the tenant filter (chapters/{id}).
+     *
+     * @param userGuidance         optional one-time author note for this generation only; null/blank = none
+     * @param includePinnedContext when true, pinned Codex entries (book + project)
+     *                             are assembled into the editorial's reference context
+     */
+    public ChapterEditorial generateChapterEditorial(UUID userId, UUID chapterId, UUID credentialId,
+            String modelOverride, String userGuidance, boolean includePinnedContext) throws SQLException {
+        Chapter chapter = chapterDao.findById(chapterId)
+                .orElseThrow(() -> new ReviewException(Status.PRECONDITION_REQUIRED, "not_found", "Chapter not found."));
+
+        UUID bookId = chapter.getBookId();
+        if (bookId == null) {
+            throw new ReviewException(Status.BAD_REQUEST, "not_manuscript",
+                    "Editorials are only available for manuscript chapters.");
+        }
+
+        String chapterText = assembleChapterText(chapterId);
+        if (chapterText.isBlank()) {
+            throw new ReviewException(Status.BAD_REQUEST, "empty_chapter",
+                    "This chapter has no text to give an editorial on yet.");
+        }
+
+        AiCredential credential = resolveCredential(userId, credentialId);
+        AiProvider   provider   = providers.get(credential.getProvider());
+        if (provider == null) {
+            throw new ReviewException(Status.BAD_REQUEST, "unsupported_provider",
+                    "Provider " + credential.getProvider() + " is not supported yet.");
+        }
+        String model = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+
+        String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new ReviewException(Status.CONFLICT, "no_ai_credential", "Stored API key could not be read.");
+        }
+
+        String priorContext     = assemblePriorContext(bookId, chapterId);
+        String referenceContext = includePinnedContext ? assembleReferenceContext(bookId) : null;
+        logger.debug("Editorial context assembled: chapterId={}, textChars={}, priorContextChars={}, referenceContextChars={}",
+                chapterId, chapterText.length(), priorContext == null ? 0 : priorContext.length(),
+                referenceContext == null ? 0 : referenceContext.length());
+
+        String           note = blankToNull(userGuidance);
+        EditorialRequest req  = new EditorialRequest(apiKey, model, chapterLabel(chapter), chapter.getSubtitle(),
+                chapterText, priorContext, referenceContext, note);
+        try {
+            EditorialResult result = provider.generateEditorial(req);
+            chapterEditorialDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model, note);
+        } catch (AiProviderException e) {
+            logger.error("Editorial generation for chapter {} failed: {}", chapterId, e.getMessage());
+            throw new ReviewException(Status.INTERNAL_SERVER_ERROR, "editorial_provider_error", e.getMessage());
+        }
+        return chapterEditorialDao.findByChapter(chapterId).orElseThrow();
+    }
+
+    /** Returns the chapter's current editorial, if any. */
+    public Optional<ChapterEditorial> getChapterEditorial(UUID chapterId) throws SQLException {
+        return chapterEditorialDao.findByChapter(chapterId);
+    }
+
+    /** Saves an author edit to an existing editorial (marks it EDITED). */
+    public ChapterEditorial editChapterEditorial(UUID chapterId, String content) throws SQLException {
+        if (!chapterEditorialDao.updateEdited(chapterId, content)) {
+            throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_found",
+                    "This chapter has no editorial to edit. Generate one first.");
+        }
+        return chapterEditorialDao.findByChapter(chapterId).orElseThrow();
+    }
+
+    /** Clears a chapter's editorial. Returns false if there was none. */
+    public boolean deleteChapterEditorial(UUID chapterId) throws SQLException {
+        return chapterEditorialDao.delete(chapterId);
     }
 
     /**

@@ -229,6 +229,15 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 					setSelection={setSelection}
 					depth={depth}
 				/>
+				<ChapterAiDocItem
+					docType="editorial"
+					chapterId={chapter.id}
+					bookId={bookId}
+					partId={partId}
+					selection={selection}
+					setSelection={setSelection}
+					depth={depth}
+				/>
 			</Collapse>
 		</div>
 	)

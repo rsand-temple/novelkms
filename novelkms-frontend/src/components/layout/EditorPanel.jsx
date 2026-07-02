@@ -30,6 +30,7 @@ import { scenesApi } from '../../api/scenes';
 import { templatesApi } from '../../api/templates';
 import { chapterMemoryApi } from '../../api/chapterMemory';
 import { summaryApi } from '../../api/summary';
+import { editorialApi } from '../../api/editorial';
 import {
 	useChapterMemory, useChapterMemoryStatus,
 	useGenerateChapterMemory, CHAPTER_MEMORY_KEYS,
@@ -38,6 +39,9 @@ import {
 	useChapterSummary, useBookChapterSummaries, useBookSummary, useBookSummaryStatus,
 	useGenerateChapterSummary, useGenerateBookSummary, SUMMARY_KEYS,
 } from '../../hooks/useSummary';
+import {
+	useChapterEditorial, useGenerateChapterEditorial, EDITORIAL_KEYS,
+} from '../../hooks/useEditorial';
 import { flaggedPreceding, formatTime as formatMemoryTime, stateColor as memoryStateColor, stateExplanation as memoryStateExplanation, stateLabel as memoryStateLabel } from '../ai/memoryStatus';
 import { flaggedChapters, stateColor as summaryStateColor, stateExplanation as summaryStateExplanation, stateLabel as summaryStateLabel } from '../ai/summaryStatus';
 import PreReviewMemoryDialog from '../ai/PreReviewMemoryDialog';
@@ -266,6 +270,7 @@ export default function EditorPanel({
 	const isMemoryDoc = aiDocMode && aiDocType === 'memory';
 	const isChapterSummaryDoc = aiDocMode && aiDocType === 'chapterSummary';
 	const isBookSummaryDoc = aiDocMode && aiDocType === 'bookSummary';
+	const isEditorialDoc = aiDocMode && aiDocType === 'editorial';
 	const templateMode = !aiDocMode && !!templateType;
 	const singleSceneMode = !aiDocMode && !templateMode && !!sceneId;
 	const multiSceneMode = !aiDocMode && !templateMode && !singleSceneMode && !!chapterId && !codexId;
@@ -316,7 +321,7 @@ export default function EditorPanel({
 	// entry apart from a manuscript scene — see isCodexEntry below), and the two
 	// chapter-scoped AI-doc modes (memory/chapter-summary heading label).
 	const { data: chapterData } = useChapter(
-		(multiSceneMode || singleSceneMode || isMemoryDoc || isChapterSummaryDoc) ? chapterId : null
+		(multiSceneMode || singleSceneMode || isMemoryDoc || isChapterSummaryDoc || isEditorialDoc) ? chapterId : null
 	);
 
 	// ── AI document data (memory / chapter summary / book summary) ───────────
@@ -340,12 +345,18 @@ export default function EditorPanel({
 	const { data: bookSummaryChapterRows = [] } = useBookChapterSummaries(isBookSummaryDoc ? bookId : null, isBookSummaryDoc);
 	const { mutateAsync: generateBookSummaryAsync, isPending: generatingBookSummary } = useGenerateBookSummary();
 
+	// Editorial is chapter-scoped like memory/chapter-summary, but has no
+	// book-wide aggregate or staleness view — it's purely author-facing and
+	// never consumed by another AI function, so no status query.
+	const { data: editorialDoc, isLoading: editorialDocLoading } = useChapterEditorial(isEditorialDoc ? chapterId : null);
+	const { mutateAsync: generateEditorialAsync, isPending: generatingEditorial } = useGenerateChapterEditorial();
+
 	// Heading label for the AI-doc modes ("Chapter 3: Title" / book title).
 	const { data: aiDocBook } = useBook(isBookSummaryDoc ? bookId : null);
 
-	const aiDocLoading = isMemoryDoc ? memoryDocLoading : isChapterSummaryDoc ? chapterSummaryDocLoading : isBookSummaryDoc ? bookSummaryDocLoading : false;
-	const aiDocCurrent = isMemoryDoc ? memoryDoc : isChapterSummaryDoc ? chapterSummaryDoc : isBookSummaryDoc ? bookSummaryDoc : null;
-	const aiDocGenerating = isMemoryDoc ? generatingMemory : isChapterSummaryDoc ? generatingChapterSummary : isBookSummaryDoc ? generatingBookSummary : false;
+	const aiDocLoading = isMemoryDoc ? memoryDocLoading : isChapterSummaryDoc ? chapterSummaryDocLoading : isBookSummaryDoc ? bookSummaryDocLoading : isEditorialDoc ? editorialDocLoading : false;
+	const aiDocCurrent = isMemoryDoc ? memoryDoc : isChapterSummaryDoc ? chapterSummaryDoc : isBookSummaryDoc ? bookSummaryDoc : isEditorialDoc ? editorialDoc : null;
+	const aiDocGenerating = isMemoryDoc ? generatingMemory : isChapterSummaryDoc ? generatingChapterSummary : isBookSummaryDoc ? generatingBookSummary : isEditorialDoc ? generatingEditorial : false;
 
 	// Preceding-chapter gating (memory only) / coverage gating (book summary only).
 	const aiDocFlaggedPreceding = useMemo(
@@ -382,7 +393,7 @@ export default function EditorPanel({
 			? (chapterData.title?.trim() ? `Chapter ${chapterData.chapterNumber}: ${chapterData.title.trim()}` : `Chapter ${chapterData.chapterNumber}`)
 			: '';
 
-	const aiDocTypeLabel = isMemoryDoc ? 'Memory document' : isChapterSummaryDoc ? 'Chapter summary' : 'Book summary';
+	const aiDocTypeLabel = isMemoryDoc ? 'Memory document' : isChapterSummaryDoc ? 'Chapter summary' : isEditorialDoc ? 'Editorial' : 'Book summary';
 	const aiDocMetaLine = aiDocCurrent
 		? [
 			aiDocCurrent.source === 'EDITED' ? 'Edited' : 'Generated',
@@ -627,6 +638,12 @@ export default function EditorPanel({
 						loadedAiDocKeyRef.current = aiDocKey(type, bid, saved);
 						queryClient.setQueryData(SUMMARY_KEYS.bookDoc(bid), saved);
 						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bid) });
+					} else if (type === 'editorial') {
+						const cid = chapterIdRef.current;
+						if (!cid) return;
+						const saved = await editorialApi.save(cid, html);
+						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved);
+						queryClient.setQueryData(EDITORIAL_KEYS.doc(cid), saved);
 					}
 					return;
 				}
@@ -988,9 +1005,12 @@ export default function EditorPanel({
 		if (isBookSummaryDoc) {
 			return generateBookSummaryAsync({ bookId, credentialId: null, userGuidance });
 		}
+		if (isEditorialDoc) {
+			return generateEditorialAsync({ chapterId, bookId, credentialId: null, userGuidance });
+		}
 		return Promise.resolve();
-	}, [isMemoryDoc, isChapterSummaryDoc, isBookSummaryDoc, chapterId, bookId, aiDocGuidance,
-		generateMemoryAsync, generateChapterSummaryAsync, generateBookSummaryAsync]);
+	}, [isMemoryDoc, isChapterSummaryDoc, isBookSummaryDoc, isEditorialDoc, chapterId, bookId, aiDocGuidance,
+		generateMemoryAsync, generateChapterSummaryAsync, generateBookSummaryAsync, generateEditorialAsync]);
 
 	// After the discard-content gate (if any), memory/book-summary generation
 	// still checks the continuity/coverage gate before actually running.

@@ -24,6 +24,7 @@ import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor';
 import MemoryTemplateEditor from '../ai/MemoryTemplateEditor';
 import { useChapterMemory, useChapterMemoryStatus } from '../../hooks/useChapterMemory';
 import { useChapterSummary, useBookChapterSummaries, useBookSummary, useBookSummaryStatus } from '../../hooks/useSummary';
+import { useChapterEditorial } from '../../hooks/useEditorial';
 import { useCodexAiContext, useSetScenePinned, useSetCategoryPinned } from '../../hooks/useAiContext';
 import { stateColor as memoryStateColor, stateExplanation as memoryStateExplanation, stateLabel as memoryStateLabel, formatTime as formatMemoryTime } from '../ai/memoryStatus';
 import { stateColor as summaryStateColor, stateExplanation as summaryStateExplanation, stateLabel as summaryStateLabel } from '../ai/summaryStatus';
@@ -775,6 +776,7 @@ function AiDocProperties({ selection, setSelection }) {
 	const isMemory = aiDocType === 'memory';
 	const isChapterSummary = aiDocType === 'chapterSummary';
 	const isBookSummary = aiDocType === 'bookSummary';
+	const isEditorial = aiDocType === 'editorial';
 
 	const { data: memoryDoc } = useChapterMemory(isMemory ? chapterId : null);
 	const { data: memoryRows = [] } = useChapterMemoryStatus(isMemory ? bookId : null, isMemory);
@@ -782,16 +784,21 @@ function AiDocProperties({ selection, setSelection }) {
 	const { data: chapterSummaryRows = [] } = useBookChapterSummaries(isChapterSummary ? bookId : null, isChapterSummary);
 	const { data: bookSummaryDoc } = useBookSummary(isBookSummary ? bookId : null);
 	const { data: bookSummaryStatusData } = useBookSummaryStatus(isBookSummary ? bookId : null, isBookSummary);
+	const { data: editorialDoc } = useChapterEditorial(isEditorial ? chapterId : null);
 
-	const doc = isMemory ? memoryDoc : isChapterSummary ? chapterSummaryDoc : bookSummaryDoc;
+	const doc = isMemory ? memoryDoc : isChapterSummary ? chapterSummaryDoc : isEditorial ? editorialDoc : bookSummaryDoc;
 
+	// Editorials have no aggregate/staleness view — purely author-facing — so no
+	// state chip; only the generation metadata below is shown.
 	const stateValue = isMemory
 		? memoryRows.find(s => s.chapterId === chapterId)?.state
 		: isChapterSummary
 			? chapterSummaryRows.find(s => s.chapterId === chapterId)?.state
-			: !bookSummaryStatusData ? null
-				: !bookSummaryStatusData.hasDoc ? 'MISSING'
-					: bookSummaryStatusData.stale ? 'STALE_CONTENT' : 'OK';
+			: isEditorial
+				? null
+				: !bookSummaryStatusData ? null
+					: !bookSummaryStatusData.hasDoc ? 'MISSING'
+						: bookSummaryStatusData.stale ? 'STALE_CONTENT' : 'OK';
 
 	const label = isMemory
 		? memoryStateLabel(stateValue)
@@ -801,7 +808,7 @@ function AiDocProperties({ selection, setSelection }) {
 	const color = isMemory ? memoryStateColor(stateValue) : summaryStateColor(stateValue);
 	const explanation = isMemory ? memoryStateExplanation(stateValue) : summaryStateExplanation(stateValue);
 
-	const typeLabel = isMemory ? 'Memory document' : isChapterSummary ? 'Chapter summary' : 'Book summary';
+	const typeLabel = isMemory ? 'Memory document' : isChapterSummary ? 'Chapter summary' : isEditorial ? 'Editorial' : 'Book summary';
 
 	function handleClose() {
 		setSelection({

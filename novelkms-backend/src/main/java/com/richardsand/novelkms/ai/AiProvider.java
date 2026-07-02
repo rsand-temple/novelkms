@@ -43,6 +43,16 @@ public interface AiProvider {
     SummaryResult generateBookSummary(BookSummaryRequest request) throws AiProviderException;
 
     /**
+     * Generates one chapter's editorial synchronously: a short editorial reading
+     * of the chapter (tone, genre drift, character arcs, storyline evolution).
+     * Free-text output, no JSON contract, and deliberately not a line-level
+     * review. Uses the same context inputs as a chapter review (preceding memory
+     * documents and pinned Codex reference), but its output is never consumed by
+     * any other AI function.
+     */
+    EditorialResult generateEditorial(EditorialRequest request) throws AiProviderException;
+
+    /**
      * Converts supplied, structured weather facts into author-facing scene guidance.
      * The AI must not become the weather authority; callers provide the weather facts
      * and source metadata that ground the answer.

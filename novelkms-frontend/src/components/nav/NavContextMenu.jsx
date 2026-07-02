@@ -53,6 +53,7 @@ import {
 import { useRunChapterReview, useRunSceneReview } from '../../hooks/useAiReviews'
 import { useGenerateChapterMemory, useChapterMemoryStatus, useDeleteChapterMemory } from '../../hooks/useChapterMemory'
 import { useGenerateChapterSummary, useBookChapterSummaries, useDeleteChapterSummary } from '../../hooks/useSummary'
+import { useGenerateChapterEditorial, useDeleteChapterEditorial, useChapterEditorial } from '../../hooks/useEditorial'
 import { useSetScenePinned, useSetCategoryPinned } from '../../hooks/useAiContext'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
 import { useReview } from '../../review/ReviewContext'
@@ -465,7 +466,72 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		)
 	}
 
-	// ── Public API ────────────────────────────────────────────────────────────
+	// ── Chapter editorials (nav) ───────────────────────────────────────────────
+	// An editorial is an author-facing editorial reading of the chapter; it has
+	// no book-wide aggregate, so existence for the Clear item is read from the
+	// single-chapter doc query rather than a coverage list.
+	const { mutate: generateEditorial, isPending: generatingEditorial } = useGenerateChapterEditorial()
+	const { mutate: clearEditorial } = useDeleteChapterEditorial()
+	const { data: menuChapterEditorial } = useChapterEditorial(
+		menuNode?.type === 'chapter' ? menuNode?.id : null,
+	)
+	const menuChapterHasEditorial = !!menuChapterEditorial
+	const [editorialSnack, setEditorialSnack] = useState(null)          // { severity, message } | null
+	const [clearEditorialOpen, setClearEditorialOpen] = useState(false)
+	const [clearEditorialNode, setClearEditorialNode] = useState(null)
+
+	// Editorials are independent of other chapters — no preceding-chapter gating.
+	const handleGenerateEditorial = () => {
+		const node = menuNode
+		if (!node) return
+		closeMenu()
+		generateEditorial(
+			{ chapterId: node.id, bookId: node.bookId, credentialId: defaultCredentialId },
+			{
+				onSuccess: () => setEditorialSnack({ severity: 'success', message: `Editorial generated for “${node.title?.trim() || 'chapter'}”.` }),
+				onError: (e) => setEditorialSnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.' }),
+			},
+		)
+	}
+
+	// "Edit editorial…" selects the chapter's Editorial leaf in the nav tree
+	// (opened for full rich-text editing in EditorPanel), the same way
+	// openMemoryDocument / openChapterSummaryDocument do.
+	const openEditorialDocument = () => {
+		const node = menuNode
+		closeMenu()
+		if (!node) return
+		setSelection((prev) => ({
+			...prev,
+			bookId: node.bookId,
+			partId: node.partId ?? null,
+			chapterId: node.id,
+			sceneId: null,
+			codexId: null,
+			codexCategory: null,
+			aiDocType: 'editorial',
+		}))
+	}
+
+	const openClearEditorialConfirm = () => {
+		setClearEditorialNode(menuNode)
+		setClearEditorialOpen(true)
+	}
+
+	const handleConfirmClearEditorial = () => {
+		const node = clearEditorialNode
+		setClearEditorialOpen(false)
+		if (!node) return
+		clearEditorial(
+			{ chapterId: node.id, bookId: node.bookId },
+			{
+				onSuccess: () => setEditorialSnack({ severity: 'success', message: `Editorial cleared for “${node.title?.trim() || 'chapter'}”.` }),
+				onError: (e) => setEditorialSnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Clear failed.' }),
+			},
+		)
+	}
+
+	// ── Public API ──
 
 	const openContextMenu = useCallback((event, nodeType, nodeData) => {
 		event.preventDefault()
@@ -887,6 +953,37 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
+				{/* Chapter editorial — chapter manuscript nodes only */}
+				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
+				{isManuscriptNode && reviewNodeType === 'chapter' && (
+					<MenuItem
+						dense
+						disabled={!canRunReview || generatingEditorial}
+						onClick={handleGenerateEditorial}
+					>
+						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Generate editorial</ListItemText>
+					</MenuItem>
+				)}
+				{isManuscriptNode && reviewNodeType === 'chapter' && (
+					<MenuItem
+						dense
+						onClick={openEditorialDocument}
+					>
+						<ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Edit editorial…</ListItemText>
+					</MenuItem>
+				)}
+				{isManuscriptNode && reviewNodeType === 'chapter' && menuChapterHasEditorial && (
+					<MenuItem
+						dense
+						onClick={() => { closeMenu(); openClearEditorialConfirm() }}
+					>
+						<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Clear editorial</ListItemText>
+					</MenuItem>
+				)}
+
 				{/* Delete — not available for project */}
 				{canDelete && <Divider />}
 				{canDelete && (
@@ -1080,6 +1177,34 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				<DialogActions>
 					<Button onClick={() => setClearSummaryOpen(false)}>Cancel</Button>
 					<Button color="error" variant="contained" onClick={handleConfirmClearSummary}>Clear</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* Editorial generate/clear feedback */}
+			<Snackbar
+				open={!!editorialSnack}
+				autoHideDuration={4000}
+				onClose={() => setEditorialSnack(null)}
+				anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+			>
+				{editorialSnack ? (
+					<Alert severity={editorialSnack.severity} onClose={() => setEditorialSnack(null)} sx={{ width: '100%' }}>
+						{editorialSnack.message}
+					</Alert>
+				) : undefined}
+			</Snackbar>
+
+			{/* Clear editorial confirmation */}
+			<Dialog open={clearEditorialOpen} onClose={() => setClearEditorialOpen(false)} maxWidth="xs" fullWidth>
+				<DialogTitle>Clear editorial</DialogTitle>
+				<DialogContent>
+					<Typography variant="body2">
+						Delete the editorial for {clearEditorialNode?.title?.trim() ? `“${clearEditorialNode.title.trim()}”` : 'this chapter'}? You can generate a new one at any time.
+					</Typography>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setClearEditorialOpen(false)}>Cancel</Button>
+					<Button color="error" variant="contained" onClick={handleConfirmClearEditorial}>Clear</Button>
 				</DialogActions>
 			</Dialog>
 		</NavContextMenuContext.Provider>

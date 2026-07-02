@@ -66,6 +66,8 @@ public class OpenAiProvider implements AiProvider {
     public static final  String CHAPTER_SUMMARY_PROMPT_VERSION = "chapter-summary-v2";
     /** Book-summary generation prompt version (free-text synopsis built from chapter summaries). */
     public static final  String BOOK_SUMMARY_PROMPT_VERSION = "book-summary-v2";
+    /** Editorial generation prompt version (free-text half-page editorial reading; no JSON contract). */
+    public static final  String EDITORIAL_PROMPT_VERSION = "chapter-editorial-v1";
     /** Weather interpretation prompt version; facts are supplied by a weather provider. */
     public static final  String WEATHER_INTERPRETATION_PROMPT_VERSION = "weather-interpretation-v1";
 
@@ -154,6 +156,24 @@ public class OpenAiProvider implements AiProvider {
         logger.info("OpenAI book-summary request completed: model={}, outputChars={}",
                 model, lengthOf(content));
         return new SummaryResult(content.strip(), BOOK_SUMMARY_PROMPT_VERSION);
+    }
+
+    @Override
+    public EditorialResult generateEditorial(EditorialRequest request) throws AiProviderException {
+        String model = (request.model() == null || request.model().isBlank())
+                ? DEFAULT_MODEL : request.model().trim();
+
+        logger.info("OpenAI editorial request started: model={}, chapterLabel={}, promptVersion={}",
+                model, safeLabel(request.chapterLabel()), EDITORIAL_PROMPT_VERSION);
+        logger.debug("OpenAI editorial request context: chapterTextChars={}, priorContextChars={}, referenceContextChars={}, userGuidanceChars={}",
+                lengthOf(request.chapterText()), lengthOf(request.priorContext()),
+                lengthOf(request.referenceContext()), lengthOf(request.userGuidance()));
+
+        String body = buildEditorialRequestBody(model, request);
+        String content = postForContent(request.apiKey(), body);
+        logger.info("OpenAI editorial request completed: model={}, outputChars={}",
+                model, lengthOf(content));
+        return new EditorialResult(content.strip(), EDITORIAL_PROMPT_VERSION);
     }
 
     @Override
@@ -427,6 +447,81 @@ public class OpenAiProvider implements AiProvider {
             return mapper.writeValueAsString(root);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to build OpenAI book-summary request body", e);
+        }
+    }
+
+    /**
+     * System instruction for editorial generation. An editorial is a short,
+     * impressionistic editorial reading of one chapter — the model's overall
+     * "what do you think?" — held to about half a page. It deliberately does NOT
+     * surface spelling, grammar, or line-level fixes (that is what a review is
+     * for) unless something is egregious, and it is never consumed downstream.
+     */
+    private static final String EDITORIAL_WRAPPER = """
+            You are an experienced developmental editor giving the author your \
+            overall editorial impression of a single chapter of their novel. Read \
+            the chapter and share what you think of it as a whole: its tone and \
+            mood, whether the genre feels consistent or is drifting, how the \
+            characters and their arcs are developing, and how the storyline is \
+            evolving. Where prior-chapter context is provided, judge continuity \
+            and momentum against it. Write in warm, direct prose addressed to the \
+            author — a few short paragraphs at most, roughly half a page; less is \
+            more. Do NOT produce a list of findings, and do NOT point out \
+            spelling, grammar, punctuation, or other line-level issues unless \
+            something is truly egregious — those belong to a separate review. Do \
+            not restate the plot back as a summary; give your editorial read on \
+            it. Output only the editorial.""";
+
+    private String buildEditorialRequestBody(String model, EditorialRequest request) {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("model", model);
+
+        ArrayNode messages = root.putArray("messages");
+
+        ObjectNode system = messages.addObject();
+        system.put("role", "system");
+        system.put("content", EDITORIAL_WRAPPER);
+
+        StringBuilder user = new StringBuilder();
+
+        // Optional context blocks, clearly fenced off as background — not the
+        // material under editorial consideration. Reference material first, then
+        // the running "story so far" (mirrors userPrompt(ReviewRequest)).
+        if (request.referenceContext() != null && !request.referenceContext().isBlank()) {
+            user.append("Reference material — established canon and voice the manuscript must respect. ")
+                .append("Entries may list structured canonical fields (labeled) and a description. ")
+                .append("Use it to judge the chapter, but do not comment on it directly:\n\n")
+                .append(request.referenceContext().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+        if (request.priorContext() != null && !request.priorContext().isBlank()) {
+            user.append("Story so far — memory documents of the preceding chapters, for continuity ")
+                .append("context only. Do not comment on these summaries:\n\n")
+                .append(request.priorContext().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+        if (request.userGuidance() != null && !request.userGuidance().isBlank()) {
+            user.append("Additional guidance from the author for this editorial only — follow it, but it ")
+                .append("is not material to comment on:\n\n")
+                .append(request.userGuidance().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        user.append("Chapter: ").append(nullToBlank(request.chapterLabel()));
+        if (request.subtitle() != null && !request.subtitle().isBlank()) {
+            user.append(" — ").append(request.subtitle().trim());
+        }
+        user.append("\n\nChapter text:\n\n").append(nullToBlank(request.chapterText()));
+
+        ObjectNode userMsg = messages.addObject();
+        userMsg.put("role", "user");
+        userMsg.put("content", user.toString());
+
+        // Free-text output: no response_format and no token caps (reasoning-model safe).
+        try {
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to build OpenAI editorial request body", e);
         }
     }
 

@@ -1,32 +1,35 @@
 import { ListItemButton, ListItemIcon, ListItemText } from '@mui/material'
 import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined'
 import SummarizeOutlinedIcon from '@mui/icons-material/SummarizeOutlined'
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined'
 
 const ICONS = {
 	memory: PsychologyOutlinedIcon,
 	chapterSummary: SummarizeOutlinedIcon,
+	editorial: RateReviewOutlinedIcon,
 }
 
 const LABELS = {
 	memory: 'Memory',
 	chapterSummary: 'Summary',
+	editorial: 'Editorial',
 }
 
 /**
- * ChapterAiDocItem — fixed bottom leaf under a chapter for its Memory document
- * or Summary (selection.aiDocType = 'memory' | 'chapterSummary'). Opens the
- * document for rich-text editing in EditorPanel, the same way a scene opens.
+ * ChapterAiDocItem — fixed bottom leaf under a chapter for its Memory document,
+ * Summary, or Editorial (selection.aiDocType = 'memory' | 'chapterSummary' |
+ * 'editorial'). Opens the document for rich-text editing in EditorPanel, the
+ * same way a scene opens.
  *
  * Deliberately NOT draggable/sortable and not a member of the chapter's scene
- * SortableContext — these aren't manuscript content, just two fixed slots
- * rendered after the real scenes. Italic title + an icon distinct from the
- * scene icon keep them visually separate at a glance. No rename, no context
- * menu of its own: Generate/Regenerate live in EditorPanel's toolbar once
- * selected, and the chapter's own right-click menu still has the quick
- * Generate/Clear actions.
+ * SortableContext — these aren't manuscript content, just fixed slots rendered
+ * after the real scenes. Italic title + an icon distinct from the scene icon
+ * keep them visually separate at a glance. No rename, no context menu of its
+ * own: Generate/Regenerate live in EditorPanel's toolbar once selected, and the
+ * chapter's own right-click menu still has the quick Generate/Clear actions.
  *
  * Props:
- *   docType    {'memory'|'chapterSummary'}
+ *   docType    {'memory'|'chapterSummary'|'editorial'}
  *   chapterId  {string}
  *   bookId     {string}
  *   partId     {string|null}
