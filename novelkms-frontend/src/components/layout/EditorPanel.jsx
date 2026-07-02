@@ -505,6 +505,7 @@ export default function EditorPanel({
 	const bookIdRef = useRef(bookId);
 	const sceneIdRef = useRef(sceneId);
 	const scheduleSaveRef = useRef(null);
+	const creatingFirstSceneRef = useRef(false);
 	const chapterIdRef = useRef(chapterId);
 	const editorRef = useRef(null);
 	const searchRef = useRef(search);
@@ -592,6 +593,7 @@ export default function EditorPanel({
 		loadedSceneOrderRef.current = '';
 		loadedSceneIdRef.current = null;
 		prevSceneBreakIdsRef.current = [];
+		creatingFirstSceneRef.current = false;
 	}, [templateMode, templateType, templateScope, aiDocType, bookId, partId, chapterId]);
 
 	// ── save ─────────────────────────────────────────────────────────────────
@@ -658,8 +660,34 @@ export default function EditorPanel({
 					await scenesApi.updateContent(sid, html, wc);
 					queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(sid) });
 				} else {
-					const firstId = firstSceneIdRef.current;
-					if (!firstId) return;
+					let firstId = firstSceneIdRef.current;
+					if (!firstId) {
+						// Chapter mode with no scenes yet — auto-create the first scene so
+						// the user's typing is persisted without having to use Add Scene.
+						// creatingFirstSceneRef guards against duplicate creation on rapid typing.
+						const cid = chapterIdRef.current;
+						if (!cid || aggregateDraftModeRef.current || creatingFirstSceneRef.current) return;
+						creatingFirstSceneRef.current = true;
+						try {
+							const newScene = await scenesApi.create(cid, { title: '' });
+							firstId = newScene.id;
+							firstSceneIdRef.current = firstId;
+							expectedSceneIdsRef.current = [firstId];
+							// Pre-set the loaded-order refs so the upcoming query refetch
+							// doesn't see a scope/order change and re-blank the editor.
+							loadedChapterIdRef.current = `chapter:${cid}`;
+							loadedSceneOrderRef.current = firstId;
+							const wc = countWords(html);
+							await scenesApi.updateContent(firstId, html, wc);
+							queryClient.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(cid) });
+							queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(firstId) });
+						} catch (err) {
+							console.error('[EditorPanel] Failed to auto-create first scene:', err);
+						} finally {
+							creatingFirstSceneRef.current = false;
+						}
+						return;
+					}
 					const chunks = parseSceneChunks(html, firstId);
 					if (!chunks.length) return;
 					const expectedIds = expectedSceneIdsRef.current;

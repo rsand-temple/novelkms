@@ -49,7 +49,7 @@ const BUILD_NUMBER = typeof __BUILD_NUMBER__ !== 'undefined' ? __BUILD_NUMBER__ 
 const DEFAULT_NAV_WIDTH = 300
 const DEFAULT_PROPS_WIDTH = 320
 const MIN_NAV_WIDTH = 220
-const MAX_NAV_WIDTH = 520
+const MAX_NAV_WIDTH = 720
 const MIN_PROPS_WIDTH = 260
 const MAX_PROPS_WIDTH = 560
 const COLLAPSED_PANEL_WIDTH = 44
@@ -137,7 +137,9 @@ function WorkspacePanelHeader({ icon, title, subtitle, actions }) {
 	)
 }
 
-function ResizeHandle({ onMouseDown, side, disabled }) {
+// Must be a direct child of the outer flex row — flex stretches it to full height.
+// Wrapping in a <span> collapses the inner Box to 0 height (block formatting context).
+function ResizeHandle({ onMouseDown, disabled }) {
 	if (disabled) return null
 
 	return (
@@ -148,9 +150,12 @@ function ResizeHandle({ onMouseDown, side, disabled }) {
 			sx={{
 				width: 8,
 				flexShrink: 0,
+				alignSelf: 'stretch',
 				cursor: 'col-resize',
 				position: 'relative',
 				zIndex: 3,
+				ml: -0.5,
+				mr: -0.5,
 				'&::after': {
 					content: '""',
 					position: 'absolute',
@@ -160,13 +165,12 @@ function ResizeHandle({ onMouseDown, side, disabled }) {
 					width: 2,
 					transform: 'translateX(-50%)',
 					borderRadius: 2,
-					bgcolor: 'transparent',
+					bgcolor: 'divider',
 					transition: 'background-color 120ms ease',
 				},
-				'&:hover::after': {
+				'&:hover::after, &:active::after': {
 					bgcolor: 'primary.main',
 				},
-				...(side === 'left' ? { ml: -0.5, mr: -0.5 } : { ml: -0.5, mr: -0.5 }),
 			}}
 		/>
 	)
@@ -780,13 +784,10 @@ export default function App() {
 							)}
 						</Box>
 
-						<span>
-							<ResizeHandle
-								side="left"
-								disabled={navCollapsed}
-								onMouseDown={(event) => handleResizeMouseDown(event, 'nav')}
-							/>
-						</span>
+						<ResizeHandle
+							disabled={navCollapsed}
+							onMouseDown={(event) => handleResizeMouseDown(event, 'nav')}
+						/>
 
 						<Box sx={{
 							flex: 1,
@@ -828,13 +829,10 @@ export default function App() {
 							)}
 						</Box>
 
-						<span>
-							<ResizeHandle
-								side="right"
-								disabled={propsCollapsed}
-								onMouseDown={(event) => handleResizeMouseDown(event, 'props')}
-							/>
-						</span>
+						<ResizeHandle
+							disabled={propsCollapsed}
+							onMouseDown={(event) => handleResizeMouseDown(event, 'props')}
+						/>
 
 						<Box sx={{
 							width: propsCollapsed ? COLLAPSED_PANEL_WIDTH : propsWidth,
