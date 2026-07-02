@@ -215,12 +215,30 @@ export default function LoginPage() {
 						</Box>
 
 						<Box>
-							<Typography variant="h5" fontWeight={700}>
-								Start your NovelKMS trial
-							</Typography>
-							<Typography color="text.secondary">
-								Sign in to create your account and continue to your manuscript workspace.
-							</Typography>
+							<Stack spacing={1.25}>
+								<Typography variant="h5" fontWeight={700}>
+									Start your NovelKMS trial
+								</Typography>
+								<Typography color="text.secondary" sx={{ fontSize: '1rem', fontStyle: 'italic' }}>
+									Founders access is open! Start your 14-day trial, then continue for $9/month
+									as an early subscriber.
+								</Typography>
+								<Typography color="text.secondary" sx={{ fontSize: '1rem', fontStyle: 'italic' }}>
+									Sign in below and meet your manuscript workspace.
+								</Typography>
+								<Box
+									component={RouterLink}
+									to="/faq"
+									sx={{
+										color: 'primary.main',
+										fontWeight: 650,
+										textDecoration: 'none',
+										'&:hover': { textDecoration: 'underline' },
+									}}
+								>
+									Questions? Read our FAQ.
+								</Box>
+							</Stack>
 						</Box>
 
 						<Stack spacing={1.5}>
@@ -251,53 +269,30 @@ export default function LoginPage() {
 
 						<Divider />
 
-						<Stack spacing={1.25}>
-							<Typography color="text.secondary" sx={{ fontSize: '1rem', fontStyle: 'italic' }}>
-								Founders access is open! Start your 14-day trial, then continue for $9/month
-								as an early subscriber.
-							</Typography>
-						</Stack>
-						<Typography color="text.secondary" sx={{ fontSize: '1rem', fontStyle: 'italic' }}>
-							Questions about privacy, AI, subscriptions, exporting your manuscript, or terms of use? Read our{' '}
-							<Box
-								component={RouterLink}
-								to="/faq"
-								sx={{
-									color: 'primary.main',
-									fontWeight: 650,
-									textDecoration: 'none',
-									'&:hover': { textDecoration: 'underline' },
-								}}
-							>
-								FAQ
-							</Box>
-							{', '}
+						<Typography color="text.secondary" sx={{ fontStyle: 'italic' }}>
 							<Box
 								component={RouterLink}
 								to="/privacy"
 								sx={{
 									color: 'primary.main',
-									fontWeight: 650,
 									textDecoration: 'none',
 									'&:hover': { textDecoration: 'underline' },
 								}}
 							>
 								Privacy Policy
 							</Box>
-							{', or '}
+							{', '}
 							<Box
 								component={RouterLink}
 								to="/terms"
 								sx={{
 									color: 'primary.main',
-									fontWeight: 650,
 									textDecoration: 'none',
 									'&:hover': { textDecoration: 'underline' },
 								}}
 							>
 								Terms of Service
 							</Box>
-							.
 						</Typography>
 					</Stack>
 				</Paper>
