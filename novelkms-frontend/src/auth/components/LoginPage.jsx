@@ -30,24 +30,28 @@ const PROVIDERS = [
 
 const FEATURES = [
 	{
-		title: 'Write in scenes, chapters, parts, or the full book',
-		body: 'Move naturally through your manuscript while NovelKMS preserves scene-level structure behind the editor.',
+		title: 'Review findings like a revision inbox',
+		body: 'Run chapter reviews to catch continuity errors or plot holes, then triage each finding as Done, Dismissed, or Deferred.',
 	},
 	{
-		title: 'Keep story knowledge beside the page',
-		body: 'Characters, canon, timeline notes, research, and world details stay attached to the project instead of scattered across other tools.',
+		title: 'Carry story context forward',
+		body: 'Build chapter memory so later reviews understand what happened earlier in the manuscript.',
 	},
 	{
-		title: 'Turn AI feedback into a revision inbox',
-		body: 'Run chapter or scene reviews, jump to the relevant passage, and triage each finding as Done, Dismissed, Deferred, or promoted to Codex.',
+		title: 'Catch the big-picture problems',
+		body: 'Surface continuity breaks, pacing dips, tone drift, genre mismatch, and character arc issues before beta readers see them.',
 	},
 	{
-		title: 'Summarize the book as it grows',
-		body: 'Generate chapter summaries and story-so-far memory docs to keep long manuscripts coherent through revision.',
+		title: 'Generate clean story summaries',
+		body: 'Create chapter summaries and aggregate them into a full-book synopsis for revision, querying, and orientation.',
 	},
 	{
-		title: 'Import, export, and stay in control',
-		body: 'Bring in DOCX, export your work, and use AI as review support — not as an automatic ghostwriter.',
+		title: 'Keep world knowledge beside the page',
+		body: 'Store characters, canon, timeline notes, voice sheets, and research near the manuscript they support.',
+	},
+	{
+		title: 'Stay in control of your prose',
+		body: 'Import, export, revise, and review freely. NovelKMS analyzes your manuscript; it does not rewrite it for you.',
 	},
 ]
 
@@ -147,12 +151,13 @@ export default function LoginPage() {
 							maxWidth: 760,
 						}}
 					>
-						Revise your novel without losing the story around it.
+						A structured editorial workspace for long manuscripts. AI review. No ghostwriting.
 					</Typography>
 
 					<Typography sx={{ mt: 2, color: 'text.secondary', fontSize: '1rem', maxWidth: 860 }}>
-						NovelKMS keeps your manuscript, Codex, summaries, continuity notes, and AI review findings in one
-						structured workspace — built for authors managing long-form fiction.
+						NovelKMS bridges the gap between chaotic drafting and elite developmental editing.
+						Keep your manuscript, continuity notes, and deep story memory in one structured workspace
+						built specifically for long-form fiction authors.
 					</Typography>
 				</Box>
 
@@ -219,12 +224,20 @@ export default function LoginPage() {
 								<Typography variant="h5" fontWeight={700}>
 									Start your NovelKMS trial
 								</Typography>
-								<Typography color="text.secondary" sx={{ fontSize: '1rem', fontStyle: 'italic' }}>
-									Founders access is open! Start your 14-day trial, then continue for $9/month
-									as an early subscriber.
+								<Typography color="text.secondary" sx={{ fontSize: '1rem' }}>
+									Best for novelists revising complex drafts, series fiction, historical fiction, speculative fiction, and continuity-heavy manuscripts.
+								</Typography>
+								<Typography color="text.secondary" sx={{ fontSize: '1rem' }}>
+									<strong>Founders access is open!</strong> Start your 14-day trial, then continue for $9/month
+									as an early subscriber. No credit card required!
+								</Typography>
+								<Typography color="text.secondary" sx={{ fontSize: '1rem' }}>
+									We charge a flat fee and never markup AI costs. 
+									Plug in your own API key (like OpenAI or Anthropic)
+									to edit with no hidden upcharge.
 								</Typography>
 								<Typography color="text.secondary" sx={{ fontSize: '1rem', fontStyle: 'italic' }}>
-									Sign in below and meet your manuscript workspace.
+									Sign in below and meet your manuscript workspace!
 								</Typography>
 								<Box
 									component={RouterLink}

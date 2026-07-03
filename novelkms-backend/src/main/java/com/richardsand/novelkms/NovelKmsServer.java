@@ -105,6 +105,7 @@ import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 import com.richardsand.novelkms.service.RegistrationNotificationService;
+import com.richardsand.novelkms.service.StarterContentService;
 import com.richardsand.novelkms.service.TrashService;
 import com.richardsand.novelkms.service.admin.AdminBillingService;
 import com.richardsand.novelkms.service.admin.AdminUserDeleteService;
@@ -247,6 +248,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         OAuthService                    oauthService                    = new OAuthService(config.getAuth(), authDao);
         RegistrationNotificationService registrationNotificationService = new RegistrationNotificationService(config.getNotifications());
         SessionService                  sessionService                  = new SessionService(authDao, config.getAuth());
+        StarterContentService           starterContentService           = new StarterContentService(projectDao, bookDao, partDao, chapterDao, sceneDao);
         TrashService                    trashService                    = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao,
                 artifactNodeDao, artifactStorage);
 
@@ -382,6 +384,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(projectDao).to(ProjectDao.class);
                 bind(registrationNotificationService).to(RegistrationNotificationService.class);
                 bind(sceneDao).to(SceneDao.class);
+                bind(starterContentService).to(StarterContentService.class);
                 bind(sessionService).to(SessionService.class);
                 bind(stripeWebhookEventDao).to(StripeWebhookEventDao.class);
                 bind(templateDao).to(TemplateDao.class);

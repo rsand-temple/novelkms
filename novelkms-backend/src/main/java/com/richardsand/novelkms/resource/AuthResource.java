@@ -13,7 +13,9 @@ import com.richardsand.novelkms.auth.CryptoTokens;
 import com.richardsand.novelkms.auth.OAuthService;
 import com.richardsand.novelkms.auth.SessionService;
 import com.richardsand.novelkms.dao.AuthDao;
+import com.richardsand.novelkms.model.AppUser;
 import com.richardsand.novelkms.service.RegistrationNotificationService;
+import com.richardsand.novelkms.service.StarterContentService;
 
 import jakarta.inject.Inject;
 import jakarta.servlet.http.HttpServletRequest;
@@ -50,6 +52,7 @@ public class AuthResource {
     private final AuthDao                         dao;
     private final NovelKmsConfig.Auth             config;
     private final RegistrationNotificationService registrationNotifications;
+    private final StarterContentService           starterContent;
 
     @Inject
     public AuthResource(
@@ -57,11 +60,13 @@ public class AuthResource {
             SessionService sessions,
             AuthDao dao,
             RegistrationNotificationService registrationNotifications,
+            StarterContentService starterContent,
             NovelKmsConfig config) {
         this.oauth = oauth;
         this.sessions = sessions;
         this.dao = dao;
         this.registrationNotifications = registrationNotifications;
+        this.starterContent = starterContent;
         this.config = config.getAuth();
     }
 
@@ -185,9 +190,17 @@ public class AuthResource {
         if (body.displayName() == null || body.displayName().isBlank() || body.displayName().trim().length() > 200)
             return Response.status(Response.Status.BAD_REQUEST).entity(Map.of("error", "display_name_required")).build();
 
-        var pendingRegistration = pending.get();
-        var user                = dao.register(pendingRegistration, body.firstName(), body.lastName(), body.displayName(), body.mobileNumber());
+        var     pendingRegistration = pending.get();
+        AppUser user                = dao.register(pendingRegistration, body.firstName(), body.lastName(), body.displayName(), body.mobileNumber());
         logger.info("Registration completed: userId={}, email={}", user.id(), user.emailAddress());
+
+        // Seed starter content. Non-fatal: a failure here must not prevent the
+        // user from accessing their newly created account.
+        try {
+            starterContent.seedForNewUser(user);
+        } catch (Exception e) {
+            logger.warn("Failed to seed starter content for userId={}: {}", user.id(), e.getMessage(), e);
+        }
 
         registrationNotifications.notifyRegistration(user, pendingRegistration, request.getRemoteAddr(), request.getHeader("User-Agent"));
 
