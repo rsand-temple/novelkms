@@ -467,3 +467,30 @@ A per-project non-manuscript file/folder area — the first feature that stores 
 - D10: Nav-pane folder drag deferred (additive fast-follow).
 - D11: Native OS file drop handled with document-level prevention + panel-level overlay.
 - D12: Image artifacts get an in-pane read-only preview modal (double-click or right-click "Preview"); image bytes are served from the existing cookie-authenticated `downloadUrl` as an `<img src>`, so no new endpoint. This is the first in-app rendering of an artifact — the "download only" rule now means "no editing/round-trip," not "never displayed." Text (editor) and all other types (download) dispatch unchanged.
+
+### V34 — Editorials (per-chapter author-facing AI reading)
+
+A new AI artifact family: a short editorial reading of one chapter — the model's overall "what do you think?" on tone, genre drift, character arcs, and storyline evolution. Modeled on chapter summaries (V25) + nav-leaf editing (V27), but with one defining difference from every prior AI artifact: **an editorial is never consumed by any other AI function.** It exists purely for the author's edification. It is also distinct from an `ai_review`: an impressionistic overall read, not discrete triageable findings, and it deliberately does not surface spelling/grammar/line-level issues unless egregious ("less is more", ~half a page).
+
+Note: the real next Flyway number was **V34** — the feature-version labels (V25–V32) had drifted ahead of the actual migration sequence, which sat at V33. This section uses the true migration number.
+
+**Schema (V34, identical in both dialects).** `chapter_editorial`: one per chapter (`chapter_id` UNIQUE), `content` TEXT (authored TipTap HTML, like memory/summary since V27), `source` AI|EDITED, prompt/model/generated_at, and `user_guidance` — the last included directly in the CREATE (the V26 one-time-guidance column) since this family arrives after V26. `ON DELETE CASCADE`; trashed chapters keep the row (excluded by read filters) and it returns on restore. No `book`/`project` columns, no aggregate table.
+
+**Context inputs, but no downstream consumption.** When generated, an editorial draws on the **same** context a chapter review does — the preceding chapters' memory documents (`assemblePriorContext`) as "story so far", plus pinned Codex reference entries (`assembleReferenceContext`, `includePinnedContext` defaulting to true exactly as the review does). But nothing reads it back: `AiReviewService.assemblePriorContext()` and `assembleChapterSummaries()` are byte-identical — editorial is never folded into any prompt.
+
+**Backend.** `ChapterEditorial` model; `ChapterEditorialDao` (single-doc CRUD only — no book-wide numbering CTE, since editorials are never aggregated or gated). New `EditorialRequest`/`EditorialResult`; `AiProvider.generateEditorial`; `OpenAiProvider` gains `EDITORIAL_PROMPT_VERSION = "chapter-editorial-v1"`, a fixed system-default persona wrapper (developmental-editor voice; half-page ceiling; no findings list; no line edits unless egregious; reuses the review's fenced reference/prior-context/guidance blocks in the user message), and `buildEditorialRequestBody`. `AiReviewService` gains `chapterEditorialDao` (constructor now 14-arg) and `generateChapterEditorial` / `getChapterEditorial` / `editChapterEditorial` / `deleteChapterEditorial`. `EditorialResource` exposes `GET/PUT/DELETE/POST /ai/editorial/chapters/{id}`, tenant-covered via the `chapters/{id}` segment; wired/bound/registered in `NovelKmsServer`.
+
+**Frontend.** `api/editorial.js` + `hooks/useEditorial.js` (`EDITORIAL_KEYS = { doc }`; per-chapter invalidation only — no aggregate/coverage). A third fixed chapter nav leaf via `ChapterAiDocItem` (`RateReviewOutlinedIcon`, distinct from Memory's `PsychologyOutlined` and Summary's `SummarizeOutlined`); `selection.aiDocType` gains `'editorial'` (stripped generically by `setSelection`'s transient cleanup like the others — no App.jsx change). `EditorPanel` slots editorial alongside memory/summary for load/autosave/toolbar-guidance/Generate-Regenerate, but with **no continuity gate and no staleness chip** — purely author-facing, so it shows only the Generated/Edited metadata line. `AiDocProperties` covers it. `NavContextMenu` gains chapter-node Generate editorial / Edit editorial… / Clear editorial (with confirm dialog + self-contained Snackbar), no gate.
+
+**Decisions.**
+- D1: New artifact family (confirmed) — same one-per-chapter shape as summaries, but decoupled and never consumed downstream.
+- D2: True next Flyway number (V34), read from the migration directories rather than the drifted feature labels.
+- D3: HTML storage + nav-leaf editing (per V27).
+- D4: Same context inputs as a chapter review (preceding memory docs + pinned Codex).
+- D5: Never folded into any prompt — assembly methods byte-identical.
+- D6: `chapter-editorial-v1`, fixed system-default persona; four-scope template editor deferred (matching the summary precedent).
+- D7: One-time guidance (V26) supported.
+- D8: Separate `EditorialResource` rather than folding into `SummaryResource`.
+- D9: `RateReviewOutlinedIcon` for the leaf.
+- D10: No ReviewRail surface — nav leaf + context menu + EditorPanel only.
+- D11: `AiDocProperties` + context-menu items with Snackbar feedback.

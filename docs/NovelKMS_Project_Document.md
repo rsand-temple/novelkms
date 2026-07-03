@@ -161,6 +161,10 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 - Designing toward Dropbox-style versioning: `sha256` captured on blobs, `artifact_file_version` additive.
 - Double-clicking an image artifact opens a read-only preview modal (Download + Close) instead of downloading; a right-click "Preview" item mirrors it. Non-image files are unchanged (text → in-place editor, other → direct download).
 
+**Editorials (V34).** A third per-chapter AI artifact family, and the first that is purely author-facing — its output is never consumed by any other AI function. An editorial is a short editorial reading of a chapter (tone, genre drift, character arcs, storyline evolution), deliberately not a line-level review (no spelling/grammar findings unless egregious) and kept to about half a page. Generated from the chapter prose plus the same prior-memory and pinned-Codex context a chapter review uses (`chapter-editorial-v1`), one per chapter, overwrite on regenerate, optionally hand-edited, with one-time guidance support. Edited in EditorPanel via a third fixed chapter nav leaf (Editorial, after Memory and Summary); created/edited/cleared from the chapter nav context menu. No ReviewRail tab, no staleness/coverage view. Endpoints: `GET/PUT/DELETE/POST /ai/editorial/chapters/{id}`.
+
+Editorial nav-leaf icon uses `RateReviewOutlinedIcon`; if a future build flags a missing icon file, swap it for a proven-present alternative (e.g. `EditNoteOutlined`) — it's a one-line change in `ChapterAiDocItem.jsx`.
+
 ## Known issues / watchlist
 
 - Billing/admin support now has a minimal console and family-access grant flow. Remaining billing work: extend trial, revoke/remove family access with a defined restoration policy, plan mapping, webhook diagnostics, and eventual Stripe reconciliation.

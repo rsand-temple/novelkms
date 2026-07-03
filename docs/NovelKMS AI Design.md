@@ -206,6 +206,7 @@ Known versions:
 | `chapter-review-v4`  | Form/functional split: editorial persona externalized as author-editable form block; constant functional block owns the JSON output contract. Form overridable at book → project → user → system scopes. Review provenance (`form_scope`, `form_instructions`) stamped on each `ai_review`. |
 | `chapter-summary-v1` | One-paragraph chapter summary (free text).                   |
 | book-summary-v1      | Whole-book synopsis built from chapter summaries, ≤1000 words |
+| chapter-editorial-v1 | Per-chapter editorial reading (tone / genre drift / character arcs / storyline evolution); free-text, ≤ ~half a page, no line-level findings; uses review-equivalent prior/reference context but is never consumed downstream |
 
 
 
@@ -315,6 +316,16 @@ Editing moved from modal dialogs into the document's own nav-tree leaf, opened i
 Regenerating warns first whenever content already exists; a first-ever Generate skips straight to the existing continuity (`PreReviewMemoryDialog`) / coverage (`PreBookSummaryDialog`) gates. One-time guidance and the staleness chip live in EditorPanel's toolbar in this mode.
 
 The ReviewRail Memory tab and the book "View chapter summaries…" dialog remain as read-only peek surfaces (Generate/Regenerate/guidance kept, inline editing replaced by an "Edit in document" link). The standalone nav-triggered `MemoryDocDialog`/`ChapterSummaryDialog`/`ChapterSummaryEditor` modals are removed.
+
+## Editorials
+
+A third per-chapter AI artifact family (after memory documents and chapter summaries), and the first whose output is **never consumed by any other AI function** — it is written purely for the author to read. An editorial is a short editorial reading of one chapter: the model's overall take on tone, genre drift, character arcs, and storyline evolution. It is deliberately **not** a review — no discrete findings, no severity, no Codex promotion — and it does not flag spelling, grammar, or line-level issues unless egregious. It is kept brief (about half a page; less is more).
+
+- **Generation** — `chapter-editorial-v1`, free-text (no JSON contract), fixed system-default persona. Generated from the chapter prose plus the **same context a chapter review uses**: the preceding chapters' memory documents ("story so far") and pinned Codex reference entries (`includePinnedContext`, default on). One per chapter, overwrite on regenerate, optionally hand-edited (`EDITED`). One-time author guidance (V26) is supported.
+- **Never fed back** — unlike a memory document, an editorial is not read by any review, summary, or other editorial. `AiReviewService.assemblePriorContext()` / `assembleChapterSummaries()` are unchanged by its existence.
+- **Surface** — edited in EditorPanel via the chapter's fixed **Editorial** nav leaf (third after Memory and Summary), with Generate / Regenerate / one-time guidance in the toolbar. Created/edited/cleared from the chapter nav context menu. No ReviewRail tab (purely author-facing), no staleness/coverage view, no book-wide aggregate.
+- **Endpoints** — `SummaryResource`-style CRUD on a dedicated `EditorialResource`: `GET/PUT/DELETE/POST /ai/editorial/chapters/{id}`, tenant-covered via the `chapters/{id}` segment.
+- **Prompt** — free-text and fixed for v1; the four-scope template mechanism was deferred, matching the summary precedent.
 
 ## Non-goals for the current AI slice
 
