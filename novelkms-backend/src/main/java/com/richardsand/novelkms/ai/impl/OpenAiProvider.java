@@ -1,4 +1,4 @@
-package com.richardsand.novelkms.ai;
+package com.richardsand.novelkms.ai.impl;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -16,6 +16,19 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.richardsand.novelkms.ai.AiProvider;
+import com.richardsand.novelkms.ai.AiProviderException;
+import com.richardsand.novelkms.ai.BookSummaryRequest;
+import com.richardsand.novelkms.ai.EditorialRequest;
+import com.richardsand.novelkms.ai.EditorialResult;
+import com.richardsand.novelkms.ai.MemoryRequest;
+import com.richardsand.novelkms.ai.MemoryResult;
+import com.richardsand.novelkms.ai.ReviewRequest;
+import com.richardsand.novelkms.ai.ReviewResult;
+import com.richardsand.novelkms.ai.SummaryRequest;
+import com.richardsand.novelkms.ai.SummaryResult;
+import com.richardsand.novelkms.ai.WeatherInterpretationRequest;
+import com.richardsand.novelkms.ai.WeatherInterpretationResult;
 
 /**
  * OpenAI implementation of {@link AiProvider}, calling the Chat Completions API

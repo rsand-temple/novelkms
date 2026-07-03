@@ -16,7 +16,8 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.richardsand.novelkms.ai.AiProvider;
-import com.richardsand.novelkms.ai.OpenAiProvider;
+import com.richardsand.novelkms.ai.impl.AnthropicProvider;
+import com.richardsand.novelkms.ai.impl.OpenAiProvider;
 import com.richardsand.novelkms.auth.AuthenticationFilter;
 import com.richardsand.novelkms.auth.OAuthService;
 import com.richardsand.novelkms.auth.SecretCipher;
@@ -70,12 +71,12 @@ import com.richardsand.novelkms.resource.BillingResource;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.BookSummaryTemplateResource;
 import com.richardsand.novelkms.resource.ChapterMemoryResource;
-import com.richardsand.novelkms.resource.ChapterSummaryTemplateResource;
-import com.richardsand.novelkms.resource.EditorialResource;
-import com.richardsand.novelkms.resource.EditorialTemplateResource;
 import com.richardsand.novelkms.resource.ChapterResource;
+import com.richardsand.novelkms.resource.ChapterSummaryTemplateResource;
 import com.richardsand.novelkms.resource.CodexResource;
 import com.richardsand.novelkms.resource.EditorSettingsResource;
+import com.richardsand.novelkms.resource.EditorialResource;
+import com.richardsand.novelkms.resource.EditorialTemplateResource;
 import com.richardsand.novelkms.resource.ExportResource;
 import com.richardsand.novelkms.resource.ImportResource;
 import com.richardsand.novelkms.resource.MemoryTemplateResource;
@@ -224,12 +225,12 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 adminUserDao,
                 authDao,
                 mapper);
-        ArchiveService  archiveService  = new ArchiveService(archiveDao);
-        ArtifactStorage artifactStorage = new ArtifactStorage(
+        ArchiveService      archiveService      = new ArchiveService(archiveDao);
+        ArtifactStorage     artifactStorage     = new ArtifactStorage(
                 config.getArtifacts() != null ? config.getArtifacts().storageDir : null);
-        ArtifactService artifactService = new ArtifactService(ds, artifactNodeDao, artifactBlobDao,
+        ArtifactService     artifactService     = new ArtifactService(ds, artifactNodeDao, artifactBlobDao,
                 artifactStorage, config);
-        BillingService  billingService  = new BillingService(userSubscriptionDao, config);
+        BillingService      billingService      = new BillingService(userSubscriptionDao, config);
 
         AdminUserDeleteService adminUserDeleteService = new AdminUserDeleteService(
                 ds,
@@ -254,10 +255,14 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 config.getSecurity() != null ? config.getSecurity().encryptionKey : null);
         AiCredentialDao aiCredentialDao = new AiCredentialDao(ds, secretCipher);
 
-        // AI Review Service
-        OpenAiProvider          openAiProvider  = new OpenAiProvider();
-        Map<String, AiProvider> aiProviders     = Map.of(openAiProvider.providerKey(), openAiProvider);
-        AiReviewService         aiReviewService = new AiReviewService(
+        // AI Review Service — provider registry
+        OpenAiProvider          openAiProvider    = new OpenAiProvider();
+        AnthropicProvider       anthropicProvider = new AnthropicProvider();
+        Map<String, AiProvider> aiProviders       = Map.of(
+                openAiProvider.providerKey(), openAiProvider,
+                anthropicProvider.providerKey(), anthropicProvider);
+
+        AiReviewService aiReviewService = new AiReviewService(
                 chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao,
                 aiFormInstructionsDao, chapterMemoryDao, memoryTemplateDao,
                 aiPromptTemplateDao,

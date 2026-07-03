@@ -8,12 +8,13 @@ order: 10
 
 AI in NovelKMS is an **editorial assistant**, not a ghostwriter. It critiques, analyzes, and helps you triage revision work — it never rewrites your manuscript on its own, and there is no general chat.
 
-To use it you bring your own provider key (currently OpenAI). Your key is stored encrypted and used only for your reviews. Set it up under [AI settings](#help:ai.credentials).
+To use it you bring your own provider key (currently OpenAI or Anthropic/Claude). Your key is stored encrypted and used only for your reviews. Set it up under [AI settings](#help:ai.credentials).
 
 The main pieces:
 
-- The [review rail](#help:ai.review.rail) runs reviews and shows findings beside the editor.
-- [Memory documents](#help:ai.memory) give the model "story so far" context for a chapter.
+- The [review rail](#help:ai.review.rail) runs chapter and scene reviews and shows findings beside the editor.
+- [Memory documents](#help:ai.memory) give the model "story so far" context when reviewing a chapter.
 - [Chapter and book summaries](#help:ai.summaries) are reader-facing synopses.
+- [Editorials](#help:ai.editorial) are short impressionistic readings of a chapter, purely for you.
 - [One-time guidance](#help:ai.guidance) steers a single run without changing your settings.
-- [Form instructions](#help:ai.form-instructions) set the editor's persona persistently.
+- [Form instructions](#help:ai.form-instructions) set the editorial persona persistently.

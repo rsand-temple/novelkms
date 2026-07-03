@@ -102,21 +102,20 @@ The immediate goal is still practical validation: determine whether NovelKMS man
 ### AI workflow
 
 - BYOK AI credentials.
-- OpenAI provider first, behind provider abstraction.
+- OpenAI and Anthropic (Claude) providers implemented behind a shared `AiProvider` interface. Users add credentials per provider; `AiReviewService` routes each call through the provider registered for the stored `ai_credential.provider` key (`OPENAI` or `ANTHROPIC`). No schema migration required — the existing `provider` string column already accommodates multiple values. Current default models: `gpt-5.4` (OpenAI), `claude-sonnet-4-6` (Anthropic).
 - Per-user API keys encrypted at rest.
 - Chapter and scene review workflows create persistent AI review artifacts.
 - Recommendation lifecycle: `OPEN`, `ACCEPTED`, `REJECTED`, `FUTURE`, `DELETED`, `PROMOTED`.
 - AI review rail in the editor area with click-to-scroll via anchor text.
 - Recommendations can be promoted into Codex entries.
 - AI review system prompt split into **form** (editorial persona/constraints, author-editable) and **functional** (JSON output contract, constant). Form instructions are independently overridable at book, project, user-global, and system-default scopes with single-block selection (no inheritance, no concatenation). Each review records the form text and source scope as immutable provenance.
-- Prompt version `chapter-review-v4` marks the form/functional externalization.
-- **Chapter & book summaries (V25).** A new AI artifact family, fully independent of memory documents (V24) — separate tables, prompts, DAOs, generation paths, and UI. 
-  - A **chapter summary** is one human-readable paragraph per chapter (`chapter-summary-v1`), generated from the chapter prose and optionally hand-edited (marks it `EDITED`). 
-  - A **book summary** is a whole-book synopsis of up to ~1000 words (`book-summary-v1`), generated *entirely* from the chapter summaries concatenated in book order — never the manuscript prose, since a full book is too large to summarize reliably in one pass. Both are one-per-parent and overwrite on regenerate, like memory docs. 
-  - Right-clicking a book → **View chapter summaries…** opens a dialog with the read-only aggregated chapter summaries (each with a per-chapter staleness chip) plus the book-summary panel (generate / regenerate / edit). 
+- Prompt version `chapter-review-v7` is current.
+- **Chapter & book summaries (V25).** A new AI artifact family, fully independent of memory documents (V24) — separate tables, prompts, DAOs, generation paths, and UI.
+  - A **chapter summary** is one human-readable paragraph per chapter (`chapter-summary-v2`), generated from the chapter prose and optionally hand-edited (marks it `EDITED`).
+  - A **book summary** is a whole-book synopsis of up to ~1000 words (`book-summary-v2`), generated *entirely* from the chapter summaries concatenated in book order — never the manuscript prose, since a full book is too large to summarize reliably in one pass. Both are one-per-parent and overwrite on regenerate, like memory docs.
+  - Right-clicking a book → **View chapter summaries…** opens a dialog with the read-only aggregated chapter summaries (each with a per-chapter staleness chip) plus the book-summary panel (generate / regenerate / edit).
   - Generating the book summary is gated by a coverage warning (`PreBookSummaryDialog`) when chapters are missing or stale, offering to fill the gaps first. Chapter summaries are created/edited/cleared from the chapter nav context menu.
-- **One-time author guidance (V26).** Every generation flow — chapter/scene review, memory document, chapter summary, book summary — now takes an optional free-text guidance note for that single run only (e.g. "the letter in this chapter is canonically a forgery"), separate from the persistent form/template overrides and from the still-future Codex-context increment. Stored as provenance on the resulting artifact; the UI field pre-fills from whatever guidance produced the current artifact and is never auto-cleared, so guidance can be repeated or refined across runs. Prompt versions bumped accordingly (`chapter-review-v6`, `memory-v2`, `chapter-summary-v2`,`book-summary-v2`).
-
+- **One-time author guidance (V26).** Every generation flow — chapter/scene review, memory document, chapter summary, book summary — now takes an optional free-text guidance note for that single run only (e.g. "the letter in this chapter is canonically a forgery"), separate from the persistent form/template overrides and from the still-future Codex-context increment. Stored as provenance on the resulting artifact; the UI field pre-fills from whatever guidance produced the current artifact and is never auto-cleared, so guidance can be repeated or refined across runs. Prompt versions bumped accordingly (`chapter-review-v6`, `memory-v2`, `chapter-summary-v2`, `book-summary-v2`).
 
 ### Codex and Trash
 

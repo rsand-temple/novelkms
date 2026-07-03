@@ -24,6 +24,27 @@ import {
 	useSetDefaultAiCredential,
 } from '../../hooks/useAiCredentials'
 
+const PROVIDERS = [
+	{
+		key: 'OPENAI',
+		label: 'OpenAI',
+		keyPrefix: 'sk-…',
+		modelDefault: 'gpt-5.4',
+		modelHelper: 'e.g. gpt-5.4, o3, gpt-4o',
+		keyHelper: 'Stored encrypted; shown only as ••••last4 afterward.',
+	},
+	{
+		key: 'ANTHROPIC',
+		label: 'Anthropic (Claude)',
+		keyPrefix: 'sk-ant-…',
+		modelDefault: 'claude-sonnet-4-6',
+		modelHelper: 'e.g. claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5',
+		keyHelper: 'Stored encrypted; shown only as ••••last4 afterward.',
+	},
+]
+
+const PROVIDER_MAP = Object.fromEntries(PROVIDERS.map(p => [p.key, p]))
+
 const EMPTY_FORM = { id: null, provider: 'OPENAI', label: '', apiKey: '', defaultModel: '', makeDefault: false }
 
 function errMessage(err) {
@@ -53,6 +74,8 @@ export default function AiCredentialsPanel() {
 
 	const saving = creating || updating
 	const isEdit = !!form?.id
+
+	const providerMeta = form ? (PROVIDER_MAP[form.provider] ?? PROVIDERS[0]) : null
 
 	const startAdd = () => { setErrorMsg(null); setForm({ ...EMPTY_FORM }) }
 	const startEdit = (c) => {
@@ -121,7 +144,11 @@ export default function AiCredentialsPanel() {
 									<Box sx={{ flexGrow: 1, minWidth: 0 }}>
 										<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 											<Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{c.label}</Typography>
-											<Chip label={c.provider} size="small" variant="outlined" />
+											<Chip
+												label={PROVIDER_MAP[c.provider]?.label ?? c.provider}
+												size="small"
+												variant="outlined"
+											/>
 											{c.defaultCredential && <Chip label="Default" size="small" color="warning" />}
 										</Box>
 										<Typography variant="caption" color="text.secondary">
@@ -174,11 +201,14 @@ export default function AiCredentialsPanel() {
 
 					<TextField
 						select label="Provider" value={form.provider}
-						onChange={(e) => setForm(f => ({ ...f, provider: e.target.value }))}
-						fullWidth size="small" sx={{ mb: 2 }} disabled
-						helperText="More providers coming later."
+						onChange={(e) => setForm(f => ({ ...f, provider: e.target.value, defaultModel: '' }))}
+						fullWidth size="small" sx={{ mb: 2 }}
+						disabled={isEdit}
+						helperText={isEdit ? 'Provider cannot be changed after creation.' : ''}
 					>
-						<MenuItem value="OPENAI">OpenAI</MenuItem>
+						{PROVIDERS.map(p => (
+							<MenuItem key={p.key} value={p.key}>{p.label}</MenuItem>
+						))}
 					</TextField>
 
 					<TextField
@@ -191,17 +221,20 @@ export default function AiCredentialsPanel() {
 					<TextField
 						label="API Key" type="password" value={form.apiKey}
 						onChange={(e) => setForm(f => ({ ...f, apiKey: e.target.value }))}
-						placeholder={isEdit ? 'Leave blank to keep current key' : 'sk-…'}
+						placeholder={isEdit ? 'Leave blank to keep current key' : (providerMeta?.keyPrefix ?? '…')}
 						fullWidth size="small" sx={{ mb: 2 }}
-						helperText={isEdit ? 'Leave blank to keep the existing key.' : 'Stored encrypted; shown only as ••••last4 afterward.'}
+						helperText={isEdit ? 'Leave blank to keep the existing key.' : (providerMeta?.keyHelper ?? '')}
 						autoComplete="off"
 					/>
 
 					<TextField
 						label="Default Model" value={form.defaultModel}
 						onChange={(e) => setForm(f => ({ ...f, defaultModel: e.target.value }))}
-						placeholder="gpt-5.4" fullWidth size="small" sx={{ mb: 2 }}
-						helperText="Optional. Blank uses the provider default."
+						placeholder={providerMeta?.modelDefault ?? ''}
+						fullWidth size="small" sx={{ mb: 2 }}
+						helperText={providerMeta?.modelHelper
+							? `Optional. ${providerMeta.modelHelper}. Blank uses the provider default.`
+							: 'Optional. Blank uses the provider default.'}
 					/>
 
 					{!isEdit && (

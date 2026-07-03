@@ -1,5 +1,7 @@
 package com.richardsand.novelkms.ai;
 
+import com.richardsand.novelkms.ai.impl.OpenAiProvider;
+
 /**
  * Abstraction over an AI provider. The rest of the application is
  * provider-agnostic: it resolves a provider by key from the registry and calls
