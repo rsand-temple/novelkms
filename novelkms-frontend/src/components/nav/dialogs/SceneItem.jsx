@@ -142,7 +142,7 @@ export default function SceneItem({
 			onClick={handleClick}
 			onContextMenu={handleContextMenu}
 			sx={{
-				pl: `${(7 + depth * 3) * 8 + 28}px`,
+				pl: 5 + depth * 3,
 				...(matchCount > 0 && { bgcolor: 'warning.light' }),
 				...(showTopLine && { boxShadow: theme => `inset 0  2px 0 ${theme.palette.primary.main}` }),
 				...(showBottomLine && { boxShadow: theme => `inset 0 -2px 0 ${theme.palette.primary.main}` }),

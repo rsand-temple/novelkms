@@ -6,8 +6,8 @@ package com.richardsand.novelkms.ai;
  * {@link AiProvider#generateChapterSummary}.
  *
  * <p>Distinct from a review and from a memory document: there are no
- * recommendations, no JSON contract, and no template. The provider reads the
- * chapter text and returns a single readable summary paragraph verbatim.
+ * recommendations, no JSON contract, and no structural template. The provider
+ * reads the chapter text and returns a single readable summary paragraph verbatim.
  *
  * @param apiKey       decrypted provider API key (never logged or persisted)
  * @param model        model identifier, e.g. {@code "gpt-5.4"}
@@ -16,11 +16,16 @@ package com.richardsand.novelkms.ai;
  * @param userGuidance optional one-time author note for this generation only,
  *                     appended to the user message as a clearly-fenced
  *                     addendum. Null/blank when not supplied.
+ * @param systemPrompt the resolved AI system prompt for this generation, from
+ *                     {@code AiPromptTemplateDao} (book → project → user → system
+ *                     default). When non-blank the provider uses it verbatim
+ *                     instead of its built-in constant.
  */
 public record SummaryRequest(
         String apiKey,
         String model,
         String chapterLabel,
         String chapterText,
-        String userGuidance) {
+        String userGuidance,
+        String systemPrompt) {
 }

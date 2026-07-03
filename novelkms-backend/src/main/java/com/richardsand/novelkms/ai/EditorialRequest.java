@@ -27,6 +27,10 @@ package com.richardsand.novelkms.ai;
  * @param userGuidance     optional one-time author note for this generation only,
  *                         appended to the user message as a clearly-fenced
  *                         addendum. Null/blank when not supplied.
+ * @param systemPrompt     the resolved AI system prompt for this generation, from
+ *                         {@code AiPromptTemplateDao} (book → project → user →
+ *                         system default). When non-blank the provider uses it
+ *                         verbatim instead of its built-in constant.
  */
 public record EditorialRequest(
         String apiKey,
@@ -36,5 +40,6 @@ public record EditorialRequest(
         String chapterText,
         String priorContext,
         String referenceContext,
-        String userGuidance) {
+        String userGuidance,
+        String systemPrompt) {
 }

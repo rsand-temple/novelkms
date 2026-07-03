@@ -59,7 +59,7 @@ export default function ChapterAiDocItem({ docType, chapterId, bookId, partId, s
 		<ListItemButton
 			selected={isSelected}
 			onClick={handleClick}
-			sx={{ pl: `${(7 + depth * 3) * 8 + 28}px` }}
+			sx={{ pl: 5 + depth * 3 }}
 		>
 			<ListItemIcon sx={{ minWidth: 28 }}>
 				<Icon fontSize="small" sx={{ color: 'text.secondary' }} />

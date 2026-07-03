@@ -31,6 +31,7 @@ import com.richardsand.novelkms.ai.SummaryRequest;
 import com.richardsand.novelkms.ai.SummaryResult;
 import com.richardsand.novelkms.dao.AiCredentialDao;
 import com.richardsand.novelkms.dao.AiFormInstructionsDao;
+import com.richardsand.novelkms.dao.AiPromptTemplateDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.BookSummaryDao;
@@ -98,6 +99,7 @@ public class AiReviewService {
     private final AiFormInstructionsDao   formInstructionsDao;
     private final ChapterMemoryDao        chapterMemoryDao;
     private final MemoryTemplateDao       memoryTemplateDao;
+    private final AiPromptTemplateDao     aiPromptTemplateDao;
     private final ChapterSummaryDao       chapterSummaryDao;
     private final ChapterEditorialDao     chapterEditorialDao;
     private final BookSummaryDao          bookSummaryDao;
@@ -109,24 +111,26 @@ public class AiReviewService {
             AiCredentialDao credentialDao, AiReviewDao reviewDao,
             AiFormInstructionsDao formInstructionsDao,
             ChapterMemoryDao chapterMemoryDao, MemoryTemplateDao memoryTemplateDao,
+            AiPromptTemplateDao aiPromptTemplateDao,
             ChapterSummaryDao chapterSummaryDao, BookSummaryDao bookSummaryDao,
             ChapterEditorialDao chapterEditorialDao,
             CodexDao codexDao, CodexCategoryDao codexCategoryDao,
             Map<String, AiProvider> providers) {
-        this.chapterDao = chapterDao;
-        this.sceneDao = sceneDao;
-        this.bookDao = bookDao;
-        this.credentialDao = credentialDao;
-        this.reviewDao = reviewDao;
-        this.formInstructionsDao = formInstructionsDao;
-        this.chapterMemoryDao = chapterMemoryDao;
-        this.memoryTemplateDao = memoryTemplateDao;
-        this.chapterSummaryDao = chapterSummaryDao;
-        this.chapterEditorialDao = chapterEditorialDao;
-        this.bookSummaryDao = bookSummaryDao;
-        this.codexDao = codexDao;
-        this.codexCategoryDao = codexCategoryDao;
-        this.providers = providers;
+        this.chapterDao           = chapterDao;
+        this.sceneDao             = sceneDao;
+        this.bookDao              = bookDao;
+        this.credentialDao        = credentialDao;
+        this.reviewDao            = reviewDao;
+        this.formInstructionsDao  = formInstructionsDao;
+        this.chapterMemoryDao     = chapterMemoryDao;
+        this.memoryTemplateDao    = memoryTemplateDao;
+        this.aiPromptTemplateDao  = aiPromptTemplateDao;
+        this.chapterSummaryDao    = chapterSummaryDao;
+        this.chapterEditorialDao  = chapterEditorialDao;
+        this.bookSummaryDao       = bookSummaryDao;
+        this.codexDao             = codexDao;
+        this.codexCategoryDao     = codexCategoryDao;
+        this.providers            = providers;
     }
 
     /** Immutable description of what is being reviewed, resolved before execution. */
@@ -198,7 +202,6 @@ public class AiReviewService {
 
         UUID bookId = chapter.getBookId();
         if (bookId == null) {
-            // A codex entry is stored as a scene under a codex (book_id null) chapter.
             throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_manuscript",
                     "AI review is only available for manuscript scenes.");
         }
@@ -234,8 +237,6 @@ public class AiReviewService {
         String model     = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
         UUID   projectId = resolveProjectId(target.bookId());
 
-        // Resolve the editorial "form" block (book -> project -> user -> system)
-        // and record it on the review as immutable provenance.
         AiFormInstructionsDao.Resolved form = formInstructionsDao.resolveForReview(userId, projectId, target.bookId());
 
         logger.debug("Resolved AI review execution context: userId={}, projectId={}, bookId={}, chapterId={}, sceneId={}, provider={}, model={}, formScope={}",
@@ -394,7 +395,8 @@ public class AiReviewService {
             throw new ReviewException(Status.BAD_REQUEST, "unsupported_provider",
                     "Provider " + credential.getProvider() + " is not supported yet.");
         }
-        String model = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+        String model     = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+        UUID   projectId = resolveProjectId(bookId);
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
@@ -407,9 +409,13 @@ public class AiReviewService {
                 chapterId, chapterText.length(), priorContext == null ? 0 : priorContext.length(),
                 referenceContext == null ? 0 : referenceContext.length());
 
+        // Resolve the editorial system-prompt template from the cascade.
+        String systemPrompt = aiPromptTemplateDao.resolveForGeneration(
+                AiPromptTemplateDao.TemplateType.EDITORIAL, userId, projectId, bookId).content();
+
         String           note = blankToNull(userGuidance);
         EditorialRequest req  = new EditorialRequest(apiKey, model, chapterLabel(chapter), chapter.getSubtitle(),
-                chapterText, priorContext, referenceContext, note);
+                chapterText, priorContext, referenceContext, note, systemPrompt);
         try {
             EditorialResult result = provider.generateEditorial(req);
             chapterEditorialDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model, note);
@@ -441,8 +447,7 @@ public class AiReviewService {
 
     /**
      * Reports the memory-document status of every manuscript chapter in the book,
-     * in linear book order, for the pre-review warning. Book ownership is enforced
-     * upstream by the tenant filter (books/{id}).
+     * in linear book order, for the pre-review warning.
      */
     public List<ChapterMemoryStatus> bookMemoryStatus(UUID bookId) throws SQLException {
         List<ChapterMemoryDao.Row> rows                = chapterMemoryDao.bookChapterMemory(bookId);
@@ -462,13 +467,6 @@ public class AiReviewService {
         return result;
     }
 
-    /**
-     * Classifies one chapter's memory state given the latest generation time among
-     * the chapters before it in book order. Precedence: MISSING, then STALE_CONTENT
-     * (document older than the chapter's latest scene edit), then OUT_OF_SEQUENCE
-     * (document older than an earlier chapter's — a likely skipped-in-this-pass
-     * gap), else OK.
-     */
     private String stateFor(ChapterMemoryDao.Row row, Instant maxEarlierGenerated) {
         if (row.generatedAt() == null) {
             return ChapterMemoryStatus.MISSING;
@@ -482,11 +480,6 @@ public class AiReviewService {
         return ChapterMemoryStatus.OK;
     }
 
-    /**
-     * Concatenates the memory documents of the chapters preceding the target
-     * chapter (in linear book order) into a single "story so far" block, or null
-     * if there are none. Chapters without a document are skipped.
-     */
     private String assemblePriorContext(UUID bookId, UUID chapterId) throws SQLException {
         List<ChapterMemoryDao.Row> rows      = chapterMemoryDao.bookChapterMemory(bookId);
         int                        targetSeq = Integer.MAX_VALUE;
@@ -500,10 +493,6 @@ public class AiReviewService {
         for (ChapterMemoryDao.Row row : rows) {
             if (row.seq() >= targetSeq)
                 continue;
-            // Memory-document content is authored HTML (rich text via the nav
-            // editor); strip it to plain text before it goes into the prompt, the
-            // same treatment scene content already gets. htmlToPlainText() falls
-            // back to raw text for legacy plain-text documents predating this.
             String plainContent = htmlToPlainText(row.content());
             if (plainContent.isBlank())
                 continue;
@@ -521,25 +510,11 @@ public class AiReviewService {
     }
 
     // ── Pinned Codex reference context ────────────────────────────────────────
-    //
-    // The author may pin individual Codex entries (per-entry, via the nav menu or
-    // the Manage AI Context dialog) to share them with the model as established
-    // canon/voice that the manuscript must respect. These flow through the
-    // review prompt's referenceContext block (rendered by the provider as
-    // "reference material — do not review it"). Nothing is shared by default;
-    // a heavy worldbuilder's full Codex is never dumped at the model.
 
     /** Aggregate counts for the per-book pinned-context summary the review UI shows. */
     public record PinnedContextSummary(int entryCount, int wordCount) {
     }
 
-    /**
-     * Concatenates the pinned Codex entries that apply to a review in {@code bookId}
-     * — both the book's own Codex and the series-wide project Codex, the same two
-     * containers that already coexist elsewhere — into a single reference block,
-     * grouped by category, or null if nothing is pinned. Entry content is authored
-     * HTML; it is stripped to plain text before it reaches the prompt.
-     */
     private String assembleReferenceContext(UUID bookId) throws SQLException {
         List<CodexDao.AiContextEntry> entries = collectPinnedEntries(bookId);
         if (entries.isEmpty()) {
@@ -574,11 +549,6 @@ public class AiReviewService {
         return result.isEmpty() ? null : result;
     }
 
-    /**
-     * Category key → schema, from the master category list, so a pinned entry's
-     * structured fields can be rendered with their labels and feedsAi gating.
-     * Categories with no schema are omitted.
-     */
     private Map<String, CodexSchema> schemasByCategoryKey() throws SQLException {
         Map<String, CodexSchema> byKey = new HashMap<>();
         for (CodexCategory cat : codexCategoryDao.findAll()) {
@@ -589,13 +559,6 @@ public class AiReviewService {
         return byKey;
     }
 
-    /**
-     * Renders a codex entry's structured fields as labeled "Label: value" lines,
-     * including only fields the schema marks feedsAi and whose stored value is
-     * present and non-blank, in schema (display) order. Returns an empty string
-     * when there is nothing to render — no schema, no values, or every relevant
-     * field private or blank.
-     */
     private String renderStructuredFields(CodexSchema schema, String structuredJson) {
         if (schema == null || schema.getFields() == null
                 || structuredJson == null || structuredJson.isBlank()) {
@@ -625,10 +588,6 @@ public class AiReviewService {
         return sb.toString().strip();
     }
 
-    /**
-     * Pinned entry count and total word count for {@code bookId}'s review scope,
-     * for the "Pinned context: N entries, ~M words" line in the review rail.
-     */
     public PinnedContextSummary pinnedContextSummary(UUID bookId) throws SQLException {
         List<CodexDao.AiContextEntry> entries = collectPinnedEntries(bookId);
         int words = 0;
@@ -638,7 +597,6 @@ public class AiReviewService {
         return new PinnedContextSummary(entries.size(), words);
     }
 
-    /** Pinned entries from the book's Codex and (if any) the project's Codex. */
     private List<CodexDao.AiContextEntry> collectPinnedEntries(UUID bookId) throws SQLException {
         List<CodexDao.AiContextEntry> entries = new ArrayList<>();
         Optional<Codex> bookCodex = codexDao.findByBookId(bookId);
@@ -654,6 +612,8 @@ public class AiReviewService {
         }
         return entries;
     }
+
+    // ── Chapter and book summaries ────────────────────────────────────────────
     //
     // A separate artifact family from memory documents: a chapter summary is one
     // readable paragraph; the book summary is built entirely from the chapter
@@ -695,15 +655,20 @@ public class AiReviewService {
             throw new ReviewException(Status.BAD_REQUEST, "unsupported_provider",
                     "Provider " + credential.getProvider() + " is not supported yet.");
         }
-        String model = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+        String model     = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+        UUID   projectId = resolveProjectId(bookId);
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
             throw new ReviewException(Status.CONFLICT, "no_ai_credential", "Stored API key could not be read.");
         }
 
+        // Resolve the chapter-summary system-prompt template from the cascade.
+        String systemPrompt = aiPromptTemplateDao.resolveForGeneration(
+                AiPromptTemplateDao.TemplateType.CHAPTER_SUMMARY, userId, projectId, bookId).content();
+
         String         note = blankToNull(userGuidance);
-        SummaryRequest req  = new SummaryRequest(apiKey, model, chapterLabel(chapter), chapterText, note);
+        SummaryRequest req  = new SummaryRequest(apiKey, model, chapterLabel(chapter), chapterText, note, systemPrompt);
         try {
             SummaryResult result = provider.generateChapterSummary(req);
             chapterSummaryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model, note);
@@ -735,9 +700,7 @@ public class AiReviewService {
 
     /**
      * Returns every manuscript chapter of the book in linear book order with its
-     * summary text and per-chapter staleness state. Drives the read-only
-     * aggregated chapter-summary view and the pre-book-summary coverage warning.
-     * Book ownership is enforced upstream by the tenant filter (books/{id}).
+     * summary text and per-chapter staleness state.
      */
     public List<ChapterSummaryStatus> bookChapterSummaries(UUID bookId) throws SQLException {
         List<ChapterSummaryDao.Row> rows   = chapterSummaryDao.bookChapterSummaries(bookId);
@@ -751,11 +714,6 @@ public class AiReviewService {
         return result;
     }
 
-    /**
-     * Per-chapter summary state: MISSING when there is no summary, STALE_CONTENT
-     * when the summary predates the chapter's latest scene edit, else OK. There is
-     * no OUT_OF_SEQUENCE — chapter summaries are independent paragraphs.
-     */
     private String chapterSummaryStateFor(ChapterSummaryDao.Row row) {
         if (row.generatedAt() == null) {
             return ChapterSummaryStatus.MISSING;
@@ -769,9 +727,7 @@ public class AiReviewService {
     /**
      * Generates (or regenerates) the book summary entirely from the book's chapter
      * summaries, concatenated in linear book order. Fails if no chapter has a
-     * summary yet (the frontend's pre-generation dialog is expected to offer to
-     * generate the missing ones first). Book ownership is enforced upstream
-     * (books/{id}).
+     * summary yet.
      *
      * @param userGuidance optional one-time author note for this generation only;
      *                     null/blank = none
@@ -793,16 +749,21 @@ public class AiReviewService {
             throw new ReviewException(Status.BAD_REQUEST, "unsupported_provider",
                     "Provider " + credential.getProvider() + " is not supported yet.");
         }
-        String model = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+        String model     = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
+        UUID   projectId = book.getProjectId();
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
             throw new ReviewException(Status.CONFLICT, "no_ai_credential", "Stored API key could not be read.");
         }
 
+        // Resolve the book-summary system-prompt template from the cascade.
+        String systemPrompt = aiPromptTemplateDao.resolveForGeneration(
+                AiPromptTemplateDao.TemplateType.BOOK_SUMMARY, userId, projectId, bookId).content();
+
         String             note = blankToNull(userGuidance);
         BookSummaryRequest req  = new BookSummaryRequest(
-                apiKey, model, book.getTitle(), aggregate, BOOK_SUMMARY_MAX_WORDS, note);
+                apiKey, model, book.getTitle(), aggregate, BOOK_SUMMARY_MAX_WORDS, note, systemPrompt);
         try {
             SummaryResult result    = provider.generateBookSummary(req);
             int           wordCount = countWords(result.content());
@@ -822,8 +783,6 @@ public class AiReviewService {
 
     /** Saves an author edit to an existing book summary (marks it EDITED; re-counts words). */
     public BookSummary editBookSummary(UUID bookId, String content) throws SQLException {
-        // content is authored HTML from the nav editor; word count must be taken
-        // from the plain text, not the raw markup, or tags inflate the count.
         if (!bookSummaryDao.updateEdited(bookId, content, countWords(htmlToPlainText(content)))) {
             throw new ReviewException(Status.BAD_REQUEST, "not_found",
                     "This book has no summary to edit. Generate one first.");
@@ -838,8 +797,7 @@ public class AiReviewService {
 
     /**
      * Reports the book-summary status plus chapter-summary coverage, for the
-     * book-summary card and the pre-generation warning. Returned even when no book
-     * summary exists yet. Book ownership is enforced upstream (books/{id}).
+     * book-summary card and the pre-generation warning.
      */
     public BookSummaryStatus bookSummaryStatus(UUID bookId) throws SQLException {
         List<ChapterSummaryDao.Row> rows            = chapterSummaryDao.bookChapterSummaries(bookId);
@@ -881,19 +839,10 @@ public class AiReviewService {
                 chapterCount, summarizedCount, missingCount, staleCount);
     }
 
-    /**
-     * Concatenates the book's chapter summaries (in linear book order) into a
-     * single block, each under a {@code Chapter N: Title} heading, or null if no
-     * chapter has a summary. Chapters without a summary are skipped (the gap is
-     * surfaced separately via {@link #bookSummaryStatus}).
-     */
     private String assembleChapterSummaries(UUID bookId) throws SQLException {
         List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId);
         StringBuilder               sb   = new StringBuilder();
         for (ChapterSummaryDao.Row row : rows) {
-            // Chapter-summary content is authored HTML (rich text via the nav
-            // editor); strip it to plain text before it goes into the book-summary
-            // prompt, the same treatment scene content already gets.
             String plainContent = htmlToPlainText(row.content());
             if (plainContent.isBlank())
                 continue;
@@ -958,7 +907,6 @@ public class AiReviewService {
         if (existing.isPresent())
             return existing.get();
         Codex codex = codexDao.createForProject(projectId, null);
-        // Seed the default category chapters, matching normal codex creation.
         for (CodexCategory cat : codexCategoryDao.findDefaults()) {
             chapterDao.createCodexChapter(codex.getId(), cat.getCategoryKey(), cat.getLabel());
         }
@@ -1019,11 +967,6 @@ public class AiReviewService {
         return String.join(SCENE_BREAK, chunks);
     }
 
-    /**
-     * Strips TipTap HTML to plain text, preserving block boundaries as blank
-     * lines so the model sees paragraph structure. Inline image data URLs and
-     * other markup are discarded.
-     */
     private String htmlToPlainText(String html) {
         if (html == null || html.isBlank())
             return "";
@@ -1036,7 +979,6 @@ public class AiReviewService {
         }
         String result = sb.toString().trim();
         if (result.isEmpty()) {
-            // Fallback for content without recognized block elements.
             result = doc.text().trim();
         }
         return result;
@@ -1064,13 +1006,6 @@ public class AiReviewService {
         return "";
     }
 
-    /**
-     * Normalizes an optional one-time author-guidance string: blank/whitespace-only
-     * becomes null (no guidance supplied), otherwise the trimmed text. Keeps a
-     * blank request body and "no guidance" indistinguishable downstream — both as
-     * the {@code null} stored on the artifact and as the absent block in the
-     * provider prompt.
-     */
     private static String blankToNull(String value) {
         if (value == null)
             return null;

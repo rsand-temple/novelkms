@@ -26,29 +26,26 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * <ul>
  *   <li>Uses {@code response_format: {"type":"json_object"}} rather than a strict
  *       {@code json_schema}. JSON-object mode is supported across a broad range
- *       of models, which matters for a BYOK tool where the user picks the model.
- *       The required output shape is described in the system prompt instead.</li>
+ *       of models, which matters for a BYOK tool where the user picks the model.</li>
  *   <li>Sends only {@code model}, {@code messages}, and {@code response_format} —
  *       no {@code temperature} or token caps — so requests don't 400 on reasoning
  *       models that reject those parameters.</li>
- *   <li>The prompt is scope-aware: the same template reviews a "chapter" or a
- *       "scene" depending on {@link ReviewRequest#scopeWord()}. The output
- *       contract is identical across scopes; {@code chapter-review-v3} marked the
- *       move to a scope-general prompt.</li>
- *   <li>The system prompt is assembled from two parts: a <b>form</b> block —
+ *   <li>The review system prompt is assembled from two parts: a <b>form</b> block —
  *       the editorial persona/constraints, author-editable and supplied via
  *       {@link ReviewRequest#formInstructions()} — followed by a constant
- *       <b>functional</b> block here that defines the JSON output contract
- *       NovelKMS consumes. The form block never breaks parsing because the
- *       functional block fully specifies the required shape. {@code chapter-review-v4}
- *       marks externalizing the form block.</li>
- *   <li>Every generation call (review, memory, chapter summary, book summary)
- *       accepts an optional one-time {@code userGuidance} string — a free-text
- *       author note for that single call only, unrelated to the persistent
- *       form/template override cascades. When present it is appended to the
- *       <em>user</em> message as a clearly-fenced addendum, closest to the
- *       material it concerns, so the model treats it as an instruction rather
- *       than as content to summarize or review.</li>
+ *       <b>functional</b> block that defines the JSON output contract
+ *       NovelKMS consumes.</li>
+ *   <li>The three free-text generation paths (chapter summary, book summary,
+ *       editorial) each accept an optional {@code systemPrompt} field on their
+ *       request record. When non-blank the provider uses it verbatim instead of
+ *       the built-in constant, allowing the author-editable template cascade
+ *       ({@code book → project → user global → system default}) to reach the
+ *       provider. When the field is null or blank the built-in constant is used
+ *       as a fallback (backward compatibility).</li>
+ *   <li>Every generation call also accepts an optional one-time {@code userGuidance}
+ *       string — a free-text author note for that single call only, unrelated to
+ *       the persistent form/template override cascades. When present it is appended
+ *       to the <em>user</em> message as a clearly-fenced addendum.</li>
  * </ul>
  */
 public class OpenAiProvider implements AiProvider {
@@ -56,9 +53,7 @@ public class OpenAiProvider implements AiProvider {
 
     public static final  String PROVIDER_KEY   = "OPENAI";
     public static final  String DEFAULT_MODEL  = "gpt-5.4";
-    // chapter-review-v6: generation calls can now carry an optional one-time
-    // userGuidance addendum from the author, alongside the existing "story so
-    // far" and reference blocks. The JSON output contract is unchanged from v4.
+    // chapter-review-v7: prompt-version constant (JSON output contract unchanged).
     public static final  String PROMPT_VERSION = "chapter-review-v7";
     /** Memory-document generation prompt version (free-text output; no JSON contract). */
     public static final  String MEMORY_PROMPT_VERSION = "memory-v2";
@@ -131,8 +126,9 @@ public class OpenAiProvider implements AiProvider {
 
         logger.info("OpenAI chapter-summary request started: model={}, chapterLabel={}, promptVersion={}",
                 model, safeLabel(request.chapterLabel()), CHAPTER_SUMMARY_PROMPT_VERSION);
-        logger.debug("OpenAI chapter-summary request context: chapterTextChars={}, userGuidanceChars={}",
-                lengthOf(request.chapterText()), lengthOf(request.userGuidance()));
+        logger.debug("OpenAI chapter-summary request context: chapterTextChars={}, userGuidanceChars={}, hasCustomPrompt={}",
+                lengthOf(request.chapterText()), lengthOf(request.userGuidance()),
+                request.systemPrompt() != null && !request.systemPrompt().isBlank());
 
         String body = buildChapterSummaryRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
@@ -148,8 +144,9 @@ public class OpenAiProvider implements AiProvider {
 
         logger.info("OpenAI book-summary request started: model={}, bookTitle={}, maxWords={}, promptVersion={}",
                 model, safeLabel(request.bookTitle()), request.maxWords(), BOOK_SUMMARY_PROMPT_VERSION);
-        logger.debug("OpenAI book-summary request context: chapterSummariesChars={}, userGuidanceChars={}",
-                lengthOf(request.chapterSummaries()), lengthOf(request.userGuidance()));
+        logger.debug("OpenAI book-summary request context: chapterSummariesChars={}, userGuidanceChars={}, hasCustomPrompt={}",
+                lengthOf(request.chapterSummaries()), lengthOf(request.userGuidance()),
+                request.systemPrompt() != null && !request.systemPrompt().isBlank());
 
         String body = buildBookSummaryRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
@@ -165,9 +162,10 @@ public class OpenAiProvider implements AiProvider {
 
         logger.info("OpenAI editorial request started: model={}, chapterLabel={}, promptVersion={}",
                 model, safeLabel(request.chapterLabel()), EDITORIAL_PROMPT_VERSION);
-        logger.debug("OpenAI editorial request context: chapterTextChars={}, priorContextChars={}, referenceContextChars={}, userGuidanceChars={}",
+        logger.debug("OpenAI editorial request context: chapterTextChars={}, priorContextChars={}, referenceContextChars={}, userGuidanceChars={}, hasCustomPrompt={}",
                 lengthOf(request.chapterText()), lengthOf(request.priorContext()),
-                lengthOf(request.referenceContext()), lengthOf(request.userGuidance()));
+                lengthOf(request.referenceContext()), lengthOf(request.userGuidance()),
+                request.systemPrompt() != null && !request.systemPrompt().isBlank());
 
         String body = buildEditorialRequestBody(model, request);
         String content = postForContent(request.apiKey(), body);
@@ -196,7 +194,6 @@ public class OpenAiProvider implements AiProvider {
     /**
      * Sends a Chat Completions request and returns the assistant message content,
      * translating transport and non-200 responses into {@link AiProviderException}.
-     * Shared by {@link #review} and {@link #generateMemory}.
      */
     private String postForContent(String apiKey, String body) throws AiProviderException {
         logger.debug("OpenAI HTTP request prepared: endpoint={}, requestBytes={}",
@@ -251,19 +248,16 @@ public class OpenAiProvider implements AiProvider {
         try {
             return mapper.writeValueAsString(root);
         } catch (Exception e) {
-            // ObjectNode serialization does not realistically fail.
             throw new IllegalStateException("Failed to build OpenAI request body", e);
         }
     }
 
     /**
-     * Assembles the system prompt as {@code form + "\n\n" + functional}.
+     * Assembles the review system prompt as {@code form + "\n\n" + functional}.
      *
      * <p>{@code form} is the author-supplied editorial persona/constraints (or
      * the system default, resolved upstream). {@code functional} is the constant
-     * JSON output contract NovelKMS consumes — it owns all scope-awareness
-     * ({@code %1$s} = unit word) and the category roster ({@code %2$s}), so the
-     * form block can be edited freely without ever breaking parsing.
+     * JSON output contract NovelKMS consumes.
      */
     private String systemPrompt(String unit, List<String> categories, String formInstructions) {
         String form = (formInstructions == null || formInstructions.isBlank())
@@ -273,10 +267,8 @@ public class OpenAiProvider implements AiProvider {
     }
 
     /**
-     * Minimal safety net only. The real default ("form") text lives in
-     * {@code AiFormInstructionsDefaults} and is always resolved upstream by
-     * {@code AiReviewService}; this guards against a future caller that forgets
-     * to set it, keeping the {@code ai} package free of a {@code model} import.
+     * Minimal safety net only. The real default text lives in
+     * {@code AiFormInstructionsDefaults} and is always resolved upstream.
      */
     private static final String FORM_FALLBACK =
             "You are an experienced editor reviewing a section of a novel. You do not "
@@ -286,7 +278,6 @@ public class OpenAiProvider implements AiProvider {
         String categoryList = (categories == null || categories.isEmpty())
                 ? "Continuity, Characterization, Pacing, Dialogue, Clarity, Grammar, General Notes"
                 : String.join(", ", categories);
-        // %1$s = the scope unit word ("chapter"/"scene"); %2$s = the category list.
         return """
                 Return your review as a single JSON object and nothing else — no prose, no \
                 Markdown, no code fences — in exactly this shape:
@@ -311,7 +302,8 @@ public class OpenAiProvider implements AiProvider {
                   the %1$s text, identifying the passage the recommendation refers to. It is used to \
                   scroll the author's editor to that passage, so it must appear word-for-word in the %1$s.
 
-                If you have no substantive notes, return {"recommendations":[]}.""".formatted(unit, categoryList);
+                If you have no substantive notes, return {"recommendations":[]}.
+                """.formatted(unit, categoryList);
     }
 
     /** Wrapper instruction prepended to the memory template for generation. */
@@ -348,16 +340,21 @@ public class OpenAiProvider implements AiProvider {
         userMsg.put("role", "user");
         userMsg.put("content", user.toString());
 
-        // Free-text output: no response_format and no token caps (reasoning-model safe).
         try {
             return mapper.writeValueAsString(root);
         } catch (Exception e) {
-            // ObjectNode serialization does not realistically fail.
             throw new IllegalStateException("Failed to build OpenAI memory request body", e);
         }
     }
 
-    /** System instruction for chapter-summary generation (one readable paragraph). */
+    /**
+     * Built-in fallback for chapter-summary generation. Used only when no
+     * author-provided template is active (i.e. {@code request.systemPrompt()} is
+     * null or blank). When the template cascade resolves to a user/project/book
+     * override or the system-default constant from
+     * {@code ChapterSummaryTemplateDefaults}, that text is passed in
+     * {@code request.systemPrompt()} and used verbatim instead.
+     */
     private static final String CHAPTER_SUMMARY_WRAPPER = """
             You are summarizing one chapter of a novel. Write a single, clear, \
             human-readable paragraph that captures what happens in the chapter: the \
@@ -372,9 +369,15 @@ public class OpenAiProvider implements AiProvider {
 
         ArrayNode messages = root.putArray("messages");
 
+        // Use the author-provided template from the resolution cascade when set;
+        // fall back to the built-in constant otherwise.
+        String systemContent = (request.systemPrompt() != null && !request.systemPrompt().isBlank())
+                ? request.systemPrompt()
+                : CHAPTER_SUMMARY_WRAPPER;
+
         ObjectNode system = messages.addObject();
         system.put("role", "system");
-        system.put("content", CHAPTER_SUMMARY_WRAPPER);
+        system.put("content", systemContent);
 
         StringBuilder user = new StringBuilder();
         user.append("Chapter: ").append(nullToBlank(request.chapterLabel())).append("\n\n");
@@ -390,7 +393,6 @@ public class OpenAiProvider implements AiProvider {
         userMsg.put("role", "user");
         userMsg.put("content", user.toString());
 
-        // Free-text output: no response_format and no token caps (reasoning-model safe).
         try {
             return mapper.writeValueAsString(root);
         } catch (Exception e) {
@@ -399,9 +401,10 @@ public class OpenAiProvider implements AiProvider {
     }
 
     /**
-     * System instruction for book-summary generation. The model sees only the
-     * chapter summaries (assembled in book order), never the manuscript, and is
-     * held to a hard word ceiling; {@code %1$d} is that ceiling.
+     * Built-in fallback for book-summary generation. Used only when no
+     * author-provided template is active. {@code %1$d} is the word ceiling and
+     * is substituted only for this fallback; author-provided prompts state their
+     * own limit in plain text and are used verbatim.
      */
     private static final String BOOK_SUMMARY_WRAPPER = """
             You are writing a synopsis of an entire novel from the per-chapter \
@@ -421,9 +424,15 @@ public class OpenAiProvider implements AiProvider {
 
         int maxWords = request.maxWords() > 0 ? request.maxWords() : 1000;
 
+        // Use the author-provided template when set; fall back to the built-in
+        // constant (with maxWords substitution) otherwise.
+        String systemContent = (request.systemPrompt() != null && !request.systemPrompt().isBlank())
+                ? request.systemPrompt()
+                : BOOK_SUMMARY_WRAPPER.formatted(maxWords);
+
         ObjectNode system = messages.addObject();
         system.put("role", "system");
-        system.put("content", BOOK_SUMMARY_WRAPPER.formatted(maxWords));
+        system.put("content", systemContent);
 
         StringBuilder user = new StringBuilder();
         if (request.bookTitle() != null && !request.bookTitle().isBlank()) {
@@ -442,7 +451,6 @@ public class OpenAiProvider implements AiProvider {
         userMsg.put("role", "user");
         userMsg.put("content", user.toString());
 
-        // Free-text output: no response_format and no token caps (reasoning-model safe).
         try {
             return mapper.writeValueAsString(root);
         } catch (Exception e) {
@@ -451,11 +459,8 @@ public class OpenAiProvider implements AiProvider {
     }
 
     /**
-     * System instruction for editorial generation. An editorial is a short,
-     * impressionistic editorial reading of one chapter — the model's overall
-     * "what do you think?" — held to about half a page. It deliberately does NOT
-     * surface spelling, grammar, or line-level fixes (that is what a review is
-     * for) unless something is egregious, and it is never consumed downstream.
+     * Built-in fallback for editorial generation. Used only when no
+     * author-provided template is active.
      */
     private static final String EDITORIAL_WRAPPER = """
             You are an experienced developmental editor giving the author your \
@@ -478,15 +483,19 @@ public class OpenAiProvider implements AiProvider {
 
         ArrayNode messages = root.putArray("messages");
 
+        // Use the author-provided template when set; fall back to the built-in constant.
+        String systemContent = (request.systemPrompt() != null && !request.systemPrompt().isBlank())
+                ? request.systemPrompt()
+                : EDITORIAL_WRAPPER;
+
         ObjectNode system = messages.addObject();
         system.put("role", "system");
-        system.put("content", EDITORIAL_WRAPPER);
+        system.put("content", systemContent);
 
         StringBuilder user = new StringBuilder();
 
         // Optional context blocks, clearly fenced off as background — not the
-        // material under editorial consideration. Reference material first, then
-        // the running "story so far" (mirrors userPrompt(ReviewRequest)).
+        // material under editorial consideration.
         if (request.referenceContext() != null && !request.referenceContext().isBlank()) {
             user.append("Reference material — established canon and voice the manuscript must respect. ")
                 .append("Entries may list structured canonical fields (labeled) and a description. ")
@@ -517,7 +526,6 @@ public class OpenAiProvider implements AiProvider {
         userMsg.put("role", "user");
         userMsg.put("content", user.toString());
 
-        // Free-text output: no response_format and no token caps (reasoning-model safe).
         try {
             return mapper.writeValueAsString(root);
         } catch (Exception e) {
@@ -526,12 +534,10 @@ public class OpenAiProvider implements AiProvider {
     }
 
     private String userPrompt(ReviewRequest request) {
-        String unit = scopeWord(request);
+        String unit    = scopeWord(request);
         String heading = capitalize(unit);
         StringBuilder sb = new StringBuilder();
 
-        // Optional context blocks, clearly fenced off as background — not material
-        // to be reviewed. Reference material first, then the running "story so far".
         if (request.referenceContext() != null && !request.referenceContext().isBlank()) {
             sb.append("Reference material — established canon and voice the manuscript must respect. ")
               .append("Entries may list structured canonical fields (labeled) and a description. ")
@@ -611,7 +617,7 @@ public class OpenAiProvider implements AiProvider {
 
     private String extractContent(String responseBody) throws AiProviderException {
         try {
-            JsonNode root = mapper.readTree(responseBody);
+            JsonNode root    = mapper.readTree(responseBody);
             JsonNode choices = root.path("choices");
             if (!choices.isArray() || choices.isEmpty()) {
                 throw new AiProviderException("OpenAI returned no choices");
@@ -632,7 +638,7 @@ public class OpenAiProvider implements AiProvider {
         String json = stripCodeFences(content);
         try {
             logger.debug("Parsing OpenAI review JSON: contentChars={}, jsonChars={}", lengthOf(content), lengthOf(json));
-            JsonNode root = mapper.readTree(json);
+            JsonNode root  = mapper.readTree(json);
             JsonNode array = root.path("recommendations");
             if (!array.isArray()) {
                 throw new AiProviderException("OpenAI response did not contain a recommendations array");
@@ -663,8 +669,8 @@ public class OpenAiProvider implements AiProvider {
 
     private String extractErrorMessage(int status, String body) {
         try {
-            JsonNode error = mapper.readTree(body).path("error");
-            String message = error.path("message").asText("");
+            JsonNode error   = mapper.readTree(body).path("error");
+            String   message = error.path("message").asText("");
             if (!message.isBlank()) {
                 return "OpenAI error (HTTP " + status + "): " + message;
             }

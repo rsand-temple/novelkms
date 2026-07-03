@@ -317,11 +317,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	}
 
 	const doGenerateMemory = (node) => {
+		setMemorySnack({ severity: 'info', message: `Producing memory document for “${node.title?.trim() || 'chapter'}”…`, persist: true })
 		generateMemory(
 			{ chapterId: node.id, bookId: node.bookId, credentialId: defaultCredentialId },
 			{
-				onSuccess: () => setMemorySnack({ severity: 'success', message: `Memory document generated for “${node.title?.trim() || 'chapter'}”.` }),
-				onError: (e) => setMemorySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.' }),
+				onSuccess: () => setMemorySnack({ severity: 'success', message: `Memory document generated for “${node.title?.trim() || 'chapter'}”.`, persist: false }),
+				onError: (e) => setMemorySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.', persist: false }),
 			},
 		)
 	}
@@ -398,11 +399,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		const node = menuNode
 		if (!node) return
 		closeMenu()
+		setSummarySnack({ severity: 'info', message: `Producing chapter summary for “${node.title?.trim() || 'chapter'}”…`, persist: true })
 		generateChapterSummary(
 			{ chapterId: node.id, bookId: node.bookId, credentialId: defaultCredentialId },
 			{
-				onSuccess: () => setSummarySnack({ severity: 'success', message: `Chapter summary generated for “${node.title?.trim() || 'chapter'}”.` }),
-				onError: (e) => setSummarySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.' }),
+				onSuccess: () => setSummarySnack({ severity: 'success', message: `Chapter summary generated for “${node.title?.trim() || 'chapter'}”.`, persist: false }),
+				onError: (e) => setSummarySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.', persist: false }),
 			},
 		)
 	}
@@ -485,11 +487,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		const node = menuNode
 		if (!node) return
 		closeMenu()
+		setEditorialSnack({ severity: 'info', message: `Producing editorial for “${node.title?.trim() || 'chapter'}”…`, persist: true })
 		generateEditorial(
 			{ chapterId: node.id, bookId: node.bookId, credentialId: defaultCredentialId },
 			{
-				onSuccess: () => setEditorialSnack({ severity: 'success', message: `Editorial generated for “${node.title?.trim() || 'chapter'}”.` }),
-				onError: (e) => setEditorialSnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.' }),
+				onSuccess: () => setEditorialSnack({ severity: 'success', message: `Editorial generated for “${node.title?.trim() || 'chapter'}”.`, persist: false }),
+				onError: (e) => setEditorialSnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.', persist: false }),
 			},
 		)
 	}
@@ -1098,7 +1101,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 
 			<Snackbar
 				open={!!memorySnack}
-				autoHideDuration={4000}
+				autoHideDuration={memorySnack?.persist ? null : 4000}
 				onClose={() => setMemorySnack(null)}
 				anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
 			>
@@ -1155,7 +1158,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 
 			<Snackbar
 				open={!!summarySnack}
-				autoHideDuration={4000}
+				autoHideDuration={summarySnack?.persist ? null : 4000}
 				onClose={() => setSummarySnack(null)}
 				anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
 			>
@@ -1183,7 +1186,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 			{/* Editorial generate/clear feedback */}
 			<Snackbar
 				open={!!editorialSnack}
-				autoHideDuration={4000}
+				autoHideDuration={editorialSnack?.persist ? null : 4000}
 				onClose={() => setEditorialSnack(null)}
 				anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
 			>

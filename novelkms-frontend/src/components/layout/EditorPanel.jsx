@@ -7,7 +7,7 @@ import CharacterCount from '@tiptap/extension-character-count';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import { ResizableImage } from '../../extensions/ResizableImage.jsx';
-import { Box, Typography, CircularProgress } from '@mui/material';
+import { Box, Typography, CircularProgress, Snackbar, Alert } from '@mui/material';
 
 import { StyledParagraph } from '../../extensions/StyledParagraph';
 import { FontSize } from '../../extensions/FontSize';
@@ -980,6 +980,7 @@ export default function EditorPanel({
 	const [aiDocGateOpen, setAiDocGateOpen] = useState(false);
 	const [aiDocGuidance, setAiDocGuidance] = useState('');
 	const [aiDocGuidanceInitKey, setAiDocGuidanceInitKey] = useState(null);
+	const [aiDocSnack, setAiDocSnack] = useState(null); // { severity, message, persist } | null
 
 	// Pre-fills from whatever guidance produced the current artifact, re-derived
 	// on scope switch and once loading finishes — never auto-cleared after a
@@ -996,19 +997,27 @@ export default function EditorPanel({
 
 	const doAiDocGenerate = useCallback(() => {
 		const userGuidance = aiDocGuidance.trim() || null;
+		const label = isMemoryDoc ? 'memory document'
+			: isChapterSummaryDoc ? 'chapter summary'
+				: isBookSummaryDoc ? 'book summary'
+					: 'editorial';
+		setAiDocSnack({ severity: 'info', message: `Producing ${label}…`, persist: true });
+		let p;
 		if (isMemoryDoc) {
-			return generateMemoryAsync({ chapterId, bookId, credentialId: null, userGuidance });
+			p = generateMemoryAsync({ chapterId, bookId, credentialId: null, userGuidance });
+		} else if (isChapterSummaryDoc) {
+			p = generateChapterSummaryAsync({ chapterId, bookId, credentialId: null, userGuidance });
+		} else if (isBookSummaryDoc) {
+			p = generateBookSummaryAsync({ bookId, credentialId: null, userGuidance });
+		} else if (isEditorialDoc) {
+			p = generateEditorialAsync({ chapterId, bookId, credentialId: null, userGuidance });
+		} else {
+			setAiDocSnack(null);
+			return Promise.resolve();
 		}
-		if (isChapterSummaryDoc) {
-			return generateChapterSummaryAsync({ chapterId, bookId, credentialId: null, userGuidance });
-		}
-		if (isBookSummaryDoc) {
-			return generateBookSummaryAsync({ bookId, credentialId: null, userGuidance });
-		}
-		if (isEditorialDoc) {
-			return generateEditorialAsync({ chapterId, bookId, credentialId: null, userGuidance });
-		}
-		return Promise.resolve();
+		return p
+			.then(() => setAiDocSnack({ severity: 'success', message: `${label.charAt(0).toUpperCase() + label.slice(1)} generated.`, persist: false }))
+			.catch((e) => setAiDocSnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.', persist: false }));
 	}, [isMemoryDoc, isChapterSummaryDoc, isBookSummaryDoc, isEditorialDoc, chapterId, bookId, aiDocGuidance,
 		generateMemoryAsync, generateChapterSummaryAsync, generateBookSummaryAsync, generateEditorialAsync]);
 
@@ -1427,6 +1436,19 @@ export default function EditorPanel({
 					credentialId={null}
 				/>
 			)}
+
+			<Snackbar
+				open={!!aiDocSnack}
+				autoHideDuration={aiDocSnack?.persist ? null : 4000}
+				onClose={() => setAiDocSnack(null)}
+				anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+			>
+				{aiDocSnack ? (
+					<Alert severity={aiDocSnack.severity} onClose={() => setAiDocSnack(null)} sx={{ width: '100%' }}>
+						{aiDocSnack.message}
+					</Alert>
+				) : undefined}
+			</Snackbar>
 		</Box>
 	);
 }

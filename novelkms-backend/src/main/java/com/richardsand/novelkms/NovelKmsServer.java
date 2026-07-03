@@ -29,6 +29,7 @@ import com.richardsand.novelkms.dao.AdminMetricsDao;
 import com.richardsand.novelkms.dao.AdminUserDao;
 import com.richardsand.novelkms.dao.AiCredentialDao;
 import com.richardsand.novelkms.dao.AiFormInstructionsDao;
+import com.richardsand.novelkms.dao.AiPromptTemplateDao;
 import com.richardsand.novelkms.dao.AiReviewDao;
 import com.richardsand.novelkms.dao.ArchiveDao;
 import com.richardsand.novelkms.dao.ArtifactBlobDao;
@@ -67,8 +68,11 @@ import com.richardsand.novelkms.resource.ArtifactResource;
 import com.richardsand.novelkms.resource.AuthResource;
 import com.richardsand.novelkms.resource.BillingResource;
 import com.richardsand.novelkms.resource.BookResource;
+import com.richardsand.novelkms.resource.BookSummaryTemplateResource;
 import com.richardsand.novelkms.resource.ChapterMemoryResource;
+import com.richardsand.novelkms.resource.ChapterSummaryTemplateResource;
 import com.richardsand.novelkms.resource.EditorialResource;
+import com.richardsand.novelkms.resource.EditorialTemplateResource;
 import com.richardsand.novelkms.resource.ChapterResource;
 import com.richardsand.novelkms.resource.CodexResource;
 import com.richardsand.novelkms.resource.EditorSettingsResource;
@@ -184,6 +188,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         AdminMetricsDao       adminMetricsDao       = new AdminMetricsDao(ds);
         AdminUserDao          adminUserDao          = new AdminUserDao(ds);
         AiFormInstructionsDao aiFormInstructionsDao = new AiFormInstructionsDao(ds);
+        AiPromptTemplateDao   aiPromptTemplateDao   = new AiPromptTemplateDao(ds);
         AiReviewDao           aiReviewDao           = new AiReviewDao(ds);
         AuthDao               authDao               = new AuthDao(ds);
         BookDao               bookDao               = new BookDao(ds);
@@ -255,6 +260,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         AiReviewService         aiReviewService = new AiReviewService(
                 chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao,
                 aiFormInstructionsDao, chapterMemoryDao, memoryTemplateDao,
+                aiPromptTemplateDao,
                 chapterSummaryDao, bookSummaryDao,
                 chapterEditorialDao,
                 codexDao, codexCategoryDao, aiProviders);
@@ -296,8 +302,11 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(AuthResource.class);
         env.jersey().register(BillingResource.class);
         env.jersey().register(BookResource.class);
+        env.jersey().register(BookSummaryTemplateResource.class);
         env.jersey().register(ChapterMemoryResource.class);
+        env.jersey().register(ChapterSummaryTemplateResource.class);
         env.jersey().register(EditorialResource.class);
+        env.jersey().register(EditorialTemplateResource.class);
         env.jersey().register(ChapterResource.class);
         env.jersey().register(CodexResource.class);
         env.jersey().register(EditorSettingsResource.class);
@@ -320,8 +329,6 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(UserPreferenceResource.class);
 
         // SPA fallback
-        // The filter is mapped only to the REQUEST dispatcher type
-        // so the internal forward to /index.html is not re-processed by this same filter.
         env.servlets()
                 .addFilter("spa-fallback", new SpaFallbackFilter())
                 .addMappingForUrlPatterns(EnumSet.of(DispatcherType.REQUEST), true, "/*");
@@ -338,6 +345,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(adminUserDeleteService).to(AdminUserDeleteService.class);
                 bind(aiCredentialDao).to(AiCredentialDao.class);
                 bind(aiFormInstructionsDao).to(AiFormInstructionsDao.class);
+                bind(aiPromptTemplateDao).to(AiPromptTemplateDao.class);
                 bind(aiReviewDao).to(AiReviewDao.class);
                 bind(aiReviewService).to(AiReviewService.class);
                 bind(archiveDao).to(ArchiveDao.class);
