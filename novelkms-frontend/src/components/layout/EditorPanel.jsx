@@ -68,6 +68,15 @@ import CodexEntryFields from '../codex/CodexEntryFields';
 
 const AUTOSAVE_DELAY_MS = 1500;
 
+const isEditorReady = (ed) =>
+	Boolean(ed && !ed.isDestroyed && ed.view);
+
+const runEditorCommand = (ed, fn) => {
+	if (!isEditorReady(ed)) return false;
+	fn(ed);
+	return true;
+};
+
 // ── Review-rail resize ────────────────────────────────────────────────────────
 const RAIL_STORAGE_KEY = 'novelkms.reviewRailWidth';
 const DEFAULT_RAIL_WIDTH = 332;
@@ -895,9 +904,9 @@ export default function EditorPanel({
 	// Keep the transient ProseMirror search decorations synchronized with the
 	// shared search bar. Decorations never enter the stored HTML.
 	useEffect(() => {
-		if (!editor) return;
+		if (!isEditorReady(editor)) return;
 		if (!search.open || !search.query || templateMode || aiDocMode) {
-			editor.commands.clearSearch();
+			runEditorCommand(editor, ed => ed.commands.clearSearch());
 			return;
 		}
 		// Search navigation must never change the manuscript selection. In
@@ -905,28 +914,32 @@ export default function EditorPanel({
 		// provider's flattened match index is already the correct document-wide
 		// index. In single-scene mode it is likewise local to that scene.
 		const editorMatchIndex = search.activeIndex >= 0 ? search.activeIndex : 0;
-		editor.commands.setSearch({
+		const applied = runEditorCommand(editor, ed => ed.commands.setSearch({
 			query: search.query,
 			matchCase: search.matchCase,
 			activeIndex: editorMatchIndex,
-		});
-		if (search.totalCount > 0) {
-			requestAnimationFrame(() => editor.commands.scrollToSearchMatch(editorMatchIndex));
+		}));
+		if (applied && search.totalCount > 0) {
+			requestAnimationFrame(() => {
+				runEditorCommand(editor, ed => ed.commands.scrollToSearchMatch(editorMatchIndex));
+			});
 		}
 	}, [editor, search.open, search.query, search.matchCase, search.activeIndex, search.totalCount, templateMode, aiDocMode]);
 
 	const { registerEditorActions } = search;
 
 	useEffect(() => {
-		if (!editor) return;
+		if (!isEditorReady(editor)) return;
 
 		registerEditorActions({
-			next: () => editor.commands.goToNextSearchMatch(),
-			previous: () => editor.commands.goToPreviousSearchMatch(),
+			next: () =>
+				runEditorCommand(editor, ed => ed.commands.goToNextSearchMatch()),
+			previous: () =>
+				runEditorCommand(editor, ed => ed.commands.goToPreviousSearchMatch()),
 			replaceCurrent: (replacement) =>
-				editor.commands.replaceCurrentSearchMatch(replacement),
+				runEditorCommand(editor, ed => ed.commands.replaceCurrentSearchMatch(replacement)),
 			replaceAll: (replacement) =>
-				editor.commands.replaceAllSearchMatches(replacement),
+				runEditorCommand(editor, ed => ed.commands.replaceAllSearchMatches(replacement)),
 		});
 
 		return () => {
@@ -939,10 +952,11 @@ export default function EditorPanel({
 	const handleSceneBreak = useCallback(async () => {
 		const cid = chapterIdRef.current;
 		const firstId = firstSceneIdRef.current;
-		if (!cid || !firstId || !editorRef.current) return;
+		if (!cid || !firstId || !isEditorReady(editorRef.current)) return;
 		try {
 			const newScene = await scenesApi.create(cid, { title: '' });
 			const ed = editorRef.current;
+			if (!isEditorReady(ed)) return;
 			ed.chain().focus().setSceneBreak({ sceneId: newScene.id }).run();
 			const breakIds = getDocSceneBreakIds(ed);
 			const orderedIds = [firstId, ...breakIds];
@@ -961,7 +975,9 @@ export default function EditorPanel({
 		[templateMode, templateType]
 	);
 	const handleInsertToken = useCallback((token) => {
-		editorRef.current?.chain().focus().insertTemplateToken({ token }).run();
+		const ed = editorRef.current;
+		if (!isEditorReady(ed)) return;
+		ed.chain().focus().insertTemplateToken({ token }).run();
 	}, []);
 	const handleTogglePreview = useCallback(() => setPreviewActive(p => !p), []);
 
@@ -970,7 +986,7 @@ export default function EditorPanel({
 		[templateScope, previewBook, previewProject, bookWordCount]
 	);
 	const previewHtml = useMemo(() => {
-		if (!showEditorPreview || !editor) return '';
+		if (!showEditorPreview || !isEditorReady(editor)) return '';
 		return renderPreviewHtml(editor.getHTML(), previewValues);
 	}, [showEditorPreview, previewValues, editor]);
 
@@ -979,13 +995,14 @@ export default function EditorPanel({
 	// ── load content ─────────────────────────────────────────────────────────
 
 	useEffect(() => {
-		if (!editor) return;
+		if (!isEditorReady(editor)) return;
 
 		let cancelled = false;
 		const setEditorContent = (html) => {
 			queueMicrotask(() => {
-				if (cancelled || editor.isDestroyed) return;
-				editor.commands.setContent(html, false);
+				runEditorCommand(editor, ed => {
+					if (!cancelled) ed.commands.setContent(html, false);
+				});
 			});
 			return () => {
 				cancelled = true;
@@ -1425,7 +1442,9 @@ export default function EditorPanel({
 										schema={codexEntrySchema}
 										initialData={singleScene.structuredData}
 										entryTitle={singleScene.title}
-										onBodyGenerated={(html) => editor?.commands.setContent(html, false)}
+										onBodyGenerated={(html) => {
+											runEditorCommand(editor, ed => ed.commands.setContent(html, false));
+										}}
 									/>
 								)}
 
