@@ -524,3 +524,37 @@
   - D4: `functionalBlock()` is duplicated into `AnthropicProvider` (identical content) rather than extracted to a shared base class, consistent with the existing hand-rolled-integration ethos and keeping each provider self-contained.
   - D5: Provider dropdown is locked on edit — users replace keys by editing the credential, not by changing its type.
   - D6: Default model `claude-sonnet-4-6`; author can override per-credential.
+
+### Per-provider AI document variants — Phase 2 (frontend)
+
+Phase 2 surfaces the Phase 1 (backend, V36) per-(parent, provider) model in the UI. The four one-per-parent AI doc families (chapter memory, chapter summary, chapter editorial, book summary) now let the author view, edit, generate, and clear a document *per provider* (OPENAI / ANTHROPIC / GEMINI). `ai_review` is unchanged (already append-only and provider-stamped).
+
+**Data layer.** The three API modules (`api/chapterMemory.js`, `api/summary.js`, `api/editorial.js`) gained an optional `provider` on `get`/`save`/`remove` (and the status/aggregate reads), plus `variants`/`chapterVariants`/`bookVariants` calls hitting the Phase 1 `…/variants` endpoints. The three hooks (`useChapterMemory`, `useSummary`, `useEditorial`) gained a `variants` cache subkey and `use*Variants` queries. Generate/save/delete now **invalidate** the variants key and the preferred-doc key (rather than writing the mutation result straight into the preferred cache, since a generated variant may not be the default/preferred one); save/delete take an optional `provider`. All existing callers that omit `provider` (nav quick-actions, peek surfaces, gate dialogs) keep operating on the user's default-provider variant through the backward-compatible endpoints.
+
+**Fetch-all-variants (D1).** In AI-doc mode `EditorPanel` fetches *all* variants for the active parent in one query and picks the selected provider's variant client-side, so toggling providers is instant (no refetch). `aiDocKey` gained a `provider` segment (`type:parentId:provider:generatedAt`) so switching provider always reloads even if two variants share a `generatedAt`; a module-level `upsertVariant(list, doc)` (newest-first, replace-by-provider) lets autosave update the cached variants array without a reload flash.
+
+**Selected-provider state (D5).** `selection.aiDocProvider` was added to `App.jsx` `EMPTY_SELECTION`, to `setSelection`'s transient-cleanup null list, and to its final preserve (`aiDocProvider: base.aiDocProvider ?? null`) — exactly the treatment `aiDocType`/`artifactFolderId` already get, so an ordinary nav click clears it (a freshly opened AI-doc leaf resolves to the default provider). Because `setSelection` nulls transient fields in `cleanPrev`, a partial/function update would drop `aiDocType`; the selector's change handler therefore passes a **full** selection object re-asserting `aiDocType` and the ancestors. `EditorPanel` resolves `selectedProvider = selection.aiDocProvider || defaultCredentialProvider || firstVariant.provider`, and `AiDocProperties` reads the same field so the Properties panel stays in sync.
+
+**Autosave is provider-aware.** `scheduleSave` reads `aiDocProviderRef.current` (kept in sync with `selectedProvider`) and saves to that provider's variant, then `setQueryData`s the variants list via `upsertVariant`, sets `loadedAiDocKeyRef` to the saved doc's provider-keyed key, and invalidates the preferred-doc + status queries. The reset effect's deps gained `selectedProvider`, so switching provider cancels any pending debounced save and resets `loadedAiDocKeyRef` — closing a cross-provider-save race (a save queued for provider A firing after the author switched to provider B).
+
+**Generation targets a provider (D4).** The backend derives the generated variant from the credential's provider, so "generate under provider X" means passing X's default `credentialId`. `doAiDocGenerate` resolves that from `useAiCredentials()` for the selected provider; if the selected provider has no active credential (a view-only, variant-only provider), Generate is disabled with an explanatory tooltip rather than falling back to the default provider.
+
+**Selector + roster (D2, D3, D7).** New `components/ai/AiDocProviderSelect.jsx` renders in the `EditorToolbar` AI-doc strip (aiDoc mode only): a compact standard `Select` whose options are the roster-ordered **union** of {providers with an active credential} and {providers with a variant}, annotated `default` / `not generated` / `no key`; plus an overflow menu (kebab) carrying the per-provider "Clear this document" action. The `PROVIDERS` roster (key→label and model hints) was extracted from `AiCredentialsPanel.jsx` into a shared `components/ai/aiProviders.js` (`AI_PROVIDERS`, `AI_PROVIDER_MAP`, `providerLabel(key)` with raw-key fallback); `AiCredentialsPanel` now imports it (aliased, so the rest of that file is unchanged).
+
+**Scope boundary — Phase 3 deferred (D6).** The selector changes only the *document* view/edit/generate/clear. Coverage/staleness surfaces stay on the default provider for now: the memory pre-review gate, the `bookChapterSummaries` aggregate, `book-summary-status`, the ReviewRail Memory-tab peek, and `BookSummaryDialog`. Nav context-menu quick-actions (Generate/Clear) likewise stay default-provider (a right-click has no provider picker). Making coverage/staleness, review-history grouping, and a non-blocking fallback note provider-aware is the Phase 3 slice.
+
+**Icons.** The selector uses `TuneOutlined` (overflow trigger) and `Delete` (clear item) — both already present in the repo's `@mui/icons-material` set; `MoreVert`/`DeleteOutline` are not, and would have failed the Rolldown build.
+
+**Decisions.**
+
+- D1: Fetch all variants per parent in one query; switch client-side.
+- D2: Provider selector as a compact toolbar dropdown, AI-doc mode only.
+- D3: Options = union of credentialed + variant-bearing providers, roster order; default = default-credential provider; Generate disabled for credential-less providers.
+- D4: Generate under a provider by passing that provider's default `credentialId`.
+- D5: Sync via `selection.aiDocProvider` (null = preferred/default), transient like `aiDocType`.
+- D6: Coverage/staleness/peek/nav-quick-actions stay default-provider; provider-aware coverage is Phase 3.
+- D7: Per-provider Clear in the selector overflow; shared provider roster extracted to `aiProviders.js`.
+
+**Dependency note.** The selector's provider resolution relies on `GET /ai/credentials` exposing `provider`, `isDefault`, and `status` per credential (already true for `AiCredentialsPanel`).
+
+**Files (13).** `api/chapterMemory.js`, `api/summary.js`, `api/editorial.js`; `hooks/useChapterMemory.js`, `hooks/useSummary.js`, `hooks/useEditorial.js`; new `components/ai/aiProviders.js`, new `components/ai/AiDocProviderSelect.jsx`, `components/ai/AiCredentialsPanel.jsx`; `components/editor/EditorToolbar.jsx`; `components/layout/EditorPanel.jsx`, `components/layout/PropertiesPanel.jsx`; `App.jsx`. Statically verified (esbuild JSX transform, `node --check`, import/export resolution, cache-key subkeys, tab indentation, icon presence).

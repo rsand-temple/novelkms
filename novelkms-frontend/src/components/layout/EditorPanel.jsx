@@ -32,16 +32,21 @@ import { chapterMemoryApi } from '../../api/chapterMemory';
 import { summaryApi } from '../../api/summary';
 import { editorialApi } from '../../api/editorial';
 import {
-	useChapterMemory, useChapterMemoryStatus,
-	useGenerateChapterMemory, CHAPTER_MEMORY_KEYS,
+	useChapterMemoryVariants, useChapterMemoryStatus,
+	useGenerateChapterMemory, useDeleteChapterMemory, CHAPTER_MEMORY_KEYS,
 } from '../../hooks/useChapterMemory';
 import {
-	useChapterSummary, useBookChapterSummaries, useBookSummary, useBookSummaryStatus,
-	useGenerateChapterSummary, useGenerateBookSummary, SUMMARY_KEYS,
+	useChapterSummaryVariants, useBookChapterSummaries,
+	useBookSummaryVariants, useBookSummaryStatus,
+	useGenerateChapterSummary, useDeleteChapterSummary,
+	useGenerateBookSummary, useDeleteBookSummary, SUMMARY_KEYS,
 } from '../../hooks/useSummary';
 import {
-	useChapterEditorial, useGenerateChapterEditorial, EDITORIAL_KEYS,
+	useChapterEditorialVariants,
+	useGenerateChapterEditorial, useDeleteChapterEditorial, EDITORIAL_KEYS,
 } from '../../hooks/useEditorial';
+import { useAiCredentials } from '../../hooks/useAiCredentials';
+import { providerLabel } from '../ai/aiProviders';
 import { flaggedPreceding, formatTime as formatMemoryTime, stateColor as memoryStateColor, stateExplanation as memoryStateExplanation, stateLabel as memoryStateLabel } from '../ai/memoryStatus';
 import { flaggedChapters, stateColor as summaryStateColor, stateExplanation as summaryStateExplanation, stateLabel as summaryStateLabel } from '../ai/summaryStatus';
 import PreReviewMemoryDialog from '../ai/PreReviewMemoryDialog';
@@ -180,13 +185,23 @@ function templateKey(t) {
 	return `${t.scope}:${t.templateType}:${t.bookId ?? ''}:${t.updatedAt}`;
 }
 
-// Identifies one AI document's current saved state (memory doc / chapter
-// summary / book summary). generatedAt is bumped by both a fresh generation
-// and a hand-edit save (upsertGenerated/updateEdited both treat an edit as a
-// refresh — see ChapterMemoryDao), so it's a reliable change marker for either.
-function aiDocKey(type, parentId, doc) {
+// Identifies one AI document variant's current saved state (memory doc / chapter
+// summary / book summary / editorial, for a given provider). generatedAt is
+// bumped by both a fresh generation and a hand-edit save (upsertGenerated/
+// updateEdited both treat an edit as a refresh — see ChapterMemoryDao), so it's a
+// reliable change marker; provider is included so switching provider always
+// reloads even if two variants coincidentally share a generatedAt.
+function aiDocKey(type, parentId, provider, doc) {
 	if (!type || !parentId) return null;
-	return `${type}:${parentId}:${doc?.generatedAt ?? 'none'}`;
+	return `${type}:${parentId}:${provider ?? 'preferred'}:${doc?.generatedAt ?? 'none'}`;
+}
+
+// Replaces (or inserts) a provider variant in a variants list, newest first, so
+// an autosave can update the cached variants array without a refetch flash.
+function upsertVariant(list, doc) {
+	if (!doc) return list;
+	const arr = Array.isArray(list) ? list : [];
+	return [doc, ...arr.filter(v => v.provider !== doc.provider)];
 }
 
 /**
@@ -257,7 +272,7 @@ function countWords(html) {
  */
 export default function EditorPanel({
 	partId, chapterId, sceneId, projectId, bookId, codexId,
-	templateType, templateScope, aiDocType, setSelection, onSelectBook,
+	templateType, templateScope, aiDocType, aiDocProvider, setSelection, onSelectBook,
 	onOpenContextSettings, contextSettingsLabel,
 }) {
 	const { settings, updateSettings } = useProjectSettings(projectId);
@@ -324,39 +339,91 @@ export default function EditorPanel({
 		(multiSceneMode || singleSceneMode || isMemoryDoc || isChapterSummaryDoc || isEditorialDoc) ? chapterId : null
 	);
 
-	// ── AI document data (memory / chapter summary / book summary) ───────────
-	// Only one of these three is ever active per selection.aiDocType. Autosave
+	// ── AI document data (memory / chapter summary / book summary / editorial) ─
+	// Since the provider-variants work, each AI doc has one variant per provider.
+	// We fetch ALL variants for the active doc in one query and pick the selected
+	// provider's variant client-side, so toggling providers is instant. Autosave
 	// goes through the stable API modules directly inside scheduleSave (see
-	// below), not these mutation hooks — scheduleSave's useCallback has a
-	// limited dependency array, so a hook-returned mutate function captured in
-	// its closure could go stale across renders. The mutation hooks below are
-	// only used for the explicit Generate/Regenerate action, triggered directly
-	// from a click handler where that staleness risk doesn't apply.
-	const { data: memoryDoc, isLoading: memoryDocLoading } = useChapterMemory(isMemoryDoc ? chapterId : null);
+	// below), not the mutation hooks — scheduleSave's useCallback has a limited
+	// dependency array, so a hook-returned mutate function captured in its closure
+	// could go stale. The mutation hooks below are only used for the explicit
+	// Generate/Regenerate and per-provider Clear actions, triggered directly from
+	// click handlers where that staleness risk doesn't apply. Status/coverage
+	// queries stay on the user's default provider for now (provider-aware coverage
+	// is a later increment).
+	const { data: aiCredentials = [] } = useAiCredentials();
+
+	const { data: memoryVariants = [], isLoading: memoryVariantsLoading } = useChapterMemoryVariants(isMemoryDoc ? chapterId : null, isMemoryDoc);
 	const { data: memoryStatusRows = [] } = useChapterMemoryStatus(isMemoryDoc ? bookId : null, isMemoryDoc);
 	const { mutateAsync: generateMemoryAsync, isPending: generatingMemory } = useGenerateChapterMemory();
+	const { mutateAsync: deleteMemoryAsync } = useDeleteChapterMemory();
 
-	const { data: chapterSummaryDoc, isLoading: chapterSummaryDocLoading } = useChapterSummary(isChapterSummaryDoc ? chapterId : null);
+	const { data: chapterSummaryVariants = [], isLoading: chapterSummaryVariantsLoading } = useChapterSummaryVariants(isChapterSummaryDoc ? chapterId : null, isChapterSummaryDoc);
 	const { data: chapterSummaryRows = [] } = useBookChapterSummaries(isChapterSummaryDoc ? bookId : null, isChapterSummaryDoc);
 	const { mutateAsync: generateChapterSummaryAsync, isPending: generatingChapterSummary } = useGenerateChapterSummary();
+	const { mutateAsync: deleteChapterSummaryAsync } = useDeleteChapterSummary();
 
-	const { data: bookSummaryDoc, isLoading: bookSummaryDocLoading } = useBookSummary(isBookSummaryDoc ? bookId : null);
+	const { data: bookSummaryVariants = [], isLoading: bookSummaryVariantsLoading } = useBookSummaryVariants(isBookSummaryDoc ? bookId : null, isBookSummaryDoc);
 	const { data: bookSummaryStatusData } = useBookSummaryStatus(isBookSummaryDoc ? bookId : null, isBookSummaryDoc);
 	const { data: bookSummaryChapterRows = [] } = useBookChapterSummaries(isBookSummaryDoc ? bookId : null, isBookSummaryDoc);
 	const { mutateAsync: generateBookSummaryAsync, isPending: generatingBookSummary } = useGenerateBookSummary();
+	const { mutateAsync: deleteBookSummaryAsync } = useDeleteBookSummary();
 
 	// Editorial is chapter-scoped like memory/chapter-summary, but has no
 	// book-wide aggregate or staleness view — it's purely author-facing and
 	// never consumed by another AI function, so no status query.
-	const { data: editorialDoc, isLoading: editorialDocLoading } = useChapterEditorial(isEditorialDoc ? chapterId : null);
+	const { data: editorialVariants = [], isLoading: editorialVariantsLoading } = useChapterEditorialVariants(isEditorialDoc ? chapterId : null, isEditorialDoc);
 	const { mutateAsync: generateEditorialAsync, isPending: generatingEditorial } = useGenerateChapterEditorial();
+	const { mutateAsync: deleteEditorialAsync } = useDeleteChapterEditorial();
 
 	// Heading label for the AI-doc modes ("Chapter 3: Title" / book title).
 	const { data: aiDocBook } = useBook(isBookSummaryDoc ? bookId : null);
 
-	const aiDocLoading = isMemoryDoc ? memoryDocLoading : isChapterSummaryDoc ? chapterSummaryDocLoading : isBookSummaryDoc ? bookSummaryDocLoading : isEditorialDoc ? editorialDocLoading : false;
-	const aiDocCurrent = isMemoryDoc ? memoryDoc : isChapterSummaryDoc ? chapterSummaryDoc : isBookSummaryDoc ? bookSummaryDoc : isEditorialDoc ? editorialDoc : null;
+	// Providers the user holds an active credential for (can generate under), and
+	// the default provider (matches the backend's "preferred" resolution).
+	const aiCredentialProviders = useMemo(() => {
+		const out = [];
+		for (const c of aiCredentials || []) {
+			const active = c.status ? c.status === 'ACTIVE' : true;
+			if (active && c.provider && !out.includes(c.provider)) out.push(c.provider);
+		}
+		return out;
+	}, [aiCredentials]);
+	const defaultProviderKey = useMemo(() => {
+		const active = (aiCredentials || []).filter(c => (c.status ? c.status === 'ACTIVE' : true));
+		return (active.find(c => c.isDefault) || active[0])?.provider ?? null;
+	}, [aiCredentials]);
+	const credentialForProvider = useCallback((prov) => {
+		if (!prov) return null;
+		const forProv = (aiCredentials || []).filter(c => c.provider === prov && (c.status ? c.status === 'ACTIVE' : true));
+		return forProv.find(c => c.isDefault) || forProv[0] || null;
+	}, [aiCredentials]);
+
+	const aiDocVariants = isMemoryDoc ? memoryVariants
+		: isChapterSummaryDoc ? chapterSummaryVariants
+			: isBookSummaryDoc ? bookSummaryVariants
+				: isEditorialDoc ? editorialVariants : [];
+	const aiDocLoading = isMemoryDoc ? memoryVariantsLoading
+		: isChapterSummaryDoc ? chapterSummaryVariantsLoading
+			: isBookSummaryDoc ? bookSummaryVariantsLoading
+				: isEditorialDoc ? editorialVariantsLoading : false;
+
+	// Selected provider: an explicit selection.aiDocProvider wins; otherwise the
+	// default provider; otherwise (no credentials) fall back to whatever variant
+	// exists so an existing doc is still shown.
+	const selectedProvider = aiDocMode
+		? (aiDocProvider || defaultProviderKey || (aiDocVariants[0]?.provider ?? null))
+		: null;
+	const aiDocCurrent = (aiDocMode && selectedProvider)
+		? (aiDocVariants.find(v => v.provider === selectedProvider) ?? null)
+		: null;
 	const aiDocGenerating = isMemoryDoc ? generatingMemory : isChapterSummaryDoc ? generatingChapterSummary : isBookSummaryDoc ? generatingBookSummary : isEditorialDoc ? generatingEditorial : false;
+
+	// Can the selected provider be (re)generated? Only if the user holds a
+	// credential for it. A variant-only provider (key later removed) is viewable
+	// but its Generate is disabled.
+	const selectedProviderCredential = credentialForProvider(selectedProvider);
+	const aiDocCanGenerate = !!selectedProviderCredential;
 
 	// Preceding-chapter gating (memory only) / coverage gating (book summary only).
 	const aiDocFlaggedPreceding = useMemo(
@@ -509,6 +576,7 @@ export default function EditorPanel({
 	const loadedAiDocKeyRef = useRef(null);
 	const aiDocTypeRef = useRef(aiDocType);
 	const aiDocModeRef = useRef(aiDocMode);
+	const aiDocProviderRef = useRef(selectedProvider);
 	const singleSceneModeRef = useRef(singleSceneMode);
 	const templateModeRef = useRef(templateMode);
 	const templateScopeRef = useRef(templateScope);
@@ -550,6 +618,7 @@ export default function EditorPanel({
 	useEffect(() => { templateTypeRef.current = templateType; }, [templateType]);
 	useEffect(() => { aiDocTypeRef.current = aiDocType; }, [aiDocType]);
 	useEffect(() => { aiDocModeRef.current = aiDocMode; }, [aiDocMode]);
+	useEffect(() => { aiDocProviderRef.current = selectedProvider; }, [selectedProvider]);
 	useEffect(() => { bookIdRef.current = bookId; }, [bookId]);
 	useEffect(() => { sceneIdRef.current = sceneId; }, [sceneId]);
 	useEffect(() => { searchRef.current = search; }, [search]);
@@ -605,7 +674,7 @@ export default function EditorPanel({
 		loadedSceneIdRef.current = null;
 		prevSceneBreakIdsRef.current = [];
 		creatingFirstSceneRef.current = false;
-	}, [templateMode, templateType, templateScope, aiDocType, bookId, partId, chapterId]);
+	}, [templateMode, templateType, templateScope, aiDocType, selectedProvider, bookId, partId, chapterId]);
 
 	// ── save ─────────────────────────────────────────────────────────────────
 
@@ -616,34 +685,39 @@ export default function EditorPanel({
 			try {
 				if (aiDocTypeRef.current) {
 					const type = aiDocTypeRef.current;
+					const prov = aiDocProviderRef.current;
 					if (type === 'memory') {
 						const cid = chapterIdRef.current;
 						if (!cid) return;
-						const saved = await chapterMemoryApi.save(cid, html);
-						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved);
-						queryClient.setQueryData(CHAPTER_MEMORY_KEYS.doc(cid), saved);
+						const saved = await chapterMemoryApi.save(cid, html, prov);
+						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved.provider, saved);
+						queryClient.setQueryData(CHAPTER_MEMORY_KEYS.variants(cid), (old) => upsertVariant(old, saved));
+						queryClient.invalidateQueries({ queryKey: CHAPTER_MEMORY_KEYS.doc(cid) });
 						queryClient.invalidateQueries({ queryKey: CHAPTER_MEMORY_KEYS.status(bookIdRef.current) });
 					} else if (type === 'chapterSummary') {
 						const cid = chapterIdRef.current;
 						if (!cid) return;
-						const saved = await summaryApi.saveChapter(cid, html);
-						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved);
-						queryClient.setQueryData(SUMMARY_KEYS.chapterDoc(cid), saved);
+						const saved = await summaryApi.saveChapter(cid, html, prov);
+						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved.provider, saved);
+						queryClient.setQueryData(SUMMARY_KEYS.chapterVariants(cid), (old) => upsertVariant(old, saved));
+						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.chapterDoc(cid) });
 						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.chapters(bookIdRef.current) });
 						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bookIdRef.current) });
 					} else if (type === 'bookSummary') {
 						const bid = bookIdRef.current;
 						if (!bid) return;
-						const saved = await summaryApi.saveBook(bid, html);
-						loadedAiDocKeyRef.current = aiDocKey(type, bid, saved);
-						queryClient.setQueryData(SUMMARY_KEYS.bookDoc(bid), saved);
+						const saved = await summaryApi.saveBook(bid, html, prov);
+						loadedAiDocKeyRef.current = aiDocKey(type, bid, saved.provider, saved);
+						queryClient.setQueryData(SUMMARY_KEYS.bookVariants(bid), (old) => upsertVariant(old, saved));
+						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookDoc(bid) });
 						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bid) });
 					} else if (type === 'editorial') {
 						const cid = chapterIdRef.current;
 						if (!cid) return;
-						const saved = await editorialApi.save(cid, html);
-						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved);
-						queryClient.setQueryData(EDITORIAL_KEYS.doc(cid), saved);
+						const saved = await editorialApi.save(cid, html, prov);
+						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved.provider, saved);
+						queryClient.setQueryData(EDITORIAL_KEYS.variants(cid), (old) => upsertVariant(old, saved));
+						queryClient.invalidateQueries({ queryKey: EDITORIAL_KEYS.doc(cid) });
 					}
 					return;
 				}
@@ -921,7 +995,7 @@ export default function EditorPanel({
 		if (aiDocMode) {
 			if (aiDocLoading) return;
 			const parentId = isBookSummaryDoc ? bookId : chapterId;
-			const key = aiDocKey(aiDocType, parentId, aiDocCurrent);
+			const key = aiDocKey(aiDocType, parentId, selectedProvider, aiDocCurrent);
 			if (loadedAiDocKeyRef.current === key) return;
 			prevSceneBreakIdsRef.current = [];
 			loadedAiDocKeyRef.current = key;
@@ -970,7 +1044,7 @@ export default function EditorPanel({
 		loadedChapterIdRef.current = scopeKey;
 		loadedSceneOrderRef.current = newOrder;
 		return setEditorContent(html);
-	}, [editor, scenes, activeScenes, draftDocument, aggregateDraftMode, partDraftMode, partId, bookId, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template, aiDocMode, aiDocLoading, aiDocCurrent, aiDocType, isBookSummaryDoc]);
+	}, [editor, scenes, activeScenes, draftDocument, aggregateDraftMode, partDraftMode, partId, bookId, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template, aiDocMode, aiDocLoading, aiDocCurrent, aiDocType, selectedProvider, isBookSummaryDoc]);
 
 	useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
@@ -988,7 +1062,7 @@ export default function EditorPanel({
 	// throughout this app instead of an effect, and the same guidance lifecycle
 	// as the legacy ChapterMemoryEditor/BookSummaryDialog peek surfaces).
 	const aiDocGuidanceKey = aiDocMode
-		? `${aiDocType}:${isBookSummaryDoc ? bookId : chapterId}:${aiDocLoading ? 'loading' : 'loaded'}`
+		? `${aiDocType}:${isBookSummaryDoc ? bookId : chapterId}:${selectedProvider ?? 'preferred'}:${aiDocLoading ? 'loading' : 'loaded'}`
 		: null;
 	if (aiDocMode && aiDocGuidanceKey !== aiDocGuidanceInitKey) {
 		setAiDocGuidanceInitKey(aiDocGuidanceKey);
@@ -1001,16 +1075,23 @@ export default function EditorPanel({
 			: isChapterSummaryDoc ? 'chapter summary'
 				: isBookSummaryDoc ? 'book summary'
 					: 'editorial';
-		setAiDocSnack({ severity: 'info', message: `Producing ${label}…`, persist: true });
+		// The generated variant is determined by the credential's provider, so we
+		// pass the selected provider's credential explicitly.
+		const credentialId = selectedProviderCredential?.id ?? null;
+		if (!credentialId) {
+			setAiDocSnack({ severity: 'error', message: `No ${providerLabel(selectedProvider) || 'AI'} key is configured. Add one in Settings.`, persist: false });
+			return Promise.resolve();
+		}
+		setAiDocSnack({ severity: 'info', message: `Producing ${label} with ${providerLabel(selectedProvider)}…`, persist: true });
 		let p;
 		if (isMemoryDoc) {
-			p = generateMemoryAsync({ chapterId, bookId, credentialId: null, userGuidance });
+			p = generateMemoryAsync({ chapterId, bookId, credentialId, userGuidance });
 		} else if (isChapterSummaryDoc) {
-			p = generateChapterSummaryAsync({ chapterId, bookId, credentialId: null, userGuidance });
+			p = generateChapterSummaryAsync({ chapterId, bookId, credentialId, userGuidance });
 		} else if (isBookSummaryDoc) {
-			p = generateBookSummaryAsync({ bookId, credentialId: null, userGuidance });
+			p = generateBookSummaryAsync({ bookId, credentialId, userGuidance });
 		} else if (isEditorialDoc) {
-			p = generateEditorialAsync({ chapterId, bookId, credentialId: null, userGuidance });
+			p = generateEditorialAsync({ chapterId, bookId, credentialId, userGuidance });
 		} else {
 			setAiDocSnack(null);
 			return Promise.resolve();
@@ -1019,6 +1100,7 @@ export default function EditorPanel({
 			.then(() => setAiDocSnack({ severity: 'success', message: `${label.charAt(0).toUpperCase() + label.slice(1)} generated.`, persist: false }))
 			.catch((e) => setAiDocSnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.', persist: false }));
 	}, [isMemoryDoc, isChapterSummaryDoc, isBookSummaryDoc, isEditorialDoc, chapterId, bookId, aiDocGuidance,
+		selectedProvider, selectedProviderCredential,
 		generateMemoryAsync, generateChapterSummaryAsync, generateBookSummaryAsync, generateEditorialAsync]);
 
 	// After the discard-content gate (if any), memory/book-summary generation
@@ -1040,6 +1122,47 @@ export default function EditorPanel({
 		setAiDocRegenConfirmOpen(false);
 		proceedToAiDocGate();
 	}, [proceedToAiDocGate]);
+
+	// Switching the provider variant is a selection change (kept in App's
+	// selection so AiDocProperties stays in sync). We re-assert aiDocType and the
+	// ancestors because setSelection nulls transient fields on every update.
+	const handleAiDocProviderChange = useCallback((key) => {
+		setSelection({
+			projectId: projectId ?? null,
+			bookId: bookId ?? null,
+			partId: null,
+			chapterId: isBookSummaryDoc ? null : (chapterId ?? null),
+			sceneId: null,
+			aiDocType,
+			aiDocProvider: key,
+		});
+	}, [setSelection, projectId, bookId, chapterId, aiDocType, isBookSummaryDoc]);
+
+	// Clears only the selected provider's variant. (The nav context-menu Clear
+	// targets the user's default provider; this covers the other providers.)
+	const handleAiDocClearProvider = useCallback(() => {
+		if (!selectedProvider || !aiDocCurrent) return;
+		const label = isMemoryDoc ? 'memory document'
+			: isChapterSummaryDoc ? 'chapter summary'
+				: isBookSummaryDoc ? 'book summary'
+					: 'editorial';
+		let p;
+		if (isMemoryDoc) {
+			p = deleteMemoryAsync({ chapterId, bookId, provider: selectedProvider });
+		} else if (isChapterSummaryDoc) {
+			p = deleteChapterSummaryAsync({ chapterId, bookId, provider: selectedProvider });
+		} else if (isBookSummaryDoc) {
+			p = deleteBookSummaryAsync({ bookId, provider: selectedProvider });
+		} else if (isEditorialDoc) {
+			p = deleteEditorialAsync({ chapterId, provider: selectedProvider });
+		} else {
+			return;
+		}
+		setAiDocSnack({ severity: 'info', message: `Clearing ${providerLabel(selectedProvider)} ${label}…`, persist: true });
+		p.then(() => setAiDocSnack({ severity: 'success', message: `${providerLabel(selectedProvider)} ${label} cleared.`, persist: false }))
+			.catch((e) => setAiDocSnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Clear failed.', persist: false }));
+	}, [selectedProvider, aiDocCurrent, isMemoryDoc, isChapterSummaryDoc, isBookSummaryDoc, isEditorialDoc,
+		chapterId, bookId, deleteMemoryAsync, deleteChapterSummaryAsync, deleteBookSummaryAsync, deleteEditorialAsync]);
 
 	// ── render ────────────────────────────────────────────────────────────────
 
@@ -1085,6 +1208,16 @@ export default function EditorPanel({
 				aiDocGuidance={aiDocGuidance}
 				onAiDocGuidanceChange={setAiDocGuidance}
 				onAiDocGenerate={handleAiDocGenerateClick}
+				aiDocCanGenerate={aiDocCanGenerate}
+				aiDocProviderSelect={aiDocMode ? {
+					value: selectedProvider,
+					onChange: handleAiDocProviderChange,
+					variants: aiDocVariants,
+					credentialProviders: aiCredentialProviders,
+					defaultProvider: defaultProviderKey,
+					docTypeLabel: aiDocTypeLabel.toLowerCase(),
+					onClearProvider: handleAiDocClearProvider,
+				} : null}
 				onOpenContextSettings={onOpenContextSettings}
 				contextSettingsLabel={contextSettingsLabel}
 			/>

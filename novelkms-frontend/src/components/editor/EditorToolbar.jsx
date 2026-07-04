@@ -28,6 +28,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import EditNoteIcon from '@mui/icons-material/EditNote'
 import { useReview } from '../../review/ReviewContext'
 import { STYLE_ORDER, STYLE_LABELS, HEADING_KEYS } from '../../utils/styles'
+import AiDocProviderSelect from '../ai/AiDocProviderSelect'
 
 // ── font options ───────────────────────────────────────────────────────────────
 
@@ -166,6 +167,10 @@ function VDivider() {
  *   aiDocGuidance     — string — one-time guidance text for the next generation
  *   onAiDocGuidanceChange — (text) => void
  *   onAiDocGenerate   — () => void — runs (or gates, then runs) generation
+ *   aiDocCanGenerate  — boolean — whether the selected provider can be generated
+ *                       under (a credential exists for it); Generate is disabled otherwise
+ *   aiDocProviderSelect — props object for the per-provider variant selector, or
+ *                       null when not in AI-doc mode (see AiDocProviderSelect)
  *   onOpenContextSettings — opens the selected project/book settings dialog
  *   contextSettingsLabel  — label for the selected project/book settings action
  */
@@ -186,6 +191,8 @@ export default function EditorToolbar({
 	aiDocGuidance = '',
 	onAiDocGuidanceChange,
 	onAiDocGenerate,
+	aiDocCanGenerate = true,
+	aiDocProviderSelect = null,
 	onOpenContextSettings,
 	contextSettingsLabel = '',
 }) {
@@ -516,9 +523,12 @@ export default function EditorToolbar({
 
 					{aiDocMode && (
 						<>
+							{aiDocProviderSelect && (
+								<AiDocProviderSelect {...aiDocProviderSelect} disabled={aiDocBusy} />
+							)}
 							{aiDocStatus && (
 								<Tooltip title={aiDocStatus.tooltip ?? ''}>
-									<Chip size="small" color={aiDocStatus.color} variant="outlined" label={aiDocStatus.label} sx={{ mr: 0.5 }} />
+									<Chip size="small" color={aiDocStatus.color} variant="outlined" label={aiDocStatus.label} sx={{ mr: 0.5, ml: 0.5 }} />
 								</Tooltip>
 							)}
 							<TBtn
@@ -557,9 +567,13 @@ export default function EditorToolbar({
 								</Box>
 							</Popover>
 							<TBtn
-								title={aiDocBusy ? 'Working…' : (aiDocHasContent ? `Regenerate this ${aiDocTypeLabel.toLowerCase()}` : `Generate this ${aiDocTypeLabel.toLowerCase()}`)}
+								title={aiDocBusy
+									? 'Working…'
+									: !aiDocCanGenerate
+										? `Add a key for this provider in Settings to ${aiDocHasContent ? 'regenerate' : 'generate'}`
+										: (aiDocHasContent ? `Regenerate this ${aiDocTypeLabel.toLowerCase()}` : `Generate this ${aiDocTypeLabel.toLowerCase()}`)}
 								onClick={onAiDocGenerate}
-								disabled={aiDocBusy}
+								disabled={aiDocBusy || !aiDocCanGenerate}
 							>
 								{aiDocBusy ? <CircularProgress size={16} /> : <AutoAwesomeIcon fontSize="small" />}
 							</TBtn>

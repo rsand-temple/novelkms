@@ -33,9 +33,9 @@ import {
  * Lifecycle is bug-tracker style; the face actions depend on the finding's
  * current status:
  *
- *   OPEN      → [Mark Done] [Dismiss] [Defer]
- *   DEFERRED  → [Mark Done] [Dismiss] [Reopen]
- *   DONE      → [Reopen]
+ *   OPEN      → [Mark Done] [Dismiss] [Defer] [Codex]
+ *   DEFERRED  → [Mark Done] [Dismiss] [Reopen] [Codex]
+ *   DONE      → [Reopen] [Codex]
  *   DISMISSED → [Reopen]
  *   PROMOTED  → (inert — promoted to Codex, no lifecycle actions)
  *
@@ -77,6 +77,7 @@ export default function ReviewCard({
 
 	// Promotion is meaningless once dismissed or already promoted.
 	const addDisabled = status === STATUS.DISMISSED || status === STATUS.PROMOTED
+	const showCodex = !addDisabled
 
 	const closeMenu = () => setMenuAnchor(null)
 
@@ -158,7 +159,7 @@ export default function ReviewCard({
 				</Typography>
 			)}
 
-			{(showDone || showDismiss || showDefer || showReopen) && (
+			{(showDone || showDismiss || showDefer || showReopen || showCodex) && (
 				<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
 					{showDone && (
 						<Button size="small" color="success" onClick={() => onSetStatus(rec, STATUS.DONE)}>
@@ -178,6 +179,11 @@ export default function ReviewCard({
 					{showReopen && (
 						<Button size="small" onClick={() => onSetStatus(rec, STATUS.OPEN)}>
 							Reopen
+						</Button>
+					)}
+					{showCodex && (
+						<Button size="small" color="primary" disabled={promoting} onClick={openAddDialog}>
+							{promoting ? 'Adding…' : 'Codex'}
 						</Button>
 					)}
 				</Box>

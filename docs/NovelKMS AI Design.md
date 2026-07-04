@@ -359,3 +359,13 @@
    3. Consider a Codex draft/suggestion layer.
    4. Move long-running review workflows to async execution before part/book reviews.
    5. Preserve prompt versioning for every output-shape change.
+   
+   ## Per-provider AI document variants (frontend)
+   
+   Each of the four one-per-parent AI artifact families (chapter memory, chapter summary, chapter editorial, book summary) now keeps one document **per provider** rather than one per parent, so an author with keys for more than one provider can hold, compare, and independently regenerate each provider's take. `ai_review` is unaffected — it was already append-only and provider-stamped.
+   
+   - **Selector.** In AI-doc mode the editor toolbar shows a provider dropdown. Its options are the roster-ordered union of the providers the author holds an active credential for and the providers that already have a variant of this document; each option is annotated `default` (the default credential's provider), `not generated` (no variant yet), or `no key` (a variant exists but its credential was removed — viewable, not regenerable). Switching is instant: all variants are fetched once and the selected one is chosen client-side.
+   - **Generate/Regenerate** runs under the selected provider (the backend derives the variant from the credential's provider, so the selected provider's default credential is passed). One-time author guidance, the regenerate-confirm gate, and the memory/coverage gates behave exactly as before, now scoped to the chosen provider's document.
+   - **Clear.** The nav context-menu "Clear" still targets the default provider's variant; the selector's overflow adds "Clear this provider's document" for the others.
+   - **Properties.** The AI-doc Properties panel shows the selected variant's provider alongside its source/generated-at/model/guidance, notes when the selected provider has no variant yet, and shows how many providers have generated the document.
+   - **Preferred variant.** Every document GET is backward-compatible: with no provider it returns the *preferred* variant (the default provider's, else the most-recently-updated). The read-only peek surfaces (ReviewRail Memory tab, "View chapter summaries…") and the coverage/staleness gates continue to read the preferred/default variant; making them provider-aware is a later increment.

@@ -2,6 +2,7 @@ package com.richardsand.novelkms.resource;
 
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -19,6 +20,7 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -28,16 +30,28 @@ import jakarta.ws.rs.core.Response.Status;
 /**
  * Chapter memory-document endpoints.
  *
+ * <p>Since V36 a chapter holds one memory document per provider. To stay
+ * backward-compatible with the current frontend while the provider-selector UI
+ * is built (Phase 2), the single-document {@code GET} keeps returning ONE
+ * document: an explicit {@code ?provider=} yields exactly that provider's
+ * document, and its absence yields the user's <em>preferred</em> document (the
+ * default provider's variant, else the most-recently-updated variant of any
+ * provider). Edit/delete/status likewise accept an optional provider and default
+ * to the user's default provider. A new {@code /variants} endpoint returns every
+ * provider variant for the selector to enumerate.
+ *
  * <p>Authorization: every path carries a {@code chapters/{id}} or
  * {@code books/{id}} segment, so the tenant filter enforces ownership before the
  * resource runs — exactly like {@link AiReviewResource}'s run endpoints.
  * <ul>
  *   <li>{@code POST   /ai/memory/chapters/{chapterId}} — (re)generate via the provider.</li>
- *   <li>{@code GET    /ai/memory/chapters/{chapterId}} — fetch the current document (or 404).</li>
- *   <li>{@code PUT    /ai/memory/chapters/{chapterId}} — save an author edit.</li>
- *   <li>{@code DELETE /ai/memory/chapters/{chapterId}} — clear the document.</li>
+ *   <li>{@code GET    /ai/memory/chapters/{chapterId}} — fetch the preferred document
+ *       (or the {@code ?provider=} variant); 204 if none.</li>
+ *   <li>{@code GET    /ai/memory/chapters/{chapterId}/variants} — every provider variant.</li>
+ *   <li>{@code PUT    /ai/memory/chapters/{chapterId}} — save an author edit (per provider).</li>
+ *   <li>{@code DELETE /ai/memory/chapters/{chapterId}} — clear the document (per provider).</li>
  *   <li>{@code GET    /books/{bookId}/memory-status} — per-chapter staleness for the
- *       pre-review warning.</li>
+ *       pre-review warning, for the given (or default) provider.</li>
  * </ul>
  */
 @Path("/")
@@ -66,10 +80,13 @@ public class ChapterMemoryResource {
         public String userGuidance;
     }
 
-    /** Body for PUT: the edited document text. */
+    /** Body for PUT: the edited document text and the provider variant it belongs to. */
     public static class EditRequest {
         @JsonProperty
         public String content;
+        /** Provider variant being edited; null/blank falls back to the user's default provider. */
+        @JsonProperty
+        public String provider;
     }
 
     @POST
@@ -91,11 +108,26 @@ public class ChapterMemoryResource {
 
     @GET
     @Path("/ai/memory/chapters/{chapterId}")
-    public Response get(@PathParam("chapterId") UUID chapterId) {
+    public Response get(@PathParam("chapterId") UUID chapterId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return service.getChapterMemory(chapterId)
-                    .map(memory -> Response.ok(memory).build())
+            Optional<ChapterMemory> memory = (provider != null && !provider.isBlank())
+                    ? service.getChapterMemory(chapterId, provider)
+                    : service.getPreferredChapterMemory(chapterId, service.defaultProviderKey(userId));
+            return memory
+                    .map(m -> Response.ok(m).build())
                     .orElseGet(() -> Response.noContent().build());
+        } catch (SQLException e) {
+            return serverError();
+        }
+    }
+
+    @GET
+    @Path("/ai/memory/chapters/{chapterId}/variants")
+    public Response variants(@PathParam("chapterId") UUID chapterId) {
+        try {
+            return Response.ok(service.listChapterMemoryVariants(chapterId)).build();
         } catch (SQLException e) {
             return serverError();
         }
@@ -107,8 +139,10 @@ public class ChapterMemoryResource {
         if (body == null || body.content == null || body.content.isBlank()) {
             return error(Status.BAD_REQUEST, "bad_request", "content must not be blank; use DELETE to clear the document.");
         }
+        UUID userId = CurrentUser.id(request);
         try {
-            ChapterMemory memory = service.editChapterMemory(chapterId, body.content.strip());
+            String provider = resolveProvider(body.provider, userId);
+            ChapterMemory memory = service.editChapterMemory(chapterId, provider, body.content.strip());
             return Response.ok(memory).build();
         } catch (ReviewException re) {
             return error(re.status(), re.code(), re.getMessage());
@@ -119,9 +153,11 @@ public class ChapterMemoryResource {
 
     @DELETE
     @Path("/ai/memory/chapters/{chapterId}")
-    public Response clear(@PathParam("chapterId") UUID chapterId) {
+    public Response clear(@PathParam("chapterId") UUID chapterId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return service.deleteChapterMemory(chapterId)
+            return service.deleteChapterMemory(chapterId, resolveProvider(provider, userId))
                     ? Response.ok().build()
                     : Response.noContent().build();
         } catch (SQLException e) {
@@ -131,15 +167,22 @@ public class ChapterMemoryResource {
 
     @GET
     @Path("/books/{bookId}/memory-status")
-    public Response bookStatus(@PathParam("bookId") UUID bookId) {
+    public Response bookStatus(@PathParam("bookId") UUID bookId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return Response.ok(service.bookMemoryStatus(bookId)).build();
+            return Response.ok(service.bookMemoryStatus(bookId, resolveProvider(provider, userId))).build();
         } catch (SQLException e) {
             return serverError();
         }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /** Explicit provider when supplied, otherwise the user's default provider. */
+    private String resolveProvider(String provider, UUID userId) throws SQLException {
+        return (provider != null && !provider.isBlank()) ? provider : service.defaultProviderKey(userId);
+    }
 
     private static Response error(Status status, String code, String message) {
         return Response.status(status).entity(Map.of("error", code, "message", message)).build();

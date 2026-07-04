@@ -2,20 +2,33 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { summaryApi } from '../api/summary'
 
 export const SUMMARY_KEYS = {
-	all:        ['summary'],
-	chapterDoc: (chapterId) => ['summary', 'chapterDoc', chapterId],
-	bookDoc:    (bookId)    => ['summary', 'bookDoc', bookId],
-	chapters:   (bookId)    => ['summary', 'chapters', bookId],
-	bookStatus: (bookId)    => ['summary', 'bookStatus', bookId],
+	all:             ['summary'],
+	chapterDoc:      (chapterId) => ['summary', 'chapterDoc', chapterId],
+	chapterVariants: (chapterId) => ['summary', 'chapterVariants', chapterId],
+	bookDoc:         (bookId)    => ['summary', 'bookDoc', bookId],
+	bookVariants:    (bookId)    => ['summary', 'bookVariants', bookId],
+	chapters:        (bookId)    => ['summary', 'chapters', bookId],
+	bookStatus:      (bookId)    => ['summary', 'bookStatus', bookId],
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
-// The current summary for a chapter (null when none exists).
+// The preferred summary for a chapter (default provider's, else most-recent; null
+// when none).
 export function useChapterSummary(chapterId, enabled = true) {
 	return useQuery({
 		queryKey: SUMMARY_KEYS.chapterDoc(chapterId),
 		queryFn:  () => summaryApi.getChapter(chapterId),
+		enabled:  !!chapterId && enabled,
+	})
+}
+
+// Every provider variant of a chapter's summary (newest first). Drives the
+// per-document provider selector.
+export function useChapterSummaryVariants(chapterId, enabled = true) {
+	return useQuery({
+		queryKey: SUMMARY_KEYS.chapterVariants(chapterId),
+		queryFn:  () => summaryApi.chapterVariants(chapterId),
 		enabled:  !!chapterId && enabled,
 	})
 }
@@ -29,11 +42,20 @@ export function useBookChapterSummaries(bookId, enabled = true) {
 	})
 }
 
-// The current book summary (null when none exists).
+// The preferred book summary (default provider's, else most-recent; null when none).
 export function useBookSummary(bookId, enabled = true) {
 	return useQuery({
 		queryKey: SUMMARY_KEYS.bookDoc(bookId),
 		queryFn:  () => summaryApi.getBook(bookId),
+		enabled:  !!bookId && enabled,
+	})
+}
+
+// Every provider variant of a book's summary (newest first).
+export function useBookSummaryVariants(bookId, enabled = true) {
+	return useQuery({
+		queryKey: SUMMARY_KEYS.bookVariants(bookId),
+		queryFn:  () => summaryApi.bookVariants(bookId),
 		enabled:  !!bookId && enabled,
 	})
 }
@@ -47,10 +69,14 @@ export function useBookSummaryStatus(bookId, enabled = true) {
 	})
 }
 
-// A chapter-summary change moves both the chapter's summary and the book-wide
-// coverage/status (which feeds book-summary staleness), so invalidate all three.
+// A chapter-summary change moves that chapter's variants + preferred doc and the
+// book-wide coverage/status (which feeds book-summary staleness); a book-summary
+// change moves the book's variants + preferred doc and its status. We invalidate
+// (not write straight into the preferred cache) because the changed variant may
+// not be the preferred one.
 function refreshChapter(qc, chapterId, bookId) {
 	qc.invalidateQueries({ queryKey: SUMMARY_KEYS.chapterDoc(chapterId) })
+	qc.invalidateQueries({ queryKey: SUMMARY_KEYS.chapterVariants(chapterId) })
 	if (bookId) {
 		qc.invalidateQueries({ queryKey: SUMMARY_KEYS.chapters(bookId) })
 		qc.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bookId) })
@@ -59,6 +85,7 @@ function refreshChapter(qc, chapterId, bookId) {
 
 function refreshBook(qc, bookId) {
 	qc.invalidateQueries({ queryKey: SUMMARY_KEYS.bookDoc(bookId) })
+	qc.invalidateQueries({ queryKey: SUMMARY_KEYS.bookVariants(bookId) })
 	qc.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bookId) })
 }
 
@@ -73,32 +100,23 @@ export function useGenerateChapterSummary() {
 				model: model ?? null,
 				userGuidance: userGuidance ?? null,
 			}),
-		onSuccess: (doc, { chapterId, bookId }) => {
-			if (doc) qc.setQueryData(SUMMARY_KEYS.chapterDoc(chapterId), doc)
-			refreshChapter(qc, chapterId, bookId)
-		},
+		onSuccess: (_doc, { chapterId, bookId }) => refreshChapter(qc, chapterId, bookId),
 	})
 }
 
 export function useSaveChapterSummary() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ chapterId, content }) => summaryApi.saveChapter(chapterId, content),
-		onSuccess: (doc, { chapterId, bookId }) => {
-			if (doc) qc.setQueryData(SUMMARY_KEYS.chapterDoc(chapterId), doc)
-			refreshChapter(qc, chapterId, bookId)
-		},
+		mutationFn: ({ chapterId, content, provider }) => summaryApi.saveChapter(chapterId, content, provider),
+		onSuccess: (_doc, { chapterId, bookId }) => refreshChapter(qc, chapterId, bookId),
 	})
 }
 
 export function useDeleteChapterSummary() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ chapterId }) => summaryApi.removeChapter(chapterId),
-		onSuccess: (_data, { chapterId, bookId }) => {
-			qc.setQueryData(SUMMARY_KEYS.chapterDoc(chapterId), null)
-			refreshChapter(qc, chapterId, bookId)
-		},
+		mutationFn: ({ chapterId, provider }) => summaryApi.removeChapter(chapterId, provider),
+		onSuccess: (_data, { chapterId, bookId }) => refreshChapter(qc, chapterId, bookId),
 	})
 }
 
@@ -113,31 +131,22 @@ export function useGenerateBookSummary() {
 				model: model ?? null,
 				userGuidance: userGuidance ?? null,
 			}),
-		onSuccess: (doc, { bookId }) => {
-			if (doc) qc.setQueryData(SUMMARY_KEYS.bookDoc(bookId), doc)
-			refreshBook(qc, bookId)
-		},
+		onSuccess: (_doc, { bookId }) => refreshBook(qc, bookId),
 	})
 }
 
 export function useSaveBookSummary() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ bookId, content }) => summaryApi.saveBook(bookId, content),
-		onSuccess: (doc, { bookId }) => {
-			if (doc) qc.setQueryData(SUMMARY_KEYS.bookDoc(bookId), doc)
-			refreshBook(qc, bookId)
-		},
+		mutationFn: ({ bookId, content, provider }) => summaryApi.saveBook(bookId, content, provider),
+		onSuccess: (_doc, { bookId }) => refreshBook(qc, bookId),
 	})
 }
 
 export function useDeleteBookSummary() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ bookId }) => summaryApi.removeBook(bookId),
-		onSuccess: (_data, { bookId }) => {
-			qc.setQueryData(SUMMARY_KEYS.bookDoc(bookId), null)
-			refreshBook(qc, bookId)
-		},
+		mutationFn: ({ bookId, provider }) => summaryApi.removeBook(bookId, provider),
+		onSuccess: (_data, { bookId }) => refreshBook(qc, bookId),
 	})
 }

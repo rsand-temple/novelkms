@@ -79,7 +79,8 @@ const EMPTY_SELECTION = {
 	trashSelected: false, // true when the Trash node is selected
 	templateType: null,   // 'cover' | 'part' | null
 	templateScope: null,  // 'global' | 'book' | null
-	aiDocType: null,       // 'memory' | 'chapterSummary' | 'bookSummary' | null
+	aiDocType: null,       // 'memory' | 'chapterSummary' | 'bookSummary' | 'editorial' | null
+	aiDocProvider: null,   // selected provider variant for the active AI doc; null = preferred (default provider)
 	artifactFolderId: null, // 'root' | <folderId> | null — active Artifacts Explorer folder
 }
 
@@ -299,6 +300,7 @@ export default function App() {
 				templateType: null,
 				templateScope: null,
 				aiDocType: null,
+				aiDocProvider: null,
 				artifactFolderId: null,
 			}
 
@@ -313,6 +315,7 @@ export default function App() {
 				templateType: base.templateType ?? null,
 				templateScope: base.templateScope ?? null,
 				aiDocType: base.aiDocType ?? null,
+				aiDocProvider: base.aiDocProvider ?? null,
 				artifactFolderId: base.artifactFolderId ?? null,
 			}
 		})
@@ -821,6 +824,7 @@ export default function App() {
 									templateType={selection.templateType}
 									templateScope={selection.templateScope}
 									aiDocType={selection.aiDocType}
+									aiDocProvider={selection.aiDocProvider}
 									setSelection={setSelection}
 									onSelectBook={handleSelectBook}
 									onOpenContextSettings={openContextSettings}

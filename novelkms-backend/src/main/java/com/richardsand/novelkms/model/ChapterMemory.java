@@ -11,18 +11,23 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * A per-chapter "memory document": a standardized summary of one chapter,
- * generated explicitly by the author (AI-filled from the memory template, then
- * optionally hand-edited). There is at most one current memory document per
- * chapter ({@code chapter_memory.chapter_id} is unique); regenerating overwrites
- * it and refreshes {@code generatedAt}.
+ * A per-chapter, per-provider "memory document": a standardized summary of one
+ * chapter, generated explicitly by the author (AI-filled from the memory
+ * template, then optionally hand-edited). There is at most one current memory
+ * document per (chapter, provider) — {@code chapter_memory} is unique on
+ * {@code (chapter_id, provider)} (V36) — so each configured provider keeps its
+ * own document and regenerating with a given provider overwrites that provider's
+ * document and refreshes {@code generatedAt}.
  *
  * <p>Memory documents are continuity context, not review artifacts: when a
  * chapter review runs, the memory documents of all preceding chapters (in linear
  * book order) are concatenated and supplied to the model as a "story so far"
- * block. {@code generatedAt} is the basis for staleness reporting — a document
- * older than its chapter's latest scene edit is stale content; a document older
- * than a later chapter's is out of sequence (see {@code ChapterMemoryStatus}).
+ * block. For each preceding chapter the review prefers the generating provider's
+ * own document, falling back to that chapter's most-recently-updated document of
+ * any provider. {@code generatedAt} is the basis for staleness reporting — a
+ * document older than its chapter's latest scene edit is stale content; a
+ * document older than a later chapter's is out of sequence (see
+ * {@code ChapterMemoryStatus}).
  */
 @Getter
 @Builder
@@ -35,6 +40,14 @@ public class ChapterMemory {
 
     @JsonProperty
     private UUID chapterId;
+
+    /**
+     * The AI provider this document belongs to (e.g. {@code OPENAI},
+     * {@code ANTHROPIC}, {@code GEMINI}). A chapter has at most one memory
+     * document per provider.
+     */
+    @JsonProperty
+    private String provider;
 
     @JsonProperty
     private String content;

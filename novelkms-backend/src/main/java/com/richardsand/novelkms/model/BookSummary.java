@@ -11,18 +11,21 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * A per-book "book summary": a synopsis of the whole book of no more than ~1000
- * words, generated explicitly by the author and then optionally hand-edited.
- * There is at most one current summary per book ({@code book_summary.book_id} is
- * unique); regenerating overwrites it and refreshes {@code generatedAt}.
+ * A per-book, per-provider "book summary": a synopsis of the whole book of no
+ * more than ~1000 words, generated explicitly by the author and then optionally
+ * hand-edited. There is at most one current summary per (book, provider) —
+ * {@code book_summary} is unique on {@code (book_id, provider)} (V36) — so each
+ * configured provider keeps its own book summary and regenerating with a given
+ * provider overwrites that provider's summary and refreshes {@code generatedAt}.
  *
  * <p>The book summary is generated <em>entirely</em> from the book's chapter
  * summaries, concatenated in linear book order — never from the manuscript prose
  * directly. A full-length manuscript is too large to summarize reliably in one
- * pass, so the chapter summaries act as a compact, already-distilled input. The
- * summary is therefore only as current as the chapter summaries it consumed:
- * staleness is reported when a chapter has gained/changed a summary since (see
- * {@code BookSummaryStatus}).
+ * pass, so the chapter summaries act as a compact, already-distilled input (each
+ * chapter contributing the generating provider's own summary where present, else
+ * its most-recently-updated summary of any provider). The summary is therefore
+ * only as current as the chapter summaries it consumed: staleness is reported
+ * when a chapter has gained/changed a summary since (see {@code BookSummaryStatus}).
  */
 @Getter
 @Builder
@@ -35,6 +38,14 @@ public class BookSummary {
 
     @JsonProperty
     private UUID bookId;
+
+    /**
+     * The AI provider this summary belongs to (e.g. {@code OPENAI},
+     * {@code ANTHROPIC}, {@code GEMINI}). A book has at most one summary per
+     * provider.
+     */
+    @JsonProperty
+    private String provider;
 
     @JsonProperty
     private String content;

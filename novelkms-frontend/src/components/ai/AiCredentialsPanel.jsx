@@ -23,35 +23,13 @@ import {
 	useDeleteAiCredential,
 	useSetDefaultAiCredential,
 } from '../../hooks/useAiCredentials'
+import { AI_PROVIDERS, AI_PROVIDER_MAP } from './aiProviders'
 
-const PROVIDERS = [
-	{
-		key: 'OPENAI',
-		label: 'OpenAI',
-		keyPrefix: 'sk-…',
-		modelDefault: 'gpt-5.4',
-		modelHelper: 'e.g. gpt-5.4, o3, gpt-4o',
-		keyHelper: 'Stored encrypted; shown only as ••••last4 afterward.',
-	},
-	{
-		key: 'ANTHROPIC',
-		label: 'Anthropic (Claude)',
-		keyPrefix: 'sk-ant-…',
-		modelDefault: 'claude-sonnet-4-6',
-		modelHelper: 'e.g. claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5',
-		keyHelper: 'Stored encrypted; shown only as ••••last4 afterward.',
-	},
-	{
-		key: 'GEMINI',
-		label: 'Google Gemini',
-		keyPrefix: 'AIza…',
-		modelDefault: 'gemini-2.5-flash',
-		modelHelper: 'e.g. gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro',
-		keyHelper: 'Stored encrypted; shown only as ••••last4 afterward.',
-	},
-]
-
-const PROVIDER_MAP = Object.fromEntries(PROVIDERS.map(p => [p.key, p]))
+// The provider roster now lives in the shared aiProviders.js module so this
+// panel and the per-document provider selector can't drift apart. Aliased here
+// to keep the rest of this file unchanged.
+const PROVIDERS = AI_PROVIDERS
+const PROVIDER_MAP = AI_PROVIDER_MAP
 
 const EMPTY_FORM = { id: null, provider: 'OPENAI', label: '', apiKey: '', defaultModel: '', makeDefault: false }
 

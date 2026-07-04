@@ -22,9 +22,11 @@ import { booksApi } from '../../api/books';
 import client from '../../api/client';
 import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor';
 import MemoryTemplateEditor from '../ai/MemoryTemplateEditor';
-import { useChapterMemory, useChapterMemoryStatus } from '../../hooks/useChapterMemory';
-import { useChapterSummary, useBookChapterSummaries, useBookSummary, useBookSummaryStatus } from '../../hooks/useSummary';
-import { useChapterEditorial } from '../../hooks/useEditorial';
+import { useChapterMemoryVariants, useChapterMemoryStatus } from '../../hooks/useChapterMemory';
+import { useChapterSummaryVariants, useBookChapterSummaries, useBookSummaryVariants, useBookSummaryStatus } from '../../hooks/useSummary';
+import { useChapterEditorialVariants } from '../../hooks/useEditorial';
+import { useAiCredentials } from '../../hooks/useAiCredentials';
+import { providerLabel } from '../ai/aiProviders';
 import { useCodexAiContext, useSetScenePinned, useSetCategoryPinned } from '../../hooks/useAiContext';
 import { stateColor as memoryStateColor, stateExplanation as memoryStateExplanation, stateLabel as memoryStateLabel, formatTime as formatMemoryTime } from '../ai/memoryStatus';
 import { stateColor as summaryStateColor, stateExplanation as summaryStateExplanation, stateLabel as summaryStateLabel } from '../ai/summaryStatus';
@@ -772,21 +774,35 @@ function ProjectProperties({ projectId }) {
 // ── AI document (memory / chapter summary / book summary) ─────────────────────
 
 function AiDocProperties({ selection, setSelection }) {
-	const { aiDocType, chapterId, bookId, projectId } = selection;
+	const { aiDocType, chapterId, bookId, projectId, aiDocProvider } = selection;
 	const isMemory = aiDocType === 'memory';
 	const isChapterSummary = aiDocType === 'chapterSummary';
 	const isBookSummary = aiDocType === 'bookSummary';
 	const isEditorial = aiDocType === 'editorial';
 
-	const { data: memoryDoc } = useChapterMemory(isMemory ? chapterId : null);
-	const { data: memoryRows = [] } = useChapterMemoryStatus(isMemory ? bookId : null, isMemory);
-	const { data: chapterSummaryDoc } = useChapterSummary(isChapterSummary ? chapterId : null);
-	const { data: chapterSummaryRows = [] } = useBookChapterSummaries(isChapterSummary ? bookId : null, isChapterSummary);
-	const { data: bookSummaryDoc } = useBookSummary(isBookSummary ? bookId : null);
-	const { data: bookSummaryStatusData } = useBookSummaryStatus(isBookSummary ? bookId : null, isBookSummary);
-	const { data: editorialDoc } = useChapterEditorial(isEditorial ? chapterId : null);
+	// Provider-variant aware: fetch all variants and show the one the editor's
+	// selector has selected (selection.aiDocProvider), falling back to the default
+	// provider, then to whatever variant exists. Coverage/staleness chips below
+	// stay on the default provider for now (a later increment makes them
+	// provider-aware).
+	const { data: aiCredentials = [] } = useAiCredentials();
+	const activeCredentials = (aiCredentials || []).filter(c => (c.status ? c.status === 'ACTIVE' : true));
+	const defaultProviderKey = (activeCredentials.find(c => c.isDefault) || activeCredentials[0])?.provider ?? null;
 
-	const doc = isMemory ? memoryDoc : isChapterSummary ? chapterSummaryDoc : isEditorial ? editorialDoc : bookSummaryDoc;
+	const { data: memoryVariants = [] } = useChapterMemoryVariants(isMemory ? chapterId : null, isMemory);
+	const { data: memoryRows = [] } = useChapterMemoryStatus(isMemory ? bookId : null, isMemory);
+	const { data: chapterSummaryVariants = [] } = useChapterSummaryVariants(isChapterSummary ? chapterId : null, isChapterSummary);
+	const { data: chapterSummaryRows = [] } = useBookChapterSummaries(isChapterSummary ? bookId : null, isChapterSummary);
+	const { data: bookSummaryVariants = [] } = useBookSummaryVariants(isBookSummary ? bookId : null, isBookSummary);
+	const { data: bookSummaryStatusData } = useBookSummaryStatus(isBookSummary ? bookId : null, isBookSummary);
+	const { data: editorialVariants = [] } = useChapterEditorialVariants(isEditorial ? chapterId : null, isEditorial);
+
+	const variants = isMemory ? memoryVariants
+		: isChapterSummary ? chapterSummaryVariants
+			: isEditorial ? editorialVariants
+				: bookSummaryVariants;
+	const selectedProvider = aiDocProvider || defaultProviderKey || (variants[0]?.provider ?? null);
+	const doc = variants.find(v => v.provider === selectedProvider) ?? null;
 
 	// Editorials have no aggregate/staleness view — purely author-facing — so no
 	// state chip; only the generation metadata below is shown.
@@ -843,6 +859,9 @@ function AiDocProperties({ selection, setSelection }) {
 						{doc.source === 'EDITED' ? 'Edited' : 'Generated'}
 						{doc.generatedAt ? ` · ${formatMemoryTime(doc.generatedAt)}` : ''}
 					</Typography>
+					{doc.provider && (
+						<Typography variant="caption" color="text.secondary">Provider: {providerLabel(doc.provider)}</Typography>
+					)}
 					{doc.model && (
 						<Typography variant="caption" color="text.secondary">Model: {doc.model}</Typography>
 					)}
@@ -855,6 +874,18 @@ function AiDocProperties({ selection, setSelection }) {
 						</Typography>
 					)}
 				</Stack>
+			)}
+
+			{!doc && variants.length > 0 && selectedProvider && (
+				<Typography variant="caption" color="text.secondary">
+					Not generated for {providerLabel(selectedProvider)} yet.
+				</Typography>
+			)}
+
+			{variants.length > 1 && (
+				<Typography variant="caption" color="text.secondary">
+					{variants.length} providers have this {typeLabel.toLowerCase()}.
+				</Typography>
 			)}
 
 			<Divider />

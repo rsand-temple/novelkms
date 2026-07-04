@@ -117,6 +117,8 @@ The immediate goal is still practical validation: determine whether NovelKMS man
   - Generating the book summary is gated by a coverage warning (`PreBookSummaryDialog`) when chapters are missing or stale, offering to fill the gaps first. Chapter summaries are created/edited/cleared from the chapter nav context menu.
 - **One-time author guidance (V26).** Every generation flow — chapter/scene review, memory document, chapter summary, book summary — now takes an optional free-text guidance note for that single run only (e.g. "the letter in this chapter is canonically a forgery"), separate from the persistent form/template overrides and from the still-future Codex-context increment. Stored as provenance on the resulting artifact; the UI field pre-fills from whatever guidance produced the current artifact and is never auto-cleared, so guidance can be repeated or refined across runs. Prompt versions bumped accordingly (`chapter-review-v6`, `memory-v2`, `chapter-summary-v2`, `book-summary-v2`).
 
+- **Per-provider AI document variants.** Each of the four one-per-parent AI artifact families (chapter memory, chapter summary, chapter editorial, book summary) now stores one document per provider (OpenAI / Anthropic / Gemini). The editor toolbar carries a provider selector (AI-doc mode only) offering the union of credentialed and already-generated providers; the author views/edits/generates/clears a document per provider, with Generate disabled for view-only providers that have no key. Provider selection is tracked in `selection.aiDocProvider` and reflected in the AI-doc Properties panel. Coverage/staleness surfaces, the pre-review/coverage gates, the read-only peek surfaces, and nav quick-actions deliberately stay on the default provider for now — making them provider-aware (plus provider-grouped review history and a non-blocking fallback note) is the remaining Phase 3 slice.
+
 ### Codex and Trash
 
 - Codex categories/entries exist and are used as promotion targets for AI findings.
@@ -192,6 +194,7 @@ Editorial nav-leaf icon uses `RateReviewOutlinedIcon`; if a future build flags a
 5. Add style-editor UI.
 6. Begin enriching AI prompts with selected Codex/context data (Phase C per-chapter memory artifact).
 7. Summary-prompt template editors (four-scope, like memory templates) were deliberately deferred — V25 uses fixed system-default prompts.
+8. Provider-variants Phase 3: provider-aware coverage/staleness surfacing, review-history grouping by provider, and a non-blocking fallback note when a chained context input (preceding memory, chapter summaries) falls back to a different provider's variant.
 
 ## Documentation maintenance rule
 

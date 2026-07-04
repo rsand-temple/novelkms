@@ -2,6 +2,7 @@ package com.richardsand.novelkms.resource;
 
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -19,6 +20,7 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -29,17 +31,23 @@ import jakarta.ws.rs.core.Response.Status;
  * Chapter-editorial endpoints — a separate, author-facing AI artifact family
  * from memory documents ({@link ChapterMemoryResource}) and summaries
  * ({@link SummaryResource}). An editorial is a short editorial reading of one
- * chapter; there is at most one per chapter, (re)generating overwrites it, and
- * an author edit marks it EDITED. Unlike a memory document, an editorial is
- * never consumed by any other AI function.
+ * chapter; since V36 there is one per (chapter, provider). Unlike a memory
+ * document, an editorial is never consumed by any other AI function.
+ *
+ * <p>Backward-compatible like the other families: the single-editorial
+ * {@code GET} returns the preferred editorial (default provider's variant, else
+ * most-recently-updated), an explicit {@code ?provider=} returns that variant,
+ * and a {@code /variants} endpoint enumerates all provider variants. Edit/delete
+ * accept an optional provider defaulting to the user's default provider.
  *
  * <p>Authorization: every path carries a {@code chapters/{id}} segment, so the
  * tenant filter enforces ownership before the resource runs.
  * <ul>
  *   <li>{@code POST   /ai/editorial/chapters/{chapterId}} — (re)generate.</li>
- *   <li>{@code GET    /ai/editorial/chapters/{chapterId}} — fetch it (or 204).</li>
- *   <li>{@code PUT    /ai/editorial/chapters/{chapterId}} — save an author edit.</li>
- *   <li>{@code DELETE /ai/editorial/chapters/{chapterId}} — clear it.</li>
+ *   <li>{@code GET    /ai/editorial/chapters/{chapterId}} — preferred (or {@code ?provider=}) editorial; 204 if none.</li>
+ *   <li>{@code GET    /ai/editorial/chapters/{chapterId}/variants} — every provider variant.</li>
+ *   <li>{@code PUT    /ai/editorial/chapters/{chapterId}} — save an author edit (per provider).</li>
+ *   <li>{@code DELETE /ai/editorial/chapters/{chapterId}} — clear it (per provider).</li>
  * </ul>
  */
 @Path("/")
@@ -71,10 +79,13 @@ public class EditorialResource {
         public Boolean includePinnedContext;
     }
 
-    /** Body for PUT: the edited editorial text. */
+    /** Body for PUT: the edited editorial text and the provider variant it belongs to. */
     public static class EditRequest {
         @JsonProperty
         public String content;
+        /** Provider variant being edited; null/blank falls back to the user's default provider. */
+        @JsonProperty
+        public String provider;
     }
 
     @POST
@@ -98,11 +109,26 @@ public class EditorialResource {
 
     @GET
     @Path("/ai/editorial/chapters/{chapterId}")
-    public Response get(@PathParam("chapterId") UUID chapterId) {
+    public Response get(@PathParam("chapterId") UUID chapterId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return service.getChapterEditorial(chapterId)
-                    .map(editorial -> Response.ok(editorial).build())
+            Optional<ChapterEditorial> editorial = (provider != null && !provider.isBlank())
+                    ? service.getChapterEditorial(chapterId, provider)
+                    : service.getPreferredChapterEditorial(chapterId, service.defaultProviderKey(userId));
+            return editorial
+                    .map(ed -> Response.ok(ed).build())
                     .orElseGet(() -> Response.noContent().build());
+        } catch (SQLException e) {
+            return serverError();
+        }
+    }
+
+    @GET
+    @Path("/ai/editorial/chapters/{chapterId}/variants")
+    public Response variants(@PathParam("chapterId") UUID chapterId) {
+        try {
+            return Response.ok(service.listChapterEditorialVariants(chapterId)).build();
         } catch (SQLException e) {
             return serverError();
         }
@@ -114,8 +140,10 @@ public class EditorialResource {
         if (body == null || body.content == null || body.content.isBlank()) {
             return error(Status.BAD_REQUEST, "bad_request", "content must not be blank; use DELETE to clear the editorial.");
         }
+        UUID userId = CurrentUser.id(request);
         try {
-            ChapterEditorial editorial = service.editChapterEditorial(chapterId, body.content.strip());
+            String provider = resolveProvider(body.provider, userId);
+            ChapterEditorial editorial = service.editChapterEditorial(chapterId, provider, body.content.strip());
             return Response.ok(editorial).build();
         } catch (ReviewException e) {
             return error(e.status(), e.code(), e.getMessage());
@@ -126,9 +154,11 @@ public class EditorialResource {
 
     @DELETE
     @Path("/ai/editorial/chapters/{chapterId}")
-    public Response clear(@PathParam("chapterId") UUID chapterId) {
+    public Response clear(@PathParam("chapterId") UUID chapterId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return service.deleteChapterEditorial(chapterId)
+            return service.deleteChapterEditorial(chapterId, resolveProvider(provider, userId))
                     ? Response.ok().build()
                     : Response.noContent().build();
         } catch (SQLException e) {
@@ -137,6 +167,11 @@ public class EditorialResource {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /** Explicit provider when supplied, otherwise the user's default provider. */
+    private String resolveProvider(String provider, UUID userId) throws SQLException {
+        return (provider != null && !provider.isBlank()) ? provider : service.defaultProviderKey(userId);
+    }
 
     private static Response error(Status status, String code, String message) {
         return Response.status(status).entity(Map.of("error", code, "message", message)).build();

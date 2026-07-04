@@ -11,13 +11,15 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * A per-chapter "editorial": a short editorial reading of one chapter — the AI's
- * overall take on tone, genre drift, character arcs, and storyline evolution.
- * It is generated explicitly by the author (AI-filled from the chapter prose,
- * then optionally hand-edited) and is deliberately brief (about half a page or
- * less). There is at most one current editorial per chapter
- * ({@code chapter_editorial.chapter_id} is unique); regenerating overwrites it
- * and refreshes {@code generatedAt}.
+ * A per-chapter, per-provider "editorial": a short editorial reading of one
+ * chapter — the AI's overall take on tone, genre drift, character arcs, and
+ * storyline evolution. It is generated explicitly by the author (AI-filled from
+ * the chapter prose, then optionally hand-edited) and is deliberately brief
+ * (about half a page or less). There is at most one current editorial per
+ * (chapter, provider) — {@code chapter_editorial} is unique on
+ * {@code (chapter_id, provider)} (V36) — so each configured provider keeps its
+ * own editorial and regenerating with a given provider overwrites that
+ * provider's editorial and refreshes {@code generatedAt}.
  *
  * <p>Editorials are their own artifact family, entirely separate from memory
  * documents (V24) and summaries (V25). The defining difference from a memory
@@ -28,8 +30,9 @@ import lombok.NoArgsConstructor;
  * deliberately does not flag spelling or grammar unless egregious.
  *
  * <p>When generated, an editorial draws on the same context inputs a chapter
- * review does — the preceding chapters' memory documents ("story so far") and
- * any pinned Codex reference entries — but nothing downstream ever reads it back.
+ * review does — the preceding chapters' memory documents ("story so far"),
+ * resolved with the same generating-provider preference — and any pinned Codex
+ * reference entries. Nothing downstream ever reads it back.
  *
  * <p>{@code content} is authored TipTap HTML (edited in EditorPanel through the
  * chapter's Editorial nav leaf, the same as memory/summary).
@@ -45,6 +48,14 @@ public class ChapterEditorial {
 
     @JsonProperty
     private UUID chapterId;
+
+    /**
+     * The AI provider this editorial belongs to (e.g. {@code OPENAI},
+     * {@code ANTHROPIC}, {@code GEMINI}). A chapter has at most one editorial
+     * per provider.
+     */
+    @JsonProperty
+    private String provider;
 
     @JsonProperty
     private String content;

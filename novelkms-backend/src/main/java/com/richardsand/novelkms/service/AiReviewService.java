@@ -168,14 +168,18 @@ public class AiReviewService {
                     "This chapter has no text to review yet.");
         }
 
-        String priorContext     = assemblePriorContext(bookId, chapterId);
+        // Resolve the credential up front: its provider determines which preceding
+        // chapters' memory documents are preferred when assembling prior context.
+        AiCredential credential = resolveCredential(userId, credentialId);
+
+        String priorContext     = assemblePriorContext(bookId, chapterId, credential.getProvider());
         String referenceContext = includePinnedContext ? assembleReferenceContext(bookId) : null;
         logger.debug("AI chapter review context assembled: chapterId={}, textChars={}, priorContextChars={}, referenceContextChars={}",
                 chapterId, chapterText.length(), priorContext == null ? 0 : priorContext.length(), referenceContext == null ? 0 : referenceContext.length());
         ReviewTarget target = new ReviewTarget(chapterId, null, bookId,
                 "chapter", chapterLabel(chapter), chapter.getSubtitle(), chapterText,
                 priorContext, referenceContext, blankToNull(userGuidance));
-        return execute(userId, target, credentialId, modelOverride);
+        return execute(userId, target, credential, modelOverride);
     }
 
     /**
@@ -215,19 +219,21 @@ public class AiReviewService {
         String referenceContext = includePinnedContext ? assembleReferenceContext(bookId) : null;
         logger.debug("AI scene review context assembled: sceneId={}, chapterId={}, textChars={}, referenceContextChars={}",
                 sceneId, chapterId, sceneText.length(), referenceContext == null ? 0 : referenceContext.length());
+        AiCredential credential = resolveCredential(userId, credentialId);
         ReviewTarget target = new ReviewTarget(chapterId, sceneId, bookId,
                 "scene", sceneLabel(scene), null, sceneText, null, referenceContext, blankToNull(userGuidance));
-        return execute(userId, target, credentialId, modelOverride);
+        return execute(userId, target, credential, modelOverride);
     }
 
     /**
-     * Shared review pipeline: resolve credential/provider/model, create the
-     * PENDING artifact, call the provider, and persist the outcome. Identical for
-     * chapter and scene scope — only the {@link ReviewTarget} differs.
+     * Shared review pipeline: resolve provider/model from the already-resolved
+     * credential, create the PENDING artifact, call the provider, and persist the
+     * outcome. Identical for chapter and scene scope — only the
+     * {@link ReviewTarget} differs. The caller resolves the credential first so a
+     * chapter review can prefer that provider's memory documents for prior context.
      */
-    private AiReview execute(UUID userId, ReviewTarget target, UUID credentialId,
+    private AiReview execute(UUID userId, ReviewTarget target, AiCredential credential,
             String modelOverride) throws SQLException {
-        AiCredential credential = resolveCredential(userId, credentialId);
         AiProvider   provider   = providers.get(credential.getProvider());
         if (provider == null) {
             throw new ReviewException(Status.BAD_REQUEST, "unsupported_provider",
@@ -325,31 +331,46 @@ public class AiReviewService {
         MemoryRequest req  = new MemoryRequest(apiKey, model, chapterLabel(chapter), chapterText, template, note);
         try {
             MemoryResult result = provider.generateMemory(req);
-            chapterMemoryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model, note);
+            chapterMemoryDao.upsertGenerated(chapterId, provider.providerKey(), result.content(),
+                    result.promptVersion(), model, note);
         } catch (AiProviderException e) {
             logger.error("Memory generation for chapter {} failed: {}", chapterId, e.getMessage());
             throw new ReviewException(Status.INTERNAL_SERVER_ERROR, "memory_provider_error", e.getMessage());
         }
-        return chapterMemoryDao.findByChapter(chapterId).orElseThrow();
+        return chapterMemoryDao.findByChapter(chapterId, provider.providerKey()).orElseThrow();
     }
 
-    /** Returns the chapter's current memory document, if any. */
-    public Optional<ChapterMemory> getChapterMemory(UUID chapterId) throws SQLException {
-        return chapterMemoryDao.findByChapter(chapterId);
+    /** Returns the chapter's memory document for exactly the given provider, if any. */
+    public Optional<ChapterMemory> getChapterMemory(UUID chapterId, String provider) throws SQLException {
+        return chapterMemoryDao.findByChapter(chapterId, provider);
     }
 
-    /** Saves an author edit to an existing memory document (marks it EDITED). */
-    public ChapterMemory editChapterMemory(UUID chapterId, String content) throws SQLException {
-        if (!chapterMemoryDao.updateEdited(chapterId, content)) {
+    /**
+     * Returns the chapter's preferred memory document — the {@code preferredProvider}
+     * variant if present, else the most-recently-updated variant of any provider.
+     */
+    public Optional<ChapterMemory> getPreferredChapterMemory(UUID chapterId, String preferredProvider)
+            throws SQLException {
+        return chapterMemoryDao.findPreferred(chapterId, preferredProvider);
+    }
+
+    /** Lists every provider variant of the chapter's memory document (newest first). */
+    public List<ChapterMemory> listChapterMemoryVariants(UUID chapterId) throws SQLException {
+        return chapterMemoryDao.findAllByChapter(chapterId);
+    }
+
+    /** Saves an author edit to an existing memory document for the given provider (marks it EDITED). */
+    public ChapterMemory editChapterMemory(UUID chapterId, String provider, String content) throws SQLException {
+        if (!chapterMemoryDao.updateEdited(chapterId, provider, content)) {
             throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_found",
-                    "This chapter has no memory document to edit. Generate one first.");
+                    "This chapter has no memory document to edit for that provider. Generate one first.");
         }
-        return chapterMemoryDao.findByChapter(chapterId).orElseThrow();
+        return chapterMemoryDao.findByChapter(chapterId, provider).orElseThrow();
     }
 
-    /** Clears a chapter's memory document. Returns false if there was none. */
-    public boolean deleteChapterMemory(UUID chapterId) throws SQLException {
-        return chapterMemoryDao.delete(chapterId);
+    /** Clears a chapter's memory document for the given provider. Returns false if there was none. */
+    public boolean deleteChapterMemory(UUID chapterId, String provider) throws SQLException {
+        return chapterMemoryDao.delete(chapterId, provider);
     }
 
     // ── Editorials ────────────────────────────────────────────────────────────
@@ -403,7 +424,7 @@ public class AiReviewService {
             throw new ReviewException(Status.CONFLICT, "no_ai_credential", "Stored API key could not be read.");
         }
 
-        String priorContext     = assemblePriorContext(bookId, chapterId);
+        String priorContext     = assemblePriorContext(bookId, chapterId, provider.providerKey());
         String referenceContext = includePinnedContext ? assembleReferenceContext(bookId) : null;
         logger.debug("Editorial context assembled: chapterId={}, textChars={}, priorContextChars={}, referenceContextChars={}",
                 chapterId, chapterText.length(), priorContext == null ? 0 : priorContext.length(),
@@ -418,39 +439,54 @@ public class AiReviewService {
                 chapterText, priorContext, referenceContext, note, systemPrompt);
         try {
             EditorialResult result = provider.generateEditorial(req);
-            chapterEditorialDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model, note);
+            chapterEditorialDao.upsertGenerated(chapterId, provider.providerKey(), result.content(),
+                    result.promptVersion(), model, note);
         } catch (AiProviderException e) {
             logger.error("Editorial generation for chapter {} failed: {}", chapterId, e.getMessage());
             throw new ReviewException(Status.INTERNAL_SERVER_ERROR, "editorial_provider_error", e.getMessage());
         }
-        return chapterEditorialDao.findByChapter(chapterId).orElseThrow();
+        return chapterEditorialDao.findByChapter(chapterId, provider.providerKey()).orElseThrow();
     }
 
-    /** Returns the chapter's current editorial, if any. */
-    public Optional<ChapterEditorial> getChapterEditorial(UUID chapterId) throws SQLException {
-        return chapterEditorialDao.findByChapter(chapterId);
+    /** Returns the chapter's editorial for exactly the given provider, if any. */
+    public Optional<ChapterEditorial> getChapterEditorial(UUID chapterId, String provider) throws SQLException {
+        return chapterEditorialDao.findByChapter(chapterId, provider);
     }
 
-    /** Saves an author edit to an existing editorial (marks it EDITED). */
-    public ChapterEditorial editChapterEditorial(UUID chapterId, String content) throws SQLException {
-        if (!chapterEditorialDao.updateEdited(chapterId, content)) {
+    /**
+     * Returns the chapter's preferred editorial — the {@code preferredProvider}
+     * variant if present, else the most-recently-updated variant of any provider.
+     */
+    public Optional<ChapterEditorial> getPreferredChapterEditorial(UUID chapterId, String preferredProvider)
+            throws SQLException {
+        return chapterEditorialDao.findPreferred(chapterId, preferredProvider);
+    }
+
+    /** Lists every provider variant of the chapter's editorial (newest first). */
+    public List<ChapterEditorial> listChapterEditorialVariants(UUID chapterId) throws SQLException {
+        return chapterEditorialDao.findAllByChapter(chapterId);
+    }
+
+    /** Saves an author edit to an existing editorial for the given provider (marks it EDITED). */
+    public ChapterEditorial editChapterEditorial(UUID chapterId, String provider, String content) throws SQLException {
+        if (!chapterEditorialDao.updateEdited(chapterId, provider, content)) {
             throw new ReviewException(Status.PRECONDITION_REQUIRED, "not_found",
-                    "This chapter has no editorial to edit. Generate one first.");
+                    "This chapter has no editorial to edit for that provider. Generate one first.");
         }
-        return chapterEditorialDao.findByChapter(chapterId).orElseThrow();
+        return chapterEditorialDao.findByChapter(chapterId, provider).orElseThrow();
     }
 
-    /** Clears a chapter's editorial. Returns false if there was none. */
-    public boolean deleteChapterEditorial(UUID chapterId) throws SQLException {
-        return chapterEditorialDao.delete(chapterId);
+    /** Clears a chapter's editorial for the given provider. Returns false if there was none. */
+    public boolean deleteChapterEditorial(UUID chapterId, String provider) throws SQLException {
+        return chapterEditorialDao.delete(chapterId, provider);
     }
 
     /**
      * Reports the memory-document status of every manuscript chapter in the book,
      * in linear book order, for the pre-review warning.
      */
-    public List<ChapterMemoryStatus> bookMemoryStatus(UUID bookId) throws SQLException {
-        List<ChapterMemoryDao.Row> rows                = chapterMemoryDao.bookChapterMemory(bookId);
+    public List<ChapterMemoryStatus> bookMemoryStatus(UUID bookId, String provider) throws SQLException {
+        List<ChapterMemoryDao.Row> rows                = chapterMemoryDao.bookChapterMemory(bookId, provider);
         List<ChapterMemoryStatus>  result              = new ArrayList<>();
         Instant                    maxEarlierGenerated = null;
         for (ChapterMemoryDao.Row row : rows) {
@@ -480,8 +516,8 @@ public class AiReviewService {
         return ChapterMemoryStatus.OK;
     }
 
-    private String assemblePriorContext(UUID bookId, UUID chapterId) throws SQLException {
-        List<ChapterMemoryDao.Row> rows      = chapterMemoryDao.bookChapterMemory(bookId);
+    private String assemblePriorContext(UUID bookId, UUID chapterId, String provider) throws SQLException {
+        List<ChapterMemoryDao.Row> rows      = chapterMemoryDao.bookChapterMemory(bookId, provider);
         int                        targetSeq = Integer.MAX_VALUE;
         for (ChapterMemoryDao.Row row : rows) {
             if (row.chapterId().equals(chapterId)) {
@@ -671,39 +707,54 @@ public class AiReviewService {
         SummaryRequest req  = new SummaryRequest(apiKey, model, chapterLabel(chapter), chapterText, note, systemPrompt);
         try {
             SummaryResult result = provider.generateChapterSummary(req);
-            chapterSummaryDao.upsertGenerated(chapterId, result.content(), result.promptVersion(), model, note);
+            chapterSummaryDao.upsertGenerated(chapterId, provider.providerKey(), result.content(),
+                    result.promptVersion(), model, note);
         } catch (AiProviderException e) {
             logger.error("Chapter-summary generation for chapter {} failed: {}", chapterId, e.getMessage());
             throw new ReviewException(Status.INTERNAL_SERVER_ERROR, "summary_provider_error", e.getMessage());
         }
-        return chapterSummaryDao.findByChapter(chapterId).orElseThrow();
+        return chapterSummaryDao.findByChapter(chapterId, provider.providerKey()).orElseThrow();
     }
 
-    /** Returns the chapter's current summary, if any. */
-    public Optional<ChapterSummary> getChapterSummary(UUID chapterId) throws SQLException {
-        return chapterSummaryDao.findByChapter(chapterId);
+    /** Returns the chapter's summary for exactly the given provider, if any. */
+    public Optional<ChapterSummary> getChapterSummary(UUID chapterId, String provider) throws SQLException {
+        return chapterSummaryDao.findByChapter(chapterId, provider);
     }
 
-    /** Saves an author edit to an existing chapter summary (marks it EDITED). */
-    public ChapterSummary editChapterSummary(UUID chapterId, String content) throws SQLException {
-        if (!chapterSummaryDao.updateEdited(chapterId, content)) {
+    /**
+     * Returns the chapter's preferred summary — the {@code preferredProvider}
+     * variant if present, else the most-recently-updated variant of any provider.
+     */
+    public Optional<ChapterSummary> getPreferredChapterSummary(UUID chapterId, String preferredProvider)
+            throws SQLException {
+        return chapterSummaryDao.findPreferred(chapterId, preferredProvider);
+    }
+
+    /** Lists every provider variant of the chapter's summary (newest first). */
+    public List<ChapterSummary> listChapterSummaryVariants(UUID chapterId) throws SQLException {
+        return chapterSummaryDao.findAllByChapter(chapterId);
+    }
+
+    /** Saves an author edit to an existing chapter summary for the given provider (marks it EDITED). */
+    public ChapterSummary editChapterSummary(UUID chapterId, String provider, String content) throws SQLException {
+        if (!chapterSummaryDao.updateEdited(chapterId, provider, content)) {
             throw new ReviewException(Status.BAD_REQUEST, "not_found",
-                    "This chapter has no summary to edit. Generate one first.");
+                    "This chapter has no summary to edit for that provider. Generate one first.");
         }
-        return chapterSummaryDao.findByChapter(chapterId).orElseThrow();
+        return chapterSummaryDao.findByChapter(chapterId, provider).orElseThrow();
     }
 
-    /** Clears a chapter's summary. Returns false if there was none. */
-    public boolean deleteChapterSummary(UUID chapterId) throws SQLException {
-        return chapterSummaryDao.delete(chapterId);
+    /** Clears a chapter's summary for the given provider. Returns false if there was none. */
+    public boolean deleteChapterSummary(UUID chapterId, String provider) throws SQLException {
+        return chapterSummaryDao.delete(chapterId, provider);
     }
 
     /**
      * Returns every manuscript chapter of the book in linear book order with its
      * summary text and per-chapter staleness state.
      */
-    public List<ChapterSummaryStatus> bookChapterSummaries(UUID bookId) throws SQLException {
-        List<ChapterSummaryDao.Row> rows   = chapterSummaryDao.bookChapterSummaries(bookId);
+    public List<ChapterSummaryStatus> bookChapterSummaries(UUID bookId, String provider) throws SQLException {
+        List<ChapterSummaryDao.Row> rows   = chapterSummaryDao.bookChapterSummaries(bookId, provider);
         List<ChapterSummaryStatus>  result = new ArrayList<>();
         for (ChapterSummaryDao.Row row : rows) {
             result.add(new ChapterSummaryStatus(
@@ -737,12 +788,8 @@ public class AiReviewService {
         Book book = bookDao.findById(bookId)
                 .orElseThrow(() -> new ReviewException(Status.NO_CONTENT, "not_found", "Book not found."));
 
-        String aggregate = assembleChapterSummaries(bookId);
-        if (aggregate == null || aggregate.isBlank()) {
-            throw new ReviewException(Status.BAD_REQUEST, "no_chapter_summaries",
-                    "No chapter summaries exist for this book yet. Generate chapter summaries first.");
-        }
-
+        // Resolve the credential/provider first: which chapter-summary variant each
+        // chapter contributes depends on the book summary's own generating provider.
         AiCredential credential = resolveCredential(userId, credentialId);
         AiProvider   provider   = providers.get(credential.getProvider());
         if (provider == null) {
@@ -751,6 +798,14 @@ public class AiReviewService {
         }
         String model     = firstNonBlank(modelOverride, credential.getDefaultModel(), provider.defaultModel());
         UUID   projectId = book.getProjectId();
+
+        // Each chapter contributes this provider's summary where present, else its
+        // most-recently-updated summary of any provider (the agreed fallback).
+        String aggregate = assembleChapterSummaries(bookId, provider.providerKey());
+        if (aggregate == null || aggregate.isBlank()) {
+            throw new ReviewException(Status.BAD_REQUEST, "no_chapter_summaries",
+                    "No chapter summaries exist for this book yet. Generate chapter summaries first.");
+        }
 
         String apiKey = credentialDao.getDecryptedKey(credential.getId(), userId);
         if (apiKey == null || apiKey.isBlank()) {
@@ -767,40 +822,54 @@ public class AiReviewService {
         try {
             SummaryResult result    = provider.generateBookSummary(req);
             int           wordCount = countWords(result.content());
-            bookSummaryDao.upsertGenerated(bookId, result.content(), wordCount,
+            bookSummaryDao.upsertGenerated(bookId, provider.providerKey(), result.content(), wordCount,
                     result.promptVersion(), model, note);
         } catch (AiProviderException e) {
             logger.warn("Book-summary generation for book {} failed: {}", bookId, e.getMessage());
             throw new ReviewException(Status.INTERNAL_SERVER_ERROR, "summary_provider_error", e.getMessage());
         }
-        return bookSummaryDao.findByBook(bookId).orElseThrow();
+        return bookSummaryDao.findByBook(bookId, provider.providerKey()).orElseThrow();
     }
 
-    /** Returns the book's current summary, if any. */
-    public Optional<BookSummary> getBookSummary(UUID bookId) throws SQLException {
-        return bookSummaryDao.findByBook(bookId);
+    /** Returns the book's summary for exactly the given provider, if any. */
+    public Optional<BookSummary> getBookSummary(UUID bookId, String provider) throws SQLException {
+        return bookSummaryDao.findByBook(bookId, provider);
     }
 
-    /** Saves an author edit to an existing book summary (marks it EDITED; re-counts words). */
-    public BookSummary editBookSummary(UUID bookId, String content) throws SQLException {
-        if (!bookSummaryDao.updateEdited(bookId, content, countWords(htmlToPlainText(content)))) {
+    /**
+     * Returns the book's preferred summary — the {@code preferredProvider} variant
+     * if present, else the most-recently-updated variant of any provider.
+     */
+    public Optional<BookSummary> getPreferredBookSummary(UUID bookId, String preferredProvider)
+            throws SQLException {
+        return bookSummaryDao.findPreferred(bookId, preferredProvider);
+    }
+
+    /** Lists every provider variant of the book's summary (newest first). */
+    public List<BookSummary> listBookSummaryVariants(UUID bookId) throws SQLException {
+        return bookSummaryDao.findAllByBook(bookId);
+    }
+
+    /** Saves an author edit to an existing book summary for the given provider (marks it EDITED; re-counts words). */
+    public BookSummary editBookSummary(UUID bookId, String provider, String content) throws SQLException {
+        if (!bookSummaryDao.updateEdited(bookId, provider, content, countWords(htmlToPlainText(content)))) {
             throw new ReviewException(Status.BAD_REQUEST, "not_found",
-                    "This book has no summary to edit. Generate one first.");
+                    "This book has no summary to edit for that provider. Generate one first.");
         }
-        return bookSummaryDao.findByBook(bookId).orElseThrow();
+        return bookSummaryDao.findByBook(bookId, provider).orElseThrow();
     }
 
-    /** Clears a book's summary. Returns false if there was none. */
-    public boolean deleteBookSummary(UUID bookId) throws SQLException {
-        return bookSummaryDao.delete(bookId);
+    /** Clears a book's summary for the given provider. Returns false if there was none. */
+    public boolean deleteBookSummary(UUID bookId, String provider) throws SQLException {
+        return bookSummaryDao.delete(bookId, provider);
     }
 
     /**
      * Reports the book-summary status plus chapter-summary coverage, for the
      * book-summary card and the pre-generation warning.
      */
-    public BookSummaryStatus bookSummaryStatus(UUID bookId) throws SQLException {
-        List<ChapterSummaryDao.Row> rows            = chapterSummaryDao.bookChapterSummaries(bookId);
+    public BookSummaryStatus bookSummaryStatus(UUID bookId, String provider) throws SQLException {
+        List<ChapterSummaryDao.Row> rows            = chapterSummaryDao.bookChapterSummaries(bookId, provider);
         int                         chapterCount    = rows.size();
         int                         summarizedCount = 0;
         int                         staleCount      = 0;
@@ -818,7 +887,7 @@ public class AiReviewService {
         }
         int missingCount = chapterCount - summarizedCount;
 
-        Optional<BookSummary> summary = bookSummaryDao.findByBook(bookId);
+        Optional<BookSummary> summary = bookSummaryDao.findByBook(bookId, provider);
         boolean               hasDoc  = summary.isPresent();
         boolean               stale   = false;
         if (hasDoc) {
@@ -839,8 +908,8 @@ public class AiReviewService {
                 chapterCount, summarizedCount, missingCount, staleCount);
     }
 
-    private String assembleChapterSummaries(UUID bookId) throws SQLException {
-        List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId);
+    private String assembleChapterSummaries(UUID bookId, String provider) throws SQLException {
+        List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId, provider);
         StringBuilder               sb   = new StringBuilder();
         for (ChapterSummaryDao.Row row : rows) {
             String plainContent = htmlToPlainText(row.content());
@@ -949,6 +1018,16 @@ public class AiReviewService {
         return credentialDao.findDefault(userId)
                 .orElseThrow(() -> new ReviewException(Status.CONFLICT, "no_ai_credential",
                         "No AI provider key is configured. Add one in Settings."));
+    }
+
+    /**
+     * Returns the provider key of the user's default credential (the "default
+     * provider"), or null when the user has no active credential. Used to resolve
+     * the preferred provider for reads and status when the caller did not specify
+     * one explicitly.
+     */
+    public String defaultProviderKey(UUID userId) throws SQLException {
+        return credentialDao.findDefault(userId).map(AiCredential::getProvider).orElse(null);
     }
 
     private UUID resolveProjectId(UUID bookId) throws SQLException {

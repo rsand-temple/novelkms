@@ -2,6 +2,7 @@ package com.richardsand.novelkms.resource;
 
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -20,6 +21,7 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -30,24 +32,33 @@ import jakarta.ws.rs.core.Response.Status;
  * Chapter-summary and book-summary endpoints — a separate AI artifact family
  * from memory documents ({@link ChapterMemoryResource}).
  *
+ * <p>Since V36 each parent holds one summary per provider. Exactly as with
+ * memory documents, the single-summary {@code GET} stays backward-compatible: an
+ * explicit {@code ?provider=} yields that provider's summary, its absence yields
+ * the preferred summary (default provider's variant, else most-recently-updated),
+ * and a {@code /variants} endpoint enumerates all provider variants. Edit/delete
+ * and the two status endpoints accept an optional provider defaulting to the
+ * user's default provider.
+ *
  * <p>Authorization: every path carries a {@code chapters/{id}} or
  * {@code books/{id}} segment, so the tenant filter enforces ownership before the
  * resource runs.
  * <ul>
  *   <li>{@code POST   /ai/summary/chapters/{chapterId}} — (re)generate a chapter summary.</li>
- *   <li>{@code GET    /ai/summary/chapters/{chapterId}} — fetch it (or 400).</li>
- *   <li>{@code PUT    /ai/summary/chapters/{chapterId}} — save an author edit.</li>
- *   <li>{@code DELETE /ai/summary/chapters/{chapterId}} — clear it.</li>
+ *   <li>{@code GET    /ai/summary/chapters/{chapterId}} — preferred (or {@code ?provider=}) summary; 204 if none.</li>
+ *   <li>{@code GET    /ai/summary/chapters/{chapterId}/variants} — every provider variant.</li>
+ *   <li>{@code PUT    /ai/summary/chapters/{chapterId}} — save an author edit (per provider).</li>
+ *   <li>{@code DELETE /ai/summary/chapters/{chapterId}} — clear it (per provider).</li>
  *   <li>{@code GET    /books/{bookId}/chapter-summaries} — aggregated, read-only,
- *       in book order, with per-chapter staleness (the "view chapter summary" view
- *       and the pre-book-summary coverage warning).</li>
+ *       in book order, with per-chapter staleness for the given (or default) provider.</li>
  *   <li>{@code POST   /ai/summary/books/{bookId}} — (re)generate the book summary
  *       from the chapter summaries.</li>
- *   <li>{@code GET    /ai/summary/books/{bookId}} — fetch it (or 400).</li>
- *   <li>{@code PUT    /ai/summary/books/{bookId}} — save an author edit.</li>
- *   <li>{@code DELETE /ai/summary/books/{bookId}} — clear it.</li>
+ *   <li>{@code GET    /ai/summary/books/{bookId}} — preferred (or {@code ?provider=}) book summary; 204 if none.</li>
+ *   <li>{@code GET    /ai/summary/books/{bookId}/variants} — every provider variant.</li>
+ *   <li>{@code PUT    /ai/summary/books/{bookId}} — save an author edit (per provider).</li>
+ *   <li>{@code DELETE /ai/summary/books/{bookId}} — clear it (per provider).</li>
  *   <li>{@code GET    /books/{bookId}/book-summary-status} — book-summary card
- *       status + chapter-summary coverage.</li>
+ *       status + chapter-summary coverage for the given (or default) provider.</li>
  * </ul>
  */
 @Path("/")
@@ -76,10 +87,13 @@ public class SummaryResource {
         public String userGuidance;
     }
 
-    /** Body for PUT: the edited summary text. */
+    /** Body for PUT: the edited summary text and the provider variant it belongs to. */
     public static class EditRequest {
         @JsonProperty
         public String content;
+        /** Provider variant being edited; null/blank falls back to the user's default provider. */
+        @JsonProperty
+        public String provider;
     }
 
     // ── Chapter summary ───────────────────────────────────────────────────────
@@ -103,11 +117,26 @@ public class SummaryResource {
 
     @GET
     @Path("/ai/summary/chapters/{chapterId}")
-    public Response getChapter(@PathParam("chapterId") UUID chapterId) {
+    public Response getChapter(@PathParam("chapterId") UUID chapterId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return service.getChapterSummary(chapterId)
-                    .map(summary -> Response.ok(summary).build())
+            Optional<ChapterSummary> summary = (provider != null && !provider.isBlank())
+                    ? service.getChapterSummary(chapterId, provider)
+                    : service.getPreferredChapterSummary(chapterId, service.defaultProviderKey(userId));
+            return summary
+                    .map(s -> Response.ok(s).build())
                     .orElseGet(() -> Response.noContent().build());
+        } catch (SQLException e) {
+            return serverError();
+        }
+    }
+
+    @GET
+    @Path("/ai/summary/chapters/{chapterId}/variants")
+    public Response chapterVariants(@PathParam("chapterId") UUID chapterId) {
+        try {
+            return Response.ok(service.listChapterSummaryVariants(chapterId)).build();
         } catch (SQLException e) {
             return serverError();
         }
@@ -119,8 +148,10 @@ public class SummaryResource {
         if (body == null || body.content == null || body.content.isBlank()) {
             return error(Status.BAD_REQUEST, "bad_request", "content must not be blank; use DELETE to clear the summary.");
         }
+        UUID userId = CurrentUser.id(request);
         try {
-            ChapterSummary summary = service.editChapterSummary(chapterId, body.content.strip());
+            String provider = resolveProvider(body.provider, userId);
+            ChapterSummary summary = service.editChapterSummary(chapterId, provider, body.content.strip());
             return Response.ok(summary).build();
         } catch (ReviewException e) {
             return error(e.status(), e.code(), e.getMessage());
@@ -131,9 +162,11 @@ public class SummaryResource {
 
     @DELETE
     @Path("/ai/summary/chapters/{chapterId}")
-    public Response clearChapter(@PathParam("chapterId") UUID chapterId) {
+    public Response clearChapter(@PathParam("chapterId") UUID chapterId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return service.deleteChapterSummary(chapterId)
+            return service.deleteChapterSummary(chapterId, resolveProvider(provider, userId))
                     ? Response.ok().build()
                     : Response.noContent().build();
         } catch (SQLException e) {
@@ -143,9 +176,11 @@ public class SummaryResource {
 
     @GET
     @Path("/books/{bookId}/chapter-summaries")
-    public Response bookChapterSummaries(@PathParam("bookId") UUID bookId) {
+    public Response bookChapterSummaries(@PathParam("bookId") UUID bookId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return Response.ok(service.bookChapterSummaries(bookId)).build();
+            return Response.ok(service.bookChapterSummaries(bookId, resolveProvider(provider, userId))).build();
         } catch (SQLException e) {
             return serverError();
         }
@@ -172,11 +207,26 @@ public class SummaryResource {
 
     @GET
     @Path("/ai/summary/books/{bookId}")
-    public Response getBook(@PathParam("bookId") UUID bookId) {
+    public Response getBook(@PathParam("bookId") UUID bookId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return service.getBookSummary(bookId)
-                    .map(summary -> Response.ok(summary).build())
+            Optional<BookSummary> summary = (provider != null && !provider.isBlank())
+                    ? service.getBookSummary(bookId, provider)
+                    : service.getPreferredBookSummary(bookId, service.defaultProviderKey(userId));
+            return summary
+                    .map(s -> Response.ok(s).build())
                     .orElseGet(() -> Response.noContent().build());
+        } catch (SQLException e) {
+            return serverError();
+        }
+    }
+
+    @GET
+    @Path("/ai/summary/books/{bookId}/variants")
+    public Response bookVariants(@PathParam("bookId") UUID bookId) {
+        try {
+            return Response.ok(service.listBookSummaryVariants(bookId)).build();
         } catch (SQLException e) {
             return serverError();
         }
@@ -188,8 +238,10 @@ public class SummaryResource {
         if (body == null || body.content == null || body.content.isBlank()) {
             return error(Status.BAD_REQUEST, "bad_request", "content must not be blank; use DELETE to clear the summary.");
         }
+        UUID userId = CurrentUser.id(request);
         try {
-            BookSummary summary = service.editBookSummary(bookId, body.content.strip());
+            String provider = resolveProvider(body.provider, userId);
+            BookSummary summary = service.editBookSummary(bookId, provider, body.content.strip());
             return Response.ok(summary).build();
         } catch (ReviewException e) {
             return error(e.status(), e.code(), e.getMessage());
@@ -200,9 +252,11 @@ public class SummaryResource {
 
     @DELETE
     @Path("/ai/summary/books/{bookId}")
-    public Response clearBook(@PathParam("bookId") UUID bookId) {
+    public Response clearBook(@PathParam("bookId") UUID bookId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return service.deleteBookSummary(bookId)
+            return service.deleteBookSummary(bookId, resolveProvider(provider, userId))
                     ? Response.ok().build()
                     : Response.noContent().build();
         } catch (SQLException e) {
@@ -212,9 +266,11 @@ public class SummaryResource {
 
     @GET
     @Path("/books/{bookId}/book-summary-status")
-    public Response bookStatus(@PathParam("bookId") UUID bookId) {
+    public Response bookStatus(@PathParam("bookId") UUID bookId,
+            @QueryParam("provider") String provider) {
+        UUID userId = CurrentUser.id(request);
         try {
-            return Response.ok(service.bookSummaryStatus(bookId)).build();
+            return Response.ok(service.bookSummaryStatus(bookId, resolveProvider(provider, userId))).build();
         } catch (SQLException e) {
             return serverError();
         }
@@ -222,6 +278,10 @@ public class SummaryResource {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    /** Explicit provider when supplied, otherwise the user's default provider. */
+    private String resolveProvider(String provider, UUID userId) throws SQLException {
+        return (provider != null && !provider.isBlank()) ? provider : service.defaultProviderKey(userId);
+    }
 
     private static Response error(Status status, String code, String message) {
         return Response.status(status).entity(Map.of("error", code, "message", message)).build();
