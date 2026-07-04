@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.richardsand.novelkms.ai.AiProvider;
 import com.richardsand.novelkms.ai.impl.AnthropicProvider;
+import com.richardsand.novelkms.ai.impl.GeminiProvider;
 import com.richardsand.novelkms.ai.impl.OpenAiProvider;
 import com.richardsand.novelkms.auth.AuthenticationFilter;
 import com.richardsand.novelkms.auth.OAuthService;
@@ -260,9 +261,11 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         // AI Review Service — provider registry
         OpenAiProvider          openAiProvider    = new OpenAiProvider();
         AnthropicProvider       anthropicProvider = new AnthropicProvider();
+        GeminiProvider          geminiProvider    = new GeminiProvider();
         Map<String, AiProvider> aiProviders       = Map.of(
                 openAiProvider.providerKey(), openAiProvider,
-                anthropicProvider.providerKey(), anthropicProvider);
+                anthropicProvider.providerKey(), anthropicProvider,
+                geminiProvider.providerKey(), geminiProvider);
 
         AiReviewService aiReviewService = new AiReviewService(
                 chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao,

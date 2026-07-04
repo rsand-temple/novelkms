@@ -41,6 +41,14 @@ const PROVIDERS = [
 		modelHelper: 'e.g. claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5',
 		keyHelper: 'Stored encrypted; shown only as ••••last4 afterward.',
 	},
+	{
+		key: 'GEMINI',
+		label: 'Google Gemini',
+		keyPrefix: 'AIza…',
+		modelDefault: 'gemini-2.5-flash',
+		modelHelper: 'e.g. gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro',
+		keyHelper: 'Stored encrypted; shown only as ••••last4 afterward.',
+	},
 ]
 
 const PROVIDER_MAP = Object.fromEntries(PROVIDERS.map(p => [p.key, p]))
