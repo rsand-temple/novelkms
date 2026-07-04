@@ -25,20 +25,21 @@ const TAB_CONTENT_HEIGHT = '55vh'
  */
 const TAB_HELP_TOPICS = {
 	document: 'editor.styles',
-	ai:       'ai.credentials',
-	billing:  'account.billing',
-	other:    'index',
+	aiKeys: 'ai.credentials',
+	aiPrompts: 'ai.review.prompts',
+	billing: 'account.billing',
+	other: 'index',
 }
 
-// ── AI subtab content ─────────────────────────────────────────────────────────
+// ── AI prompt subtab content ───────────────────────────────────────────────────
 
 /**
- * The four AI instruction subtabs rendered inside the AI outer tab. Each subtab
- * is mounted fresh when selected (via key) so its form state resets cleanly
- * without any useEffect syncing — the same mount-on-select pattern used by the
- * outer SettingsContent for the Document tab.
+ * The four AI prompt subtabs rendered inside the AI Prompts outer tab. Each
+ * subtab is mounted fresh when selected (via key) so its form state resets
+ * cleanly without any useEffect syncing — the same mount-on-select pattern used
+ * by the outer SettingsContent for the Document tab.
  */
-function AiSubtabs() {
+function AiPromptSubtabs() {
 	const [aiTab, setAiTab] = useState('reviews')
 
 	return (
@@ -50,9 +51,9 @@ function AiSubtabs() {
 				variant="scrollable"
 				scrollButtons="auto"
 			>
-				<Tab value="reviews"   label="Reviews" />
-				<Tab value="memory"    label="Memory" />
-				<Tab value="summary"   label="Summary" />
+				<Tab value="reviews" label="Reviews" />
+				<Tab value="memory" label="Memory" />
+				<Tab value="summary" label="Summary" />
 				<Tab value="editorial" label="Editorial" />
 			</Tabs>
 
@@ -111,7 +112,8 @@ function AiSubtabs() {
 // guard below), so the active tab always starts at `initialTab` and each tab's
 // own state starts clean — no effect syncing needed.
 function SettingsContent({ initialTab, projectId, subscriptionRequired, onTabChange }) {
-	const [tab, setTab] = useState(initialTab ?? 'document')
+	const normalizedInitialTab = initialTab === 'ai' ? 'aiKeys' : (initialTab ?? 'document')
+	const [tab, setTab] = useState(normalizedInitialTab)
 
 	const handleTabChange = (_, v) => {
 		setTab(v)
@@ -124,11 +126,14 @@ function SettingsContent({ initialTab, projectId, subscriptionRequired, onTabCha
 				value={tab}
 				onChange={handleTabChange}
 				sx={{ mb: 2, mt: -1 }}
+				variant="scrollable"
+				scrollButtons="auto"
 			>
 				<Tab value="document" label="Document" />
-				<Tab value="ai"       label="AI" />
-				<Tab value="billing"  label="Billing" />
-				<Tab value="other"    label="Other" />
+				<Tab value="aiKeys" label="AI Keys" />
+				<Tab value="aiPrompts" label="AI Prompts" />
+				<Tab value="billing" label="Billing" />
+				<Tab value="other" label="Other" />
 			</Tabs>
 
 			{tab === 'billing' && subscriptionRequired && (
@@ -139,15 +144,10 @@ function SettingsContent({ initialTab, projectId, subscriptionRequired, onTabCha
 
 			<Box sx={{ height: TAB_CONTENT_HEIGHT, overflowY: 'auto', pr: 0.5 }}>
 				{tab === 'document' && <DocumentSettingsTab projectId={projectId} />}
-				{tab === 'ai' && (
-					<>
-						<AiCredentialsPanel />
-						<Divider sx={{ my: 3 }} />
-						<AiSubtabs />
-					</>
-				)}
+				{tab === 'aiKeys' && <AiCredentialsPanel />}
+				{tab === 'aiPrompts' && <AiPromptSubtabs />}
 				{tab === 'billing' && <BillingPanel />}
-				{tab === 'other'   && <OtherSettingsTab />}
+				{tab === 'other' && <OtherSettingsTab />}
 			</Box>
 		</>
 	)
@@ -158,15 +158,15 @@ function SettingsContent({ initialTab, projectId, subscriptionRequired, onTabCha
  *
  * Global settings, organized into tabs. Opened from the account menu.
  *
- * The AI tab is further divided into four subtabs — Reviews, Memory, Summary,
- * and Editorial — so the credentials panel and all four editable instruction
- * types fit without lengthening the dialog.
+ * AI settings are split into two top-level tabs:
+ *   - AI Keys: BYOK credential management.
+ *   - AI Prompts: review, memory, summary, and editorial instructions.
  *
  * Props:
  *   open        {boolean}
- *   initialTab  {'document'|'ai'|'billing'|'other'}  Tab to show on open. Default 'document'.
- *   projectId   {string|null}                        Passed to the Document tab for the
- *                                                    per-project override panel.
+ *   initialTab  {'document'|'ai'|'aiKeys'|'aiPrompts'|'billing'|'other'}  Tab to show on open.
+ *   projectId   {string|null}                                             Passed to the Document tab for the
+ *                                                                         per-project override panel.
  *   onClose     {() => void}
  */
 export default function SettingsDialog({ open, initialTab = 'document', projectId, subscriptionRequired = false, onClose }) {
@@ -185,7 +185,8 @@ export default function SettingsDialog({ open, initialTab = 'document', projectI
 }
 
 function SettingsDialogBody({ initialTab = 'document', projectId, subscriptionRequired = false, onClose }) {
-	const [activeTab, setActiveTab] = useState(initialTab ?? 'document')
+	const normalizedInitialTab = initialTab === 'ai' ? 'aiKeys' : (initialTab ?? 'document')
+	const [activeTab, setActiveTab] = useState(normalizedInitialTab)
 	const helpTopic = TAB_HELP_TOPICS[activeTab] ?? 'index'
 
 	return (
@@ -199,7 +200,7 @@ function SettingsDialogBody({ initialTab = 'document', projectId, subscriptionRe
 
 			<DialogContent dividers>
 				<SettingsContent
-					initialTab={initialTab}
+					initialTab={normalizedInitialTab}
 					projectId={projectId}
 					subscriptionRequired={subscriptionRequired}
 					onTabChange={setActiveTab}
