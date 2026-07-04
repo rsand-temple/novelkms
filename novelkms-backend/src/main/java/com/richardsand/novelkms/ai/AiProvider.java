@@ -5,9 +5,8 @@ import com.richardsand.novelkms.ai.impl.OpenAiProvider;
 /**
  * Abstraction over an AI provider. The rest of the application is
  * provider-agnostic: it resolves a provider by key from the registry and calls
- * {@link #review(ReviewRequest)}. The first implementation is
- * {@link OpenAiProvider}; Anthropic, Gemini, etc. can be added later without
- * touching callers.
+ * the appropriate method. The first implementation is {@link OpenAiProvider};
+ * Anthropic, Gemini, etc. can be added later without touching callers.
  *
  * <p>A chapter review and a scene review use the same call; they differ only in
  * the {@link ReviewRequest}'s scope.
@@ -53,6 +52,15 @@ public interface AiProvider {
      * any other AI function.
      */
     EditorialResult generateEditorial(EditorialRequest request) throws AiProviderException;
+
+    /**
+     * Fills in the structured fields and body of a single codex entry
+     * synchronously, using manuscript context (chapter summaries) and pinned
+     * codex entries as grounding. Returns suggested field values and a prose body
+     * description; the caller is responsible for merging them into the stored
+     * entry. Prompt version: {@code codex-fill-v1}.
+     */
+    CodexFillResult fillCodexEntry(CodexFillRequest request) throws AiProviderException;
 
     /**
      * Converts supplied, structured weather facts into author-facing scene guidance.

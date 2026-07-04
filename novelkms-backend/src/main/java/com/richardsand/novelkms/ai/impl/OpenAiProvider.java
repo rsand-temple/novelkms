@@ -7,7 +7,11 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +23,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.richardsand.novelkms.ai.AiProvider;
 import com.richardsand.novelkms.ai.AiProviderException;
 import com.richardsand.novelkms.ai.BookSummaryRequest;
+import com.richardsand.novelkms.ai.CodexFillRequest;
+import com.richardsand.novelkms.ai.CodexFillResult;
 import com.richardsand.novelkms.ai.EditorialRequest;
 import com.richardsand.novelkms.ai.EditorialResult;
 import com.richardsand.novelkms.ai.MemoryRequest;
@@ -76,6 +82,8 @@ public class OpenAiProvider implements AiProvider {
     public static final  String BOOK_SUMMARY_PROMPT_VERSION = "book-summary-v2";
     /** Editorial generation prompt version (free-text half-page editorial reading; no JSON contract). */
     public static final  String EDITORIAL_PROMPT_VERSION = "chapter-editorial-v1";
+    /** Codex-entry fill prompt version (JSON contract: fields + body). */
+    public static final  String CODEX_FILL_PROMPT_VERSION = "codex-fill-v1";
     /** Weather interpretation prompt version; facts are supplied by a weather provider. */
     public static final  String WEATHER_INTERPRETATION_PROMPT_VERSION = "weather-interpretation-v1";
 
@@ -188,6 +196,25 @@ public class OpenAiProvider implements AiProvider {
     }
 
     @Override
+    public CodexFillResult fillCodexEntry(CodexFillRequest request) throws AiProviderException {
+        String model = (request.model() == null || request.model().isBlank())
+                ? DEFAULT_MODEL : request.model().trim();
+
+        logger.info("OpenAI codex-fill request started: model={}, entryTitle={}, promptVersion={}",
+                model, safeLabel(request.entryTitle()), CODEX_FILL_PROMPT_VERSION);
+        logger.debug("OpenAI codex-fill context: schemaDescChars={}, existingFieldsChars={}, manuscriptContextChars={}, referenceContextChars={}, userGuidanceChars={}",
+                lengthOf(request.schemaDescription()), lengthOf(request.existingFields()),
+                lengthOf(request.manuscriptContext()), lengthOf(request.referenceContext()),
+                lengthOf(request.userGuidance()));
+
+        String body = buildCodexFillRequestBody(model, request);
+        String content = postForContent(request.apiKey(), body);
+        CodexFillResult result = parseCodexFillResult(content);
+        logger.info("OpenAI codex-fill request completed: model={}, fieldCount={}", model, result.fields().size());
+        return result;
+    }
+
+    @Override
     public WeatherInterpretationResult interpretWeather(WeatherInterpretationRequest request) throws AiProviderException {
         String model = (request.model() == null || request.model().isBlank())
                 ? DEFAULT_MODEL : request.model().trim();
@@ -240,6 +267,10 @@ public class OpenAiProvider implements AiProvider {
                 response.statusCode(), lengthOf(response.body()));
         return extractContent(response.body());
     }
+
+    // -------------------------------------------------------------------------
+    // Request body builders
+    // -------------------------------------------------------------------------
 
     private String buildRequestBody(String model, ReviewRequest request) {
         ObjectNode root = mapper.createObjectNode();
@@ -382,8 +413,6 @@ public class OpenAiProvider implements AiProvider {
 
         ArrayNode messages = root.putArray("messages");
 
-        // Use the author-provided template from the resolution cascade when set;
-        // fall back to the built-in constant otherwise.
         String systemContent = (request.systemPrompt() != null && !request.systemPrompt().isBlank())
                 ? request.systemPrompt()
                 : CHAPTER_SUMMARY_WRAPPER;
@@ -437,8 +466,6 @@ public class OpenAiProvider implements AiProvider {
 
         int maxWords = request.maxWords() > 0 ? request.maxWords() : 1000;
 
-        // Use the author-provided template when set; fall back to the built-in
-        // constant (with maxWords substitution) otherwise.
         String systemContent = (request.systemPrompt() != null && !request.systemPrompt().isBlank())
                 ? request.systemPrompt()
                 : BOOK_SUMMARY_WRAPPER.formatted(maxWords);
@@ -496,7 +523,6 @@ public class OpenAiProvider implements AiProvider {
 
         ArrayNode messages = root.putArray("messages");
 
-        // Use the author-provided template when set; fall back to the built-in constant.
         String systemContent = (request.systemPrompt() != null && !request.systemPrompt().isBlank())
                 ? request.systemPrompt()
                 : EDITORIAL_WRAPPER;
@@ -507,8 +533,6 @@ public class OpenAiProvider implements AiProvider {
 
         StringBuilder user = new StringBuilder();
 
-        // Optional context blocks, clearly fenced off as background — not the
-        // material under editorial consideration.
         if (request.referenceContext() != null && !request.referenceContext().isBlank()) {
             user.append("Reference material — established canon and voice the manuscript must respect. ")
                 .append("Entries may list structured canonical fields (labeled) and a description. ")
@@ -543,6 +567,115 @@ public class OpenAiProvider implements AiProvider {
             return mapper.writeValueAsString(root);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to build OpenAI editorial request body", e);
+        }
+    }
+
+    /**
+     * System prompt for codex entry fill requests. Demands pure JSON with
+     * response_format: json_object ensuring reliable parsing.
+     */
+    private static final String CODEX_FILL_SYSTEM = """
+            You are an expert creative writing assistant helping an author build a \
+            codex (a world-building knowledge base) for their fiction project.
+
+            Your task is to fill in structured fields and write a prose description \
+            for a codex entry based on the manuscript content provided.
+
+            Rules:
+            - Base every answer strictly on the manuscript and existing codex entries provided.
+            - Do not invent details not present in the text.
+            - Respect existing field values — if the author has already filled in a field, \
+              do not contradict it; you may add to it or leave it, but never contradict.
+            - For SELECT fields, the value MUST be one of the listed valid options, or an \
+              empty string if you cannot determine the right option.
+            - If you cannot determine a value from the context, leave that field as an \
+              empty string — never guess or fabricate.
+            - The body field is a single flowing prose paragraph describing the entry overall \
+              (plain text, no HTML, no Markdown). Leave it as an empty string if there is \
+              insufficient information.
+
+            Return ONLY a JSON object — no prose, no Markdown, no code fences — in exactly \
+            this shape: {"fields":{"field_key":"value"},"body":"prose paragraph"}""";
+
+    private String buildCodexFillRequestBody(String model, CodexFillRequest request) {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("model", model);
+
+        ArrayNode messages = root.putArray("messages");
+
+        ObjectNode system = messages.addObject();
+        system.put("role", "system");
+        system.put("content", CODEX_FILL_SYSTEM);
+
+        StringBuilder user = new StringBuilder();
+        user.append("Entry: ").append(nullToBlank(request.entryTitle())).append("\n");
+        user.append("Category: ").append(nullToBlank(request.categoryLabel())).append("\n\n");
+
+        if (request.schemaDescription() != null && !request.schemaDescription().isBlank()) {
+            user.append(request.schemaDescription().strip()).append("\n\n");
+        }
+
+        String existing = request.existingFields();
+        if (existing != null && !existing.isBlank() && !"none".equalsIgnoreCase(existing.strip())) {
+            user.append("Author-provided field values (do not contradict):\n")
+                .append(existing.strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        if (request.referenceContext() != null && !request.referenceContext().isBlank()) {
+            user.append("Other codex entries for reference — established facts to respect:\n\n")
+                .append(request.referenceContext().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        if (request.manuscriptContext() != null && !request.manuscriptContext().isBlank()) {
+            user.append("Chapter summaries from the manuscript (use these to fill in the entry):\n\n")
+                .append(request.manuscriptContext().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        if (request.userGuidance() != null && !request.userGuidance().isBlank()) {
+            user.append("Additional guidance from the author for this generation only — follow it:\n\n")
+                .append(request.userGuidance().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        user.append("Now fill in the codex entry for \"").append(nullToBlank(request.entryTitle()))
+            .append("\" using the context above.");
+
+        ObjectNode userMsg = messages.addObject();
+        userMsg.put("role", "user");
+        userMsg.put("content", user.toString());
+
+        ObjectNode responseFormat = root.putObject("response_format");
+        responseFormat.put("type", "json_object");
+
+        try {
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to build OpenAI codex-fill request body", e);
+        }
+    }
+
+    private CodexFillResult parseCodexFillResult(String content) throws AiProviderException {
+        String json = stripCodeFences(content);
+        try {
+            JsonNode root = mapper.readTree(json);
+            Map<String, String> fields = new LinkedHashMap<>();
+            JsonNode fieldsNode = root.path("fields");
+            if (fieldsNode.isObject()) {
+                Set<Entry<String, JsonNode>> set = fieldsNode.properties();
+                for (Entry<String, JsonNode> e : set) {
+                    if (!e.getValue().isNull() && !e.getValue().isMissingNode()) {
+                        fields.put(e.getKey(), e.getValue().asText(""));
+                    }
+                }
+            }
+            String body = textOrNull(root, "body");
+            return new CodexFillResult(fields, body == null ? "" : body, content, CODEX_FILL_PROMPT_VERSION);
+        } catch (Exception e) {
+            logger.warn("Failed to parse OpenAI codex-fill JSON: {}", e.getMessage());
+            throw new AiProviderException("Codex fill response could not be parsed as JSON");
         }
     }
 

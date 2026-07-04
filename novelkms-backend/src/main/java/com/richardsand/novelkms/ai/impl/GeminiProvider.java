@@ -7,7 +7,11 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +23,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.richardsand.novelkms.ai.AiProvider;
 import com.richardsand.novelkms.ai.AiProviderException;
 import com.richardsand.novelkms.ai.BookSummaryRequest;
+import com.richardsand.novelkms.ai.CodexFillRequest;
+import com.richardsand.novelkms.ai.CodexFillResult;
 import com.richardsand.novelkms.ai.EditorialRequest;
 import com.richardsand.novelkms.ai.EditorialResult;
 import com.richardsand.novelkms.ai.MemoryRequest;
@@ -47,7 +53,7 @@ import com.richardsand.novelkms.ai.WeatherInterpretationResult;
  * <li>User messages go in a {@code "contents"} array where each element has
  * a {@code "role"} and a {@code "parts"} array of text objects.</li>
  * <li>Token ceilings are set via {@code "generationConfig.maxOutputTokens"}.
- * For the review JSON call, {@code "responseMimeType":"application/json"}
+ * For JSON calls (review and codex fill), {@code "responseMimeType":"application/json"}
  * is also included in {@code generationConfig} — Gemini's equivalent of
  * OpenAI's {@code response_format: json_object}. Free-text calls omit it.</li>
  * <li>Response text is extracted from
@@ -55,7 +61,7 @@ import com.richardsand.novelkms.ai.WeatherInterpretationResult;
  * <li>Prompt version constants are identical to those in {@link OpenAiProvider}
  * because the prompt content is the same — only the transport format differs.</li>
  * <li>{@code functionalBlock()} is duplicated self-contained per the established
- * Anthropic precedent (D4 in the V34 Anthropic notes).</li>
+ * convention (provider classes are self-contained).</li>
  * </ul>
  */
 public class GeminiProvider implements AiProvider {
@@ -70,6 +76,7 @@ public class GeminiProvider implements AiProvider {
     public static final String CHAPTER_SUMMARY_PROMPT_VERSION = OpenAiProvider.CHAPTER_SUMMARY_PROMPT_VERSION;
     public static final String BOOK_SUMMARY_PROMPT_VERSION    = OpenAiProvider.BOOK_SUMMARY_PROMPT_VERSION;
     public static final String EDITORIAL_PROMPT_VERSION       = OpenAiProvider.EDITORIAL_PROMPT_VERSION;
+    public static final String CODEX_FILL_PROMPT_VERSION      = OpenAiProvider.CODEX_FILL_PROMPT_VERSION;
     public static final String WEATHER_INTERPRETATION_VERSION = OpenAiProvider.WEATHER_INTERPRETATION_PROMPT_VERSION;
 
     private static final String BASE_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/";
@@ -78,11 +85,12 @@ public class GeminiProvider implements AiProvider {
      * maxOutputTokens ceilings per call type. Gemini stops naturally at
      * end-of-output well before these limits in practice.
      */
-    private static final int MAX_TOKENS_REVIEW    = 4096;
-    private static final int MAX_TOKENS_MEMORY    = 2048;
-    private static final int MAX_TOKENS_SUMMARY   = 2048;
-    private static final int MAX_TOKENS_EDITORIAL = 2048;
-    private static final int MAX_TOKENS_WEATHER   = 1024;
+    private static final int MAX_TOKENS_REVIEW      = 4096;
+    private static final int MAX_TOKENS_MEMORY      = 2048;
+    private static final int MAX_TOKENS_SUMMARY     = 2048;
+    private static final int MAX_TOKENS_EDITORIAL   = 2048;
+    private static final int MAX_TOKENS_CODEX_FILL  = 2048;
+    private static final int MAX_TOKENS_WEATHER     = 1024;
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClient   client = HttpClient.newBuilder()
@@ -100,7 +108,7 @@ public class GeminiProvider implements AiProvider {
     }
 
     // -------------------------------------------------------------------------
-    // AiProvider interface — all six methods
+    // AiProvider interface
     // -------------------------------------------------------------------------
 
     @Override
@@ -190,6 +198,24 @@ public class GeminiProvider implements AiProvider {
     }
 
     @Override
+    public CodexFillResult fillCodexEntry(CodexFillRequest request) throws AiProviderException {
+        String model = resolveModel(request.model(), DEFAULT_MODEL);
+
+        logger.info("Gemini codex-fill request started: model={}, entryTitle={}, promptVersion={}",
+                model, safeLabel(request.entryTitle()), CODEX_FILL_PROMPT_VERSION);
+        logger.debug("Gemini codex-fill context: schemaDescChars={}, existingFieldsChars={}, manuscriptContextChars={}, referenceContextChars={}, userGuidanceChars={}",
+                lengthOf(request.schemaDescription()), lengthOf(request.existingFields()),
+                lengthOf(request.manuscriptContext()), lengthOf(request.referenceContext()),
+                lengthOf(request.userGuidance()));
+
+        String body    = buildCodexFillRequestBody(model, request);
+        String content = postForContent(request.apiKey(), model, body);
+        CodexFillResult result = parseCodexFillResult(content);
+        logger.info("Gemini codex-fill request completed: model={}, fieldCount={}", model, result.fields().size());
+        return result;
+    }
+
+    @Override
     public WeatherInterpretationResult interpretWeather(WeatherInterpretationRequest request) throws AiProviderException {
         String model = resolveModel(request.model(), DEFAULT_MODEL);
 
@@ -261,12 +287,7 @@ public class GeminiProvider implements AiProvider {
 
     /**
      * Review body. Includes {@code responseMimeType:"application/json"} in
-     * {@code generationConfig} to enforce a pure-JSON response — Gemini's
-     * equivalent of OpenAI's {@code response_format: json_object}.
-     *
-     * <p>
-     * Note: the model is NOT included in the request body; it goes in the
-     * URL path. All builders follow this convention.
+     * {@code generationConfig} to enforce a pure-JSON response.
      */
     private String buildReviewRequestBody(String model, ReviewRequest request) {
         ObjectNode root = mapper.createObjectNode();
@@ -388,6 +409,84 @@ public class GeminiProvider implements AiProvider {
         return serialize(root, "editorial");
     }
 
+    /**
+     * Codex fill body. Uses {@code responseMimeType:"application/json"} in
+     * {@code generationConfig} to enforce a pure-JSON response, matching the
+     * review call pattern.
+     */
+    private String buildCodexFillRequestBody(String model, CodexFillRequest request) {
+        ObjectNode root = mapper.createObjectNode();
+
+        root.putObject("systemInstruction")
+                .putArray("parts")
+                .addObject().put("text", CODEX_FILL_SYSTEM);
+
+        StringBuilder user = new StringBuilder();
+        user.append("Entry: ").append(nullToBlank(request.entryTitle())).append("\n");
+        user.append("Category: ").append(nullToBlank(request.categoryLabel())).append("\n\n");
+
+        if (request.schemaDescription() != null && !request.schemaDescription().isBlank()) {
+            user.append(request.schemaDescription().strip()).append("\n\n");
+        }
+
+        String existing = request.existingFields();
+        if (existing != null && !existing.isBlank() && !"none".equalsIgnoreCase(existing.strip())) {
+            user.append("Author-provided field values (do not contradict):\n")
+                .append(existing.strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        if (request.referenceContext() != null && !request.referenceContext().isBlank()) {
+            user.append("Other codex entries for reference — established facts to respect:\n\n")
+                .append(request.referenceContext().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        if (request.manuscriptContext() != null && !request.manuscriptContext().isBlank()) {
+            user.append("Chapter summaries from the manuscript (use these to fill in the entry):\n\n")
+                .append(request.manuscriptContext().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        appendGuidance(user, request.userGuidance(), "fill in");
+
+        user.append("Now fill in the codex entry for \"").append(nullToBlank(request.entryTitle()))
+            .append("\" using the context above.");
+
+        ArrayNode  contents = root.putArray("contents");
+        ObjectNode userTurn = contents.addObject();
+        userTurn.put("role", "user");
+        userTurn.putArray("parts").addObject().put("text", user.toString());
+
+        ObjectNode genConfig = root.putObject("generationConfig");
+        genConfig.put("maxOutputTokens", MAX_TOKENS_CODEX_FILL);
+        genConfig.put("responseMimeType", "application/json");
+
+        return serialize(root, "codex-fill");
+    }
+
+    private CodexFillResult parseCodexFillResult(String content) throws AiProviderException {
+        String json = stripCodeFences(content);
+        try {
+            JsonNode root = mapper.readTree(json);
+            Map<String, String> fields = new LinkedHashMap<>();
+            JsonNode fieldsNode = root.path("fields");
+            if (fieldsNode.isObject()) {
+                Set<Entry<String, JsonNode>> set = fieldsNode.properties();
+                for (Entry<String, JsonNode> e : set) {
+                    if (!e.getValue().isNull() && !e.getValue().isMissingNode()) {
+                        fields.put(e.getKey(), e.getValue().asText(""));
+                    }
+                }
+            }
+            String body = textOrNull(root, "body");
+            return new CodexFillResult(fields, body == null ? "" : body, content, CODEX_FILL_PROMPT_VERSION);
+        } catch (Exception e) {
+            logger.warn("Failed to parse Gemini codex-fill JSON: {}", e.getMessage());
+            throw new AiProviderException("Codex fill response could not be parsed as JSON");
+        }
+    }
+
     private String buildWeatherRequestBody(String model, WeatherInterpretationRequest request) {
         ObjectNode root = mapper.createObjectNode();
 
@@ -421,12 +520,6 @@ public class GeminiProvider implements AiProvider {
     // Prompt assembly helpers
     // -------------------------------------------------------------------------
 
-    /**
-     * Identical form/functional split to the other providers:
-     * {@code form + "\n\n" + functional}.
-     * The {@code responseMimeType:"application/json"} in {@code generationConfig}
-     * reinforces the JSON contract at the API level for review calls.
-     */
     private String reviewSystemPrompt(String unit, List<String> categories, String formInstructions) {
         String form = (formInstructions == null || formInstructions.isBlank())
                 ? FORM_FALLBACK
@@ -535,6 +628,29 @@ public class GeminiProvider implements AiProvider {
             not restate the plot back as a summary; give your editorial read on \
             it. Output only the editorial.""";
 
+    private static final String CODEX_FILL_SYSTEM = """
+            You are an expert creative writing assistant helping an author build a \
+            codex (a world-building knowledge base) for their fiction project.
+
+            Your task is to fill in structured fields and write a prose description \
+            for a codex entry based on the manuscript content provided.
+
+            Rules:
+            - Base every answer strictly on the manuscript and existing codex entries provided.
+            - Do not invent details not present in the text.
+            - Respect existing field values — if the author has already filled in a field, \
+              do not contradict it; you may add to it or leave it, but never contradict.
+            - For SELECT fields, the value MUST be one of the listed valid options, or an \
+              empty string if you cannot determine the right option.
+            - If you cannot determine a value from the context, leave that field as an \
+              empty string — never guess or fabricate.
+            - The body field is a single flowing prose paragraph describing the entry overall \
+              (plain text, no HTML, no Markdown). Leave it as an empty string if there is \
+              insufficient information.
+
+            Return ONLY a JSON object — no prose, no Markdown, no code fences — in exactly \
+            this shape: {"fields":{"field_key":"value"},"body":"prose paragraph"}""";
+
     private static final String WEATHER_SYSTEM = """
             You are a creative writing assistant. Given raw weather facts and optional \
             scene context, write a vivid, atmospheric paragraph (2-4 sentences) describing \
@@ -564,11 +680,6 @@ public class GeminiProvider implements AiProvider {
         }
     }
 
-    /**
-     * Appends the one-time author guidance fence to the user message.
-     *
-     * @param verb the task word for the disclaimer, e.g. "review", "summarize", "comment on"
-     */
     private static void appendGuidance(StringBuilder sb, String guidance, String verb) {
         if (guidance != null && !guidance.isBlank()) {
             sb.append("Additional guidance from the author for this ").append(verb)
@@ -608,9 +719,6 @@ public class GeminiProvider implements AiProvider {
                 throw new AiProviderException("Gemini returned no content parts");
             }
             for (JsonNode part : parts) {
-                // Skip internal thinking tokens produced by hybrid-reasoning models
-                // (Gemini 2.5+). Thought parts carry "thought": true and must not
-                // be returned as output — they are the model's private scratchpad.
                 if (part.path("thought").asBoolean(false)) {
                     continue;
                 }
@@ -663,7 +771,6 @@ public class GeminiProvider implements AiProvider {
 
     private String extractErrorMessage(int status, String body) {
         try {
-            // Gemini error shape: {"error":{"code":N,"message":"...","status":"..."}}
             JsonNode error   = mapper.readTree(body).path("error");
             String   message = error.path("message").asText("");
             if (!message.isBlank()) {
@@ -676,7 +783,7 @@ public class GeminiProvider implements AiProvider {
     }
 
     // -------------------------------------------------------------------------
-    // Utility helpers (mirrors OpenAiProvider / AnthropicProvider)
+    // Utility helpers
     // -------------------------------------------------------------------------
 
     private String serialize(ObjectNode root, String callType) {

@@ -73,6 +73,7 @@ import com.richardsand.novelkms.resource.BookSummaryTemplateResource;
 import com.richardsand.novelkms.resource.ChapterMemoryResource;
 import com.richardsand.novelkms.resource.ChapterResource;
 import com.richardsand.novelkms.resource.ChapterSummaryTemplateResource;
+import com.richardsand.novelkms.resource.CodexEntryResource;
 import com.richardsand.novelkms.resource.CodexResource;
 import com.richardsand.novelkms.resource.EditorSettingsResource;
 import com.richardsand.novelkms.resource.EditorialResource;
@@ -101,6 +102,8 @@ import com.richardsand.novelkms.service.ArchiveService;
 import com.richardsand.novelkms.service.ArtifactService;
 import com.richardsand.novelkms.service.ArtifactStorage;
 import com.richardsand.novelkms.service.BillingService;
+import com.richardsand.novelkms.service.CodexAiService;
+import com.richardsand.novelkms.service.CodexExportService;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
@@ -271,6 +274,13 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 chapterEditorialDao,
                 codexDao, codexCategoryDao, aiProviderRegistry.getAiProviderMap());
 
+        // Codex entry DOCX export/import and AI fill services
+        CodexExportService codexExportService = new CodexExportService(
+                sceneDao, chapterDao, codexCategoryDao);
+        CodexAiService     codexAiService     = new CodexAiService(
+                sceneDao, chapterDao, codexDao, codexCategoryDao,
+                aiCredentialDao, chapterSummaryDao, aiProviderRegistry.getAiProviderMap());
+
         // Author utility tools
         CalendarToolsService calendarToolsService = new CalendarToolsService();
         WeatherLookupService weatherLookupService = new WeatherLookupService(
@@ -311,6 +321,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(BookSummaryTemplateResource.class);
         env.jersey().register(ChapterMemoryResource.class);
         env.jersey().register(ChapterSummaryTemplateResource.class);
+        env.jersey().register(CodexEntryResource.class);
         env.jersey().register(EditorialResource.class);
         env.jersey().register(EditorialTemplateResource.class);
         env.jersey().register(ChapterResource.class);
@@ -369,8 +380,10 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(chapterMemoryDao).to(ChapterMemoryDao.class);
                 bind(chapterSummaryDao).to(ChapterSummaryDao.class);
                 bind(chapterEditorialDao).to(ChapterEditorialDao.class);
+                bind(codexAiService).to(CodexAiService.class);
                 bind(codexCategoryDao).to(CodexCategoryDao.class);
                 bind(codexDao).to(CodexDao.class);
+                bind(codexExportService).to(CodexExportService.class);
                 bind(config).to(NovelKmsConfig.class);
                 bind(editorSettingsDao).to(EditorSettingsDao.class);
                 bind(epubExportService).to(EpubExportService.class);

@@ -1424,6 +1424,8 @@ export default function EditorPanel({
 										sceneId={sceneId}
 										schema={codexEntrySchema}
 										initialData={singleScene.structuredData}
+										entryTitle={singleScene.title}
+										onBodyGenerated={(html) => editor?.commands.setContent(html, false)}
 									/>
 								)}
 

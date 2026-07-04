@@ -7,7 +7,11 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +23,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.richardsand.novelkms.ai.AiProvider;
 import com.richardsand.novelkms.ai.AiProviderException;
 import com.richardsand.novelkms.ai.BookSummaryRequest;
+import com.richardsand.novelkms.ai.CodexFillRequest;
+import com.richardsand.novelkms.ai.CodexFillResult;
 import com.richardsand.novelkms.ai.EditorialRequest;
 import com.richardsand.novelkms.ai.EditorialResult;
 import com.richardsand.novelkms.ai.MemoryRequest;
@@ -66,6 +72,7 @@ public class AnthropicProvider implements AiProvider {
     public static final String CHAPTER_SUMMARY_PROMPT_VERSION = OpenAiProvider.CHAPTER_SUMMARY_PROMPT_VERSION;
     public static final String BOOK_SUMMARY_PROMPT_VERSION    = OpenAiProvider.BOOK_SUMMARY_PROMPT_VERSION;
     public static final String EDITORIAL_PROMPT_VERSION       = OpenAiProvider.EDITORIAL_PROMPT_VERSION;
+    public static final String CODEX_FILL_PROMPT_VERSION      = OpenAiProvider.CODEX_FILL_PROMPT_VERSION;
     public static final String WEATHER_INTERPRETATION_VERSION = OpenAiProvider.WEATHER_INTERPRETATION_PROMPT_VERSION;
 
     private static final String ENDPOINT          = "https://api.anthropic.com/v1/messages";
@@ -75,11 +82,12 @@ public class AnthropicProvider implements AiProvider {
      * max_tokens ceilings per call type. Anthropic requires this field;
      * models stop naturally well before these limits in practice.
      */
-    private static final int MAX_TOKENS_REVIEW    = 4096;
-    private static final int MAX_TOKENS_MEMORY    = 2048;
-    private static final int MAX_TOKENS_SUMMARY   = 2048;
-    private static final int MAX_TOKENS_EDITORIAL = 1024;
-    private static final int MAX_TOKENS_WEATHER   = 1024;
+    private static final int MAX_TOKENS_REVIEW      = 4096;
+    private static final int MAX_TOKENS_MEMORY      = 2048;
+    private static final int MAX_TOKENS_SUMMARY     = 2048;
+    private static final int MAX_TOKENS_EDITORIAL   = 1024;
+    private static final int MAX_TOKENS_CODEX_FILL  = 2048;
+    private static final int MAX_TOKENS_WEATHER     = 1024;
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClient   client = HttpClient.newBuilder()
@@ -97,7 +105,7 @@ public class AnthropicProvider implements AiProvider {
     }
 
     // -------------------------------------------------------------------------
-    // AiProvider interface — all six methods
+    // AiProvider interface
     // -------------------------------------------------------------------------
 
     @Override
@@ -187,6 +195,24 @@ public class AnthropicProvider implements AiProvider {
     }
 
     @Override
+    public CodexFillResult fillCodexEntry(CodexFillRequest request) throws AiProviderException {
+        String model = resolveModel(request.model(), DEFAULT_MODEL);
+
+        logger.info("Anthropic codex-fill request started: model={}, entryTitle={}, promptVersion={}",
+                model, safeLabel(request.entryTitle()), CODEX_FILL_PROMPT_VERSION);
+        logger.debug("Anthropic codex-fill context: schemaDescChars={}, existingFieldsChars={}, manuscriptContextChars={}, referenceContextChars={}, userGuidanceChars={}",
+                lengthOf(request.schemaDescription()), lengthOf(request.existingFields()),
+                lengthOf(request.manuscriptContext()), lengthOf(request.referenceContext()),
+                lengthOf(request.userGuidance()));
+
+        String body    = buildCodexFillRequestBody(model, request);
+        String content = postForContent(request.apiKey(), body);
+        CodexFillResult result = parseCodexFillResult(content);
+        logger.info("Anthropic codex-fill request completed: model={}, fieldCount={}", model, result.fields().size());
+        return result;
+    }
+
+    @Override
     public WeatherInterpretationResult interpretWeather(WeatherInterpretationRequest request) throws AiProviderException {
         String model = resolveModel(request.model(), DEFAULT_MODEL);
 
@@ -256,7 +282,6 @@ public class AnthropicProvider implements AiProvider {
         root.put("model", model);
         root.put("max_tokens", MAX_TOKENS_REVIEW);
 
-        // Anthropic: system is a top-level string, not a message.
         String systemContent = reviewSystemPrompt(
                 scopeWord(request), request.categories(), request.formInstructions());
         root.put("system", systemContent);
@@ -359,6 +384,72 @@ public class AnthropicProvider implements AiProvider {
         return serialize(root, "editorial");
     }
 
+    private String buildCodexFillRequestBody(String model, CodexFillRequest request) {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("model", model);
+        root.put("max_tokens", MAX_TOKENS_CODEX_FILL);
+        root.put("system", CODEX_FILL_SYSTEM);
+
+        StringBuilder user = new StringBuilder();
+        user.append("Entry: ").append(nullToBlank(request.entryTitle())).append("\n");
+        user.append("Category: ").append(nullToBlank(request.categoryLabel())).append("\n\n");
+
+        if (request.schemaDescription() != null && !request.schemaDescription().isBlank()) {
+            user.append(request.schemaDescription().strip()).append("\n\n");
+        }
+
+        String existing = request.existingFields();
+        if (existing != null && !existing.isBlank() && !"none".equalsIgnoreCase(existing.strip())) {
+            user.append("Author-provided field values (do not contradict):\n")
+                .append(existing.strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        if (request.referenceContext() != null && !request.referenceContext().isBlank()) {
+            user.append("Other codex entries for reference — established facts to respect:\n\n")
+                .append(request.referenceContext().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        if (request.manuscriptContext() != null && !request.manuscriptContext().isBlank()) {
+            user.append("Chapter summaries from the manuscript (use these to fill in the entry):\n\n")
+                .append(request.manuscriptContext().strip()).append("\n\n")
+                .append("----------------------------------------\n\n");
+        }
+
+        appendGuidance(user, request.userGuidance(), "fill in");
+
+        user.append("Now fill in the codex entry for \"").append(nullToBlank(request.entryTitle()))
+            .append("\" using the context above.");
+
+        ArrayNode messages = root.putArray("messages");
+        messages.addObject().put("role", "user").put("content", user.toString());
+
+        return serialize(root, "codex-fill");
+    }
+
+    private CodexFillResult parseCodexFillResult(String content) throws AiProviderException {
+        String json = stripCodeFences(content);
+        try {
+            JsonNode root = mapper.readTree(json);
+            Map<String, String> fields = new LinkedHashMap<>();
+            JsonNode fieldsNode = root.path("fields");
+            if (fieldsNode.isObject()) {
+                Set<Entry<String, JsonNode>> set = fieldsNode.properties();
+                for (Entry<String, JsonNode> e : set) {
+                    if (!e.getValue().isNull() && !e.getValue().isMissingNode()) {
+                        fields.put(e.getKey(), e.getValue().asText(""));
+                    }
+                }
+            }
+            String body = textOrNull(root, "body");
+            return new CodexFillResult(fields, body == null ? "" : body, content, CODEX_FILL_PROMPT_VERSION);
+        } catch (Exception e) {
+            logger.warn("Failed to parse Anthropic codex-fill JSON: {}", e.getMessage());
+            throw new AiProviderException("Codex fill response could not be parsed as JSON");
+        }
+    }
+
     private String buildWeatherRequestBody(String model, WeatherInterpretationRequest request) {
         ObjectNode root = mapper.createObjectNode();
         root.put("model", model);
@@ -398,11 +489,6 @@ public class AnthropicProvider implements AiProvider {
     // Prompt assembly helpers
     // -------------------------------------------------------------------------
 
-    /**
-     * Identical split to OpenAiProvider: {@code form + "\n\n" + functional}.
-     * The functional block asks for pure JSON with no prose or fences; Claude
-     * follows this reliably without needing {@code response_format}.
-     */
     private String reviewSystemPrompt(String unit, List<String> categories, String formInstructions) {
         String form = (formInstructions == null || formInstructions.isBlank())
                 ? FORM_FALLBACK
@@ -511,6 +597,33 @@ public class AnthropicProvider implements AiProvider {
             not restate the plot back as a summary; give your editorial read on \
             it. Output only the editorial.""";
 
+    /**
+     * System prompt for codex fill. Claude follows a pure-JSON demand reliably
+     * without response_format; {@link #stripCodeFences} handles any edge cases.
+     */
+    private static final String CODEX_FILL_SYSTEM = """
+            You are an expert creative writing assistant helping an author build a \
+            codex (a world-building knowledge base) for their fiction project.
+
+            Your task is to fill in structured fields and write a prose description \
+            for a codex entry based on the manuscript content provided.
+
+            Rules:
+            - Base every answer strictly on the manuscript and existing codex entries provided.
+            - Do not invent details not present in the text.
+            - Respect existing field values — if the author has already filled in a field, \
+              do not contradict it; you may add to it or leave it, but never contradict.
+            - For SELECT fields, the value MUST be one of the listed valid options, or an \
+              empty string if you cannot determine the right option.
+            - If you cannot determine a value from the context, leave that field as an \
+              empty string — never guess or fabricate.
+            - The body field is a single flowing prose paragraph describing the entry overall \
+              (plain text, no HTML, no Markdown). Leave it as an empty string if there is \
+              insufficient information.
+
+            Return ONLY a JSON object — no prose, no Markdown, no code fences — in exactly \
+            this shape: {"fields":{"field_key":"value"},"body":"prose paragraph"}""";
+
     // -------------------------------------------------------------------------
     // Shared prompt-fragment helpers
     // -------------------------------------------------------------------------
@@ -534,11 +647,6 @@ public class AnthropicProvider implements AiProvider {
         }
     }
 
-    /**
-     * Appends the one-time author guidance fence to the user message.
-     *
-     * @param verb the task word for the disclaimer, e.g. "review", "summarize", "comment on"
-     */
     private static void appendGuidance(StringBuilder sb, String guidance, String verb) {
         if (guidance != null && !guidance.isBlank()) {
             sb.append("Additional guidance from the author for this ").append(verb)
@@ -552,10 +660,6 @@ public class AnthropicProvider implements AiProvider {
     // Response parsing
     // -------------------------------------------------------------------------
 
-    /**
-     * Extracts text from the Anthropic Messages API response.
-     * The response shape is {@code {"content":[{"type":"text","text":"..."},...]}}.
-     */
     private String extractContent(String responseBody) throws AiProviderException {
         try {
             JsonNode root    = mapper.readTree(responseBody);
@@ -563,7 +667,6 @@ public class AnthropicProvider implements AiProvider {
             if (!content.isArray() || content.isEmpty()) {
                 throw new AiProviderException("Anthropic returned no content blocks");
             }
-            // Walk blocks and return the first text block.
             for (JsonNode block : content) {
                 if ("text".equals(block.path("type").asText(""))) {
                     String text = block.path("text").asText("");
@@ -616,7 +719,6 @@ public class AnthropicProvider implements AiProvider {
 
     private String extractErrorMessage(int status, String body) {
         try {
-            // Anthropic error shape: {"type":"error","error":{"type":"...","message":"..."}}
             JsonNode error   = mapper.readTree(body).path("error");
             String   message = error.path("message").asText("");
             if (!message.isBlank()) {
@@ -629,7 +731,7 @@ public class AnthropicProvider implements AiProvider {
     }
 
     // -------------------------------------------------------------------------
-    // Utility helpers (mirrors OpenAiProvider)
+    // Utility helpers
     // -------------------------------------------------------------------------
 
     private String serialize(ObjectNode root, String callType) {
