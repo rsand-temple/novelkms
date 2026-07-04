@@ -81,7 +81,7 @@ public class GeminiProvider implements AiProvider {
     private static final int MAX_TOKENS_REVIEW    = 4096;
     private static final int MAX_TOKENS_MEMORY    = 2048;
     private static final int MAX_TOKENS_SUMMARY   = 2048;
-    private static final int MAX_TOKENS_EDITORIAL = 1024;
+    private static final int MAX_TOKENS_EDITORIAL = 2048;
     private static final int MAX_TOKENS_WEATHER   = 1024;
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -586,6 +586,15 @@ public class GeminiProvider implements AiProvider {
      * Extracts text from the Gemini generateContent response.
      * The response shape is
      * {@code {"candidates":[{"content":{"parts":[{"text":"..."}]}}]}}.
+     *
+     * <p>
+     * Gemini 2.5 and later hybrid-reasoning models include internal thinking
+     * tokens as parts with {@code "thought": true} before the actual output
+     * part. These parts must be skipped; returning them would produce a
+     * mid-sentence fragment of the model's internal reasoning instead of the
+     * real response. This manifests on free-text calls (editorial, memory,
+     * summary) but not on JSON-mode review calls, where {@code responseMimeType}
+     * suppresses exposed thought parts.
      */
     private String extractContent(String responseBody) throws AiProviderException {
         try {
@@ -599,6 +608,12 @@ public class GeminiProvider implements AiProvider {
                 throw new AiProviderException("Gemini returned no content parts");
             }
             for (JsonNode part : parts) {
+                // Skip internal thinking tokens produced by hybrid-reasoning models
+                // (Gemini 2.5+). Thought parts carry "thought": true and must not
+                // be returned as output — they are the model's private scratchpad.
+                if (part.path("thought").asBoolean(false)) {
+                    continue;
+                }
                 String text = part.path("text").asText("");
                 if (!text.isBlank()) {
                     return text;
