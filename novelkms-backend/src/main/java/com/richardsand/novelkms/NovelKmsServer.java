@@ -278,7 +278,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         CodexExportService codexExportService = new CodexExportService(
                 sceneDao, chapterDao, codexCategoryDao);
         CodexAiService     codexAiService     = new CodexAiService(
-                sceneDao, chapterDao, codexDao, codexCategoryDao,
+                sceneDao, chapterDao, bookDao, codexDao, codexCategoryDao,
                 aiCredentialDao, chapterSummaryDao, aiProviderRegistry.getAiProviderMap());
 
         // Author utility tools

@@ -21,12 +21,14 @@ import com.richardsand.novelkms.ai.CodexFillResult;
 import com.richardsand.novelkms.ai.ReviewException;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.ai.AiCredentialDao;
+import com.richardsand.novelkms.dao.book.BookDao;
 import com.richardsand.novelkms.dao.chapter.ChapterDao;
 import com.richardsand.novelkms.dao.chapter.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
 import com.richardsand.novelkms.dao.codex.CodexDao;
 import com.richardsand.novelkms.model.Scene;
 import com.richardsand.novelkms.model.ai.AiCredential;
+import com.richardsand.novelkms.model.book.Book;
 import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.model.codex.Codex;
 import com.richardsand.novelkms.model.codex.CodexCategory;
@@ -38,21 +40,32 @@ import jakarta.ws.rs.core.Response.Status;
 /**
  * Orchestrates AI-driven fill-in of a single codex entry. The service:
  * <ol>
- *   <li>Resolves the entry's schema from its parent codex category.</li>
- *   <li>Assembles manuscript context from chapter summaries (required; throws
- *       {@code no_chapter_summaries} when none exist for a book-scoped codex).</li>
- *   <li>Assembles pinned codex entries as reference context.</li>
- *   <li>Calls the resolved {@link AiProvider#fillCodexEntry} method.</li>
- *   <li>Returns the {@link CodexFillResult} for the caller (resource) to relay
- *       to the frontend without auto-saving, so the author reviews the
- *       suggestions before they are committed.</li>
+ * <li>Resolves the entry's schema from its parent codex category.</li>
+ * <li>Assembles manuscript context from chapter summaries (required; throws
+ * {@code no_chapter_summaries} when none exist).</li>
+ * <li>Assembles pinned codex entries as reference context.</li>
+ * <li>Calls the resolved {@link AiProvider#fillCodexEntry} method.</li>
+ * <li>Returns the {@link CodexFillResult} for the caller (resource) to relay
+ * to the frontend without auto-saving, so the author reviews the
+ * suggestions before they are committed.</li>
  * </ol>
  *
- * <p>For a book-scoped codex, chapter summaries are used as manuscript context
- * (via {@link ChapterSummaryDao}). If no summaries exist, a
- * {@link ReviewException} with key {@code no_chapter_summaries} is thrown —
- * the author must generate summaries first. For a project-scoped codex (no
- * book), only pinned codex entries are used as context.
+ * <p>
+ * <b>Codex scope.</b> A codex is scoped to exactly one project (series-wide)
+ * or one book — exactly one of {@code projectId}/{@code bookId} is set on the
+ * {@link Codex} row. Manuscript context is assembled to match:
+ * <ul>
+ * <li><b>Book-scoped codex</b> ({@code bookId != null}): chapter summaries of
+ * that one book, in reading order.</li>
+ * <li><b>Project-scoped codex</b> ({@code projectId != null}): chapter
+ * summaries of every book in the project, concatenated book by book — a
+ * character or canon entry in a series-wide codex needs the whole series
+ * as context, not one book.</li>
+ * </ul>
+ * If no chapter summaries exist in the relevant scope, a
+ * {@link ReviewException} with key {@code no_chapter_summaries} is thrown so the
+ * author knows to generate summaries first — otherwise the model has nothing to
+ * work from and returns all-empty fields.
  */
 public class CodexAiService {
 
@@ -62,25 +75,27 @@ public class CodexAiService {
     /** Maximum characters of chapter summary text sent as manuscript context. */
     private static final int MAX_MANUSCRIPT_CHARS = 40_000;
 
-    private final SceneDao              sceneDao;
-    private final ChapterDao            chapterDao;
-    private final CodexDao              codexDao;
-    private final CodexCategoryDao      codexCategoryDao;
-    private final AiCredentialDao       credentialDao;
-    private final ChapterSummaryDao     chapterSummaryDao;
+    private final SceneDao                sceneDao;
+    private final ChapterDao              chapterDao;
+    private final BookDao                 bookDao;
+    private final CodexDao                codexDao;
+    private final CodexCategoryDao        codexCategoryDao;
+    private final AiCredentialDao         credentialDao;
+    private final ChapterSummaryDao       chapterSummaryDao;
     private final Map<String, AiProvider> providers;
 
-    public CodexAiService(SceneDao sceneDao, ChapterDao chapterDao,
+    public CodexAiService(SceneDao sceneDao, ChapterDao chapterDao, BookDao bookDao,
             CodexDao codexDao, CodexCategoryDao codexCategoryDao,
             AiCredentialDao credentialDao, ChapterSummaryDao chapterSummaryDao,
             Map<String, AiProvider> providers) {
-        this.sceneDao          = sceneDao;
-        this.chapterDao        = chapterDao;
-        this.codexDao          = codexDao;
-        this.codexCategoryDao  = codexCategoryDao;
-        this.credentialDao     = credentialDao;
+        this.sceneDao = sceneDao;
+        this.chapterDao = chapterDao;
+        this.bookDao = bookDao;
+        this.codexDao = codexDao;
+        this.codexCategoryDao = codexCategoryDao;
+        this.credentialDao = credentialDao;
         this.chapterSummaryDao = chapterSummaryDao;
-        this.providers         = providers;
+        this.providers = providers;
     }
 
     // =========================================================================
@@ -127,11 +142,12 @@ public class CodexAiService {
                         "not_found", "The entry's codex could not be found."));
 
         // ── Resolve category and schema ─────────────────────────────────────
-        String       categoryKey = chapter.getCodexCategory();
-        CodexCategory category   = resolveCategory(categoryKey);
-        CodexSchema  schema      = category != null ? category.getSchema() : null;
-        String categoryLabel = category != null && category.getLabel() != null
-                ? category.getLabel() : (categoryKey != null ? categoryKey : "Codex Entry");
+        String        categoryKey   = chapter.getCodexCategory();
+        CodexCategory category      = resolveCategory(categoryKey);
+        CodexSchema   schema        = category != null ? category.getSchema() : null;
+        String        categoryLabel = category != null && category.getLabel() != null
+                ? category.getLabel()
+                : (categoryKey != null ? categoryKey : "Codex Entry");
 
         // ── Resolve AI credential and provider ──────────────────────────────
         AiCredential credential = resolveCredential(userId, credentialId);
@@ -148,15 +164,19 @@ public class CodexAiService {
         }
 
         // ── Assemble manuscript context from chapter summaries ───────────────
-        UUID   bookId            = codex.getBookId();   // null for project-scoped codex
-        String manuscriptContext = assembleManuscriptContext(bookId, credential.getProvider());
+        // A codex is scoped to either one book or a whole project (series-wide).
+        // Book-scoped: summaries of that book. Project-scoped: summaries of every
+        // book in the project. (The previous version only handled book scope, so
+        // a project-scoped codex — the common case for series-wide characters —
+        // received no context and the model returned all-empty fields.)
+        String manuscriptContext = assembleManuscriptContext(codex, credential.getProvider());
 
-        if (bookId != null && manuscriptContext == null) {
-            // Book-scoped codex but no summaries exist — require them (per D7)
+        if (manuscriptContext == null) {
             throw new ReviewException(Status.BAD_REQUEST, "no_chapter_summaries",
-                    "Chapter summaries are required for AI codex fill. Please generate chapter "
-                    + "summaries for your manuscript chapters first (right-click a chapter → "
-                    + "Generate chapter summary).");
+                    "Chapter summaries are required for AI codex fill, and none were found for this "
+                            + (codex.getBookId() != null ? "book" : "project") + ". Please generate chapter "
+                            + "summaries for your manuscript chapters first (right-click a chapter → "
+                            + "Generate chapter summary), then try again.");
         }
 
         // ── Assemble pinned codex reference context ─────────────────────────
@@ -166,17 +186,19 @@ public class CodexAiService {
         // ── Build prompt ingredients ────────────────────────────────────────
         String schemaDescription = buildSchemaDescription(schema);
         String existingFields    = buildExistingFieldsText(schema, scene.getStructuredData());
-        String entryTitle = scene.getTitle() != null && !scene.getTitle().isBlank()
-                ? scene.getTitle().trim() : "Untitled";
+        String entryTitle        = scene.getTitle() != null && !scene.getTitle().isBlank()
+                ? scene.getTitle().trim()
+                : "Untitled";
 
         logger.debug("Codex AI fill context assembled: entryTitle={}, provider={}, model={}, "
-                + "schemaFields={}, manuscriptContextChars={}, referenceContextChars={}, "
+                + "codexScope={}, schemaFields={}, manuscriptContextChars={}, referenceContextChars={}, "
                 + "userGuidanceChars={}",
                 entryTitle, credential.getProvider(), model,
+                codex.getBookId() != null ? "BOOK" : "PROJECT",
                 schema != null && schema.getFields() != null ? schema.getFields().size() : 0,
-                manuscriptContext == null ? 0 : manuscriptContext.length(),
-                referenceContext == null  ? 0 : referenceContext.length(),
-                userGuidance == null      ? 0 : userGuidance.length());
+                manuscriptContext.length(),
+                referenceContext == null ? 0 : referenceContext.length(),
+                userGuidance == null ? 0 : userGuidance.length());
 
         CodexFillRequest req = new CodexFillRequest(
                 apiKey, model, entryTitle, categoryLabel,
@@ -202,33 +224,75 @@ public class CodexAiService {
     // =========================================================================
 
     /**
-     * Assembles chapter summaries for the given book in reading order. Returns
-     * null if the codex is project-scoped (no book) or if no summaries exist.
-     * Text is capped at {@link #MAX_MANUSCRIPT_CHARS}.
+     * Assembles chapter summaries as manuscript context, matching the codex's
+     * scope:
+     * <ul>
+     * <li>Book-scoped codex ({@code codex.bookId != null}): the summaries of
+     * that one book.</li>
+     * <li>Project-scoped codex ({@code codex.projectId != null}): the
+     * summaries of every book in the project, concatenated book by book
+     * under a book heading.</li>
+     * </ul>
+     * Returns null when no chapter has a summary in the relevant scope, so the
+     * caller can require the author to generate summaries first. Text is capped
+     * at {@link #MAX_MANUSCRIPT_CHARS}.
      */
-    private String assembleManuscriptContext(UUID bookId, String provider) throws SQLException {
-        if (bookId == null) return null;
-
-        List<ChapterSummaryDao.Row> rows =
-                chapterSummaryDao.bookChapterSummaries(bookId, provider);
-
+    private String assembleManuscriptContext(Codex codex, String provider) throws SQLException {
         StringBuilder sb = new StringBuilder();
+
+        if (codex.getBookId() != null) {
+            // Book-scoped codex — one book's summaries.
+            appendBookSummaries(sb, codex.getBookId(), null, provider);
+        } else if (codex.getProjectId() != null) {
+            // Project-scoped (series-wide) codex — every book in the project.
+            List<Book> books     = bookDao.findByProjectId(codex.getProjectId());
+            boolean    multiBook = books.size() > 1;
+            for (Book book : books) {
+                String bookHeading = multiBook
+                        ? (book.getTitle() != null && !book.getTitle().isBlank()
+                                ? book.getTitle().trim()
+                                : "Untitled Book")
+                        : null;
+                appendBookSummaries(sb, book.getId(), bookHeading, provider);
+            }
+        }
+
+        String result = sb.toString().strip();
+        if (result.isEmpty())
+            return null;
+
+        if (result.length() > MAX_MANUSCRIPT_CHARS) {
+            result = result.substring(0, MAX_MANUSCRIPT_CHARS) + "\n[Context truncated]";
+        }
+        return result;
+    }
+
+    /**
+     * Appends one book's chapter summaries (in reading order) to {@code sb}.
+     * When {@code bookHeading} is non-null (project-scoped, multi-book codex),
+     * a "## Book Title" heading precedes the chapters so the model can tell
+     * books apart. Chapters without a summary are skipped.
+     */
+    private void appendBookSummaries(StringBuilder sb, UUID bookId, String bookHeading,
+            String provider) throws SQLException {
+        List<ChapterSummaryDao.Row> rows = chapterSummaryDao.bookChapterSummaries(bookId, provider);
+
+        boolean wroteHeading = false;
         for (ChapterSummaryDao.Row row : rows) {
-            if (row.content() == null || row.content().isBlank()) continue;
+            if (row.content() == null || row.content().isBlank())
+                continue;
+
+            if (bookHeading != null && !wroteHeading) {
+                sb.append("## ").append(bookHeading).append("\n\n");
+                wroteHeading = true;
+            }
+
             String label = (row.title() != null && !row.title().isBlank())
                     ? "Chapter " + row.chapterNumber() + ": " + row.title()
                     : "Chapter " + row.chapterNumber();
             sb.append(label).append("\n");
             sb.append(htmlToPlainText(row.content())).append("\n\n");
         }
-
-        String result = sb.toString().strip();
-        if (result.isEmpty()) return null;
-
-        if (result.length() > MAX_MANUSCRIPT_CHARS) {
-            result = result.substring(0, MAX_MANUSCRIPT_CHARS) + "\n[Context truncated]";
-        }
-        return result;
     }
 
     /**
@@ -239,12 +303,14 @@ public class CodexAiService {
     private String assembleReferenceContext(UUID codexId, String excludedCategoryKey,
             String excludedTitle) throws SQLException {
         List<CodexDao.AiContextEntry> entries = codexDao.listPinnedAiContextEntries(codexId);
-        if (entries.isEmpty()) return null;
+        if (entries.isEmpty())
+            return null;
 
         // Pre-load schemas for structured field rendering
         Map<String, CodexSchema> schemaByKey = new HashMap<>();
         for (CodexCategory cat : codexCategoryDao.findAll()) {
-            if (cat.getSchema() != null) schemaByKey.put(cat.getCategoryKey(), cat.getSchema());
+            if (cat.getSchema() != null)
+                schemaByKey.put(cat.getCategoryKey(), cat.getSchema());
         }
 
         StringBuilder sb      = new StringBuilder();
@@ -260,21 +326,26 @@ public class CodexAiService {
 
             String structured = renderStructuredFields(schemaByKey.get(e.categoryKey()),
                     e.structuredData());
-            String plain = htmlToPlainText(e.content());
-            if (structured.isBlank() && plain.isBlank()) continue;
+            String plain      = htmlToPlainText(e.content());
+            if (structured.isBlank() && plain.isBlank())
+                continue;
 
             String cat = (e.categoryTitle() != null && !e.categoryTitle().isBlank())
-                    ? e.categoryTitle().trim() : "Codex";
+                    ? e.categoryTitle().trim()
+                    : "Codex";
             if (!cat.equals(lastCat)) {
                 sb.append("# ").append(cat).append("\n\n");
                 lastCat = cat;
             }
 
             String title = (e.title() != null && !e.title().isBlank())
-                    ? e.title().trim() : "Untitled";
+                    ? e.title().trim()
+                    : "Untitled";
             sb.append("=== ").append(title).append(" ===\n");
-            if (!structured.isBlank()) sb.append(structured).append("\n");
-            if (!plain.isBlank())      sb.append(plain).append("\n");
+            if (!structured.isBlank())
+                sb.append(structured).append("\n");
+            if (!plain.isBlank())
+                sb.append(plain).append("\n");
             sb.append("\n");
         }
 
@@ -289,16 +360,19 @@ public class CodexAiService {
         }
         Map<String, Object> values;
         try {
-            values = MAPPER.readValue(structuredJson, new TypeReference<Map<String, Object>>() {});
+            values = MAPPER.readValue(structuredJson, new TypeReference<Map<String, Object>>() {
+            });
         } catch (Exception e) {
             return "";
         }
         StringBuilder sb = new StringBuilder();
         for (CodexField field : schema.getFields()) {
-            if (!field.isFeedsAi()) continue;
+            if (!field.isFeedsAi())
+                continue;
             Object raw   = values.get(field.getKey());
             String value = raw == null ? "" : raw.toString().trim();
-            if (value.isEmpty()) continue;
+            if (value.isEmpty())
+                continue;
             String label = field.getLabel() != null ? field.getLabel() : field.getKey();
             sb.append(label).append(": ").append(value).append("\n");
         }
@@ -322,8 +396,8 @@ public class CodexAiService {
         sb.append("Structured fields to fill in (use the exact field key names in your JSON response):\n");
         for (CodexField field : schema.getFields()) {
             sb.append("- ").append(field.getKey())
-              .append(" (").append(field.getLabel() != null ? field.getLabel() : field.getKey())
-              .append("): ").append(field.getType());
+                    .append(" (").append(field.getLabel() != null ? field.getLabel() : field.getKey())
+                    .append("): ").append(field.getType());
             if ("SELECT".equals(field.getType())
                     && field.getOptions() != null && !field.getOptions().isEmpty()) {
                 sb.append(" — valid options: ").append(String.join(", ", field.getOptions()));
@@ -348,16 +422,19 @@ public class CodexAiService {
         }
         Map<String, Object> data;
         try {
-            data = MAPPER.readValue(structuredJson, new TypeReference<Map<String, Object>>() {});
+            data = MAPPER.readValue(structuredJson, new TypeReference<Map<String, Object>>() {
+            });
         } catch (Exception e) {
             return "none";
         }
         StringBuilder sb = new StringBuilder();
         for (CodexField field : schema.getFields()) {
             Object val = data.get(field.getKey());
-            if (val == null) continue;
+            if (val == null)
+                continue;
             String text = val.toString().trim();
-            if (text.isEmpty() || "_removedFields".equals(field.getKey())) continue;
+            if (text.isEmpty() || "_removedFields".equals(field.getKey()))
+                continue;
             String label = field.getLabel() != null ? field.getLabel() : field.getKey();
             sb.append(label).append(": ").append(text).append("\n");
         }
@@ -370,9 +447,11 @@ public class CodexAiService {
     // =========================================================================
 
     private CodexCategory resolveCategory(String categoryKey) throws SQLException {
-        if (categoryKey == null || categoryKey.isBlank()) return null;
+        if (categoryKey == null || categoryKey.isBlank())
+            return null;
         for (CodexCategory cat : codexCategoryDao.findAll()) {
-            if (categoryKey.equals(cat.getCategoryKey())) return cat;
+            if (categoryKey.equals(cat.getCategoryKey()))
+                return cat;
         }
         return null;
     }
@@ -389,12 +468,14 @@ public class CodexAiService {
     }
 
     private static String htmlToPlainText(String html) {
-        if (html == null || html.isBlank()) return "";
+        if (html == null || html.isBlank())
+            return "";
         Document      doc = Jsoup.parse(html);
         StringBuilder sb  = new StringBuilder();
         for (Element el : doc.body().select("p, h1, h2, h3, h4, blockquote, li")) {
             String text = el.text().trim();
-            if (!text.isEmpty()) sb.append(text).append("\n\n");
+            if (!text.isEmpty())
+                sb.append(text).append("\n\n");
         }
         String result = sb.toString().trim();
         return result.isEmpty() ? doc.text().trim() : result;
@@ -402,13 +483,15 @@ public class CodexAiService {
 
     private static String firstNonBlank(String... values) {
         for (String v : values) {
-            if (v != null && !v.isBlank()) return v.trim();
+            if (v != null && !v.isBlank())
+                return v.trim();
         }
         return "";
     }
 
     private static String blankToNull(String value) {
-        if (value == null) return null;
+        if (value == null)
+            return null;
         String t = value.trim();
         return t.isEmpty() ? null : t;
     }
