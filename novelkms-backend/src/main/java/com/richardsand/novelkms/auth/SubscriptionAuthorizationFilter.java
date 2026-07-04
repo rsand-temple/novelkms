@@ -11,7 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.richardsand.novelkms.NovelKmsConfig;
-import com.richardsand.novelkms.dao.UserSubscriptionDao;
+import com.richardsand.novelkms.dao.user.UserSubscriptionDao;
 import com.richardsand.novelkms.model.UserSubscription;
 
 import jakarta.annotation.Priority;

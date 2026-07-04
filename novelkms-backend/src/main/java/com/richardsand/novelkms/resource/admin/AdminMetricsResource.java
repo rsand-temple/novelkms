@@ -3,7 +3,7 @@ package com.richardsand.novelkms.resource.admin;
 import java.sql.SQLException;
 
 import com.richardsand.novelkms.auth.Roles;
-import com.richardsand.novelkms.dao.AdminMetricsDao;
+import com.richardsand.novelkms.dao.admin.AdminMetricsDao;
 import com.richardsand.novelkms.model.admin.AdminOverviewMetrics;
 
 import jakarta.annotation.security.RolesAllowed;

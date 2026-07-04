@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.AuthDao;
-import com.richardsand.novelkms.dao.UserSubscriptionDao;
+import com.richardsand.novelkms.dao.user.UserSubscriptionDao;
 import com.richardsand.novelkms.model.UserSubscription;
 import com.richardsand.novelkms.service.BillingService;
 

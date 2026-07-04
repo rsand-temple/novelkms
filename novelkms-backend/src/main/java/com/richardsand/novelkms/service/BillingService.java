@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.richardsand.novelkms.NovelKmsConfig;
-import com.richardsand.novelkms.dao.UserSubscriptionDao;
+import com.richardsand.novelkms.dao.user.UserSubscriptionDao;
 import com.richardsand.novelkms.model.UserSubscription;
 import com.stripe.Stripe;
 import com.stripe.model.checkout.Session;

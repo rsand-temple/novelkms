@@ -11,8 +11,8 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
-import com.richardsand.novelkms.dao.BookDao;
-import com.richardsand.novelkms.model.Book;
+import com.richardsand.novelkms.dao.book.BookDao;
+import com.richardsand.novelkms.model.book.Book;
 import com.richardsand.novelkms.service.TrashService;
 
 import jakarta.inject.Inject;

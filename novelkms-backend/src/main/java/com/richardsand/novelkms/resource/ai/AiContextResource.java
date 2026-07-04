@@ -11,10 +11,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.richardsand.novelkms.dao.ChapterDao;
-import com.richardsand.novelkms.dao.CodexDao;
 import com.richardsand.novelkms.dao.SceneDao;
-import com.richardsand.novelkms.model.Chapter;
+import com.richardsand.novelkms.dao.chapter.ChapterDao;
+import com.richardsand.novelkms.dao.codex.CodexDao;
+import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.AiReviewService.PinnedContextSummary;
 

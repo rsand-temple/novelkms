@@ -6,10 +6,10 @@ import java.util.UUID;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.richardsand.novelkms.dao.AdminAuditDao;
-import com.richardsand.novelkms.dao.AdminUserDao;
 import com.richardsand.novelkms.dao.AuthDao;
-import com.richardsand.novelkms.dao.UserSubscriptionDao;
+import com.richardsand.novelkms.dao.admin.AdminAuditDao;
+import com.richardsand.novelkms.dao.admin.AdminUserDao;
+import com.richardsand.novelkms.dao.user.UserSubscriptionDao;
 import com.richardsand.novelkms.model.UserSubscription;
 import com.richardsand.novelkms.model.admin.AdminBillingDetail;
 import com.richardsand.novelkms.model.admin.AdminUserDetail;

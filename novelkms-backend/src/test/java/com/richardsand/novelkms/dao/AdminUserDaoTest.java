@@ -16,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.richardsand.novelkms.auth.Roles;
+import com.richardsand.novelkms.dao.admin.AdminUserDao;
 import com.richardsand.novelkms.model.admin.AdminUserDetail;
 import com.richardsand.novelkms.model.admin.AdminUserSummary;
 

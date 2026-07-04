@@ -13,8 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.richardsand.novelkms.NovelKmsTestBase;
-import com.richardsand.novelkms.model.Book;
 import com.richardsand.novelkms.model.Project;
+import com.richardsand.novelkms.model.book.Book;
 
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;

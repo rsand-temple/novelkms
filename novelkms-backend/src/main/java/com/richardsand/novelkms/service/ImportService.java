@@ -24,15 +24,15 @@ import org.apache.poi.xwpf.usermodel.XWPFStyles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.richardsand.novelkms.dao.BookDao;
-import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.PartDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
-import com.richardsand.novelkms.model.Chapter;
+import com.richardsand.novelkms.dao.book.BookDao;
+import com.richardsand.novelkms.dao.chapter.ChapterDao;
 import com.richardsand.novelkms.model.Part;
 import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.Scene;
+import com.richardsand.novelkms.model.chapter.Chapter;
 
 public class ImportService {
 
@@ -110,7 +110,7 @@ public class ImportService {
             }
 
             // Create book — subtitle from cover page if detected (and not a byline)
-            com.richardsand.novelkms.model.Book book = bookDao.create(projectId, bookTitle, coverPage.subtitle, null, null);
+            com.richardsand.novelkms.model.book.Book book = bookDao.create(projectId, bookTitle, coverPage.subtitle, null, null);
             logger.info("DOCX import created book: projectId={}, bookId={}, title={}", projectId, book.getId(), bookTitle);
             result.bookId = book.getId();
             result.bookTitle = bookTitle;

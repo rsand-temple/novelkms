@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.EditorSettingsDao;
-import com.richardsand.novelkms.model.EditorSettingsDefinition;
+import com.richardsand.novelkms.model.editor.EditorSettingsDefinition;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;

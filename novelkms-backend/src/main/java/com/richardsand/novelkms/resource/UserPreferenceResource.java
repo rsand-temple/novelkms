@@ -6,7 +6,7 @@ import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
-import com.richardsand.novelkms.dao.UserPreferenceDao;
+import com.richardsand.novelkms.dao.user.UserPreferenceDao;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;

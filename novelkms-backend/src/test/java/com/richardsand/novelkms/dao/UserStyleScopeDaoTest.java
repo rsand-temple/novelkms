@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
+import com.richardsand.novelkms.dao.user.UserStyleDao;
 import com.richardsand.novelkms.model.AppUser;
 import com.richardsand.novelkms.model.Style;
 import com.richardsand.novelkms.model.StyleDefinition;

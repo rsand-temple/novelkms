@@ -19,10 +19,10 @@ import org.junit.jupiter.api.Test;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.richardsand.novelkms.NovelKmsTestBase;
-import com.richardsand.novelkms.dao.AdminAuditDao;
-import com.richardsand.novelkms.dao.AdminUserDao;
 import com.richardsand.novelkms.dao.AuthDao;
-import com.richardsand.novelkms.dao.UserSubscriptionDao;
+import com.richardsand.novelkms.dao.admin.AdminAuditDao;
+import com.richardsand.novelkms.dao.admin.AdminUserDao;
+import com.richardsand.novelkms.dao.user.UserSubscriptionDao;
 import com.richardsand.novelkms.model.AdminAuditLogEntry;
 import com.richardsand.novelkms.model.UserSubscription;
 

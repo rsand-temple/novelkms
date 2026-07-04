@@ -8,7 +8,7 @@ import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.ai.ReviewException;
 import com.richardsand.novelkms.auth.CurrentUser;
-import com.richardsand.novelkms.model.ChapterEditorial;
+import com.richardsand.novelkms.model.chapter.ChapterEditorial;
 import com.richardsand.novelkms.service.AiReviewService;
 
 import jakarta.inject.Inject;

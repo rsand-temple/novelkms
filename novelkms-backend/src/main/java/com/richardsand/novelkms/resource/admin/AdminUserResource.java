@@ -6,7 +6,7 @@ import java.util.UUID;
 
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.auth.Roles;
-import com.richardsand.novelkms.dao.AdminUserDao;
+import com.richardsand.novelkms.dao.admin.AdminUserDao;
 import com.richardsand.novelkms.model.admin.AdminUserDetail;
 import com.richardsand.novelkms.model.admin.AdminUserSummary;
 import com.richardsand.novelkms.model.admin.HardDeleteUserRequest;

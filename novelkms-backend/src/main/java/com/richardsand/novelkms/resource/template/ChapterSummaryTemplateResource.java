@@ -5,9 +5,9 @@ import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
-import com.richardsand.novelkms.dao.AiPromptTemplateDao;
-import com.richardsand.novelkms.dao.AiPromptTemplateDao.Resolved;
-import com.richardsand.novelkms.dao.AiPromptTemplateDao.TemplateType;
+import com.richardsand.novelkms.dao.ai.AiPromptTemplateDao;
+import com.richardsand.novelkms.dao.ai.AiPromptTemplateDao.Resolved;
+import com.richardsand.novelkms.dao.ai.AiPromptTemplateDao.TemplateType;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;

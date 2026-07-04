@@ -16,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.richardsand.novelkms.NovelKmsTestBase;
+import com.richardsand.novelkms.dao.user.UserSubscriptionDao;
 import com.richardsand.novelkms.model.UserSubscription;
 
 public class UserSubscriptionDaoTest extends NovelKmsTestBase {

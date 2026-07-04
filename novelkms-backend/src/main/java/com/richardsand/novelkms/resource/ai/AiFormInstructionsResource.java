@@ -5,8 +5,8 @@ import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
-import com.richardsand.novelkms.dao.AiFormInstructionsDao;
-import com.richardsand.novelkms.dao.AiFormInstructionsDao.Resolved;
+import com.richardsand.novelkms.dao.ai.AiFormInstructionsDao;
+import com.richardsand.novelkms.dao.ai.AiFormInstructionsDao.Resolved;
 import com.richardsand.novelkms.resource.EditorSettingsResource;
 
 import jakarta.inject.Inject;

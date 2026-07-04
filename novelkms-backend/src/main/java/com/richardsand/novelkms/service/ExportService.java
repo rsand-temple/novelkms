@@ -40,20 +40,20 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.STLineSpacingRule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.richardsand.novelkms.dao.BookDao;
 import com.richardsand.novelkms.dao.PageLayoutDao;
-import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.PartDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.TemplateDao;
-import com.richardsand.novelkms.model.Book;
+import com.richardsand.novelkms.dao.book.BookDao;
+import com.richardsand.novelkms.dao.chapter.ChapterDao;
 import com.richardsand.novelkms.model.PageLayout;
-import com.richardsand.novelkms.model.Chapter;
 import com.richardsand.novelkms.model.Part;
 import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.Scene;
 import com.richardsand.novelkms.model.Template;
+import com.richardsand.novelkms.model.book.Book;
+import com.richardsand.novelkms.model.chapter.Chapter;
 
 /**
  * Converts NovelKMS manuscript content (stored as TipTap HTML) into .docx

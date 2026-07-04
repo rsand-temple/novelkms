@@ -11,8 +11,8 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.ai.ReviewException;
 import com.richardsand.novelkms.auth.CurrentUser;
-import com.richardsand.novelkms.dao.AiReviewDao;
-import com.richardsand.novelkms.model.AiReview;
+import com.richardsand.novelkms.dao.ai.AiReviewDao;
+import com.richardsand.novelkms.model.ai.AiReview;
 import com.richardsand.novelkms.service.AiReviewService;
 import com.richardsand.novelkms.service.TrashService;
 

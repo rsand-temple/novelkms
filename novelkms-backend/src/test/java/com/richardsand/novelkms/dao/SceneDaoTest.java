@@ -15,10 +15,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.richardsand.novelkms.NovelKmsTestBase;
-import com.richardsand.novelkms.model.Book;
-import com.richardsand.novelkms.model.Chapter;
 import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.Scene;
+import com.richardsand.novelkms.model.book.Book;
+import com.richardsand.novelkms.model.chapter.Chapter;
 
 class SceneDaoTest extends NovelKmsTestBase {
 

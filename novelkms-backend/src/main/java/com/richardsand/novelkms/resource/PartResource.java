@@ -10,10 +10,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.PartDao;
-import com.richardsand.novelkms.model.Chapter;
+import com.richardsand.novelkms.dao.chapter.ChapterDao;
 import com.richardsand.novelkms.model.Part;
+import com.richardsand.novelkms.model.chapter.Chapter;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;

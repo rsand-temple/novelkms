@@ -8,8 +8,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.richardsand.novelkms.ai.AiProvider;
 import com.richardsand.novelkms.ai.WeatherInterpretationRequest;
 import com.richardsand.novelkms.ai.WeatherInterpretationResult;
-import com.richardsand.novelkms.dao.AiCredentialDao;
-import com.richardsand.novelkms.model.AiCredential;
+import com.richardsand.novelkms.dao.ai.AiCredentialDao;
+import com.richardsand.novelkms.model.ai.AiCredential;
 
 public class WeatherLookupService {
 

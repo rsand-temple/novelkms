@@ -10,7 +10,8 @@ import java.util.UUID;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 
-import com.richardsand.novelkms.model.ChapterMemoryTemplateDefaults;
+import com.richardsand.novelkms.dao.ai.AiFormInstructionsDao;
+import com.richardsand.novelkms.model.chapter.ChapterMemoryTemplateDefaults;
 
 /**
  * Storage and resolution for the <em>memory-document template</em> — the section

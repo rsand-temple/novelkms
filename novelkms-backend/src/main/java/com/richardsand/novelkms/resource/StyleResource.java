@@ -6,7 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
-import com.richardsand.novelkms.dao.UserStyleDao;
+import com.richardsand.novelkms.dao.user.UserStyleDao;
 import com.richardsand.novelkms.model.*;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;

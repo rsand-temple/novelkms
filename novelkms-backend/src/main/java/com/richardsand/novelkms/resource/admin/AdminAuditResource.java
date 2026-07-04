@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.richardsand.novelkms.auth.Roles;
-import com.richardsand.novelkms.dao.AdminAuditDao;
+import com.richardsand.novelkms.dao.admin.AdminAuditDao;
 import com.richardsand.novelkms.model.AdminAuditLogEntry;
 
 import jakarta.annotation.security.RolesAllowed;

@@ -9,12 +9,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.richardsand.novelkms.dao.ChapterDao;
-import com.richardsand.novelkms.dao.CodexCategoryDao;
-import com.richardsand.novelkms.dao.CodexDao;
-import com.richardsand.novelkms.model.Chapter;
-import com.richardsand.novelkms.model.Codex;
-import com.richardsand.novelkms.model.CodexCategory;
+import com.richardsand.novelkms.dao.chapter.ChapterDao;
+import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
+import com.richardsand.novelkms.dao.codex.CodexDao;
+import com.richardsand.novelkms.model.chapter.Chapter;
+import com.richardsand.novelkms.model.codex.Codex;
+import com.richardsand.novelkms.model.codex.CodexCategory;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;

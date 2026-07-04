@@ -12,9 +12,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.richardsand.novelkms.NovelKmsTestBase;
-import com.richardsand.novelkms.model.Book;
 import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.Template;
+import com.richardsand.novelkms.model.book.Book;
 
 class TemplateDaoTest extends NovelKmsTestBase {
 

@@ -26,9 +26,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.richardsand.novelkms.NovelKmsConfig;
-import com.richardsand.novelkms.dao.ArtifactBlobDao;
-import com.richardsand.novelkms.dao.ArtifactBlobDao.BlobRef;
-import com.richardsand.novelkms.dao.ArtifactNodeDao;
+import com.richardsand.novelkms.dao.artifact.ArtifactBlobDao;
+import com.richardsand.novelkms.dao.artifact.ArtifactNodeDao;
+import com.richardsand.novelkms.dao.artifact.ArtifactBlobDao.BlobRef;
 import com.richardsand.novelkms.model.ArtifactNode;
 
 /**

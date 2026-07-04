@@ -19,8 +19,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.richardsand.novelkms.NovelKmsConfig;
 import com.richardsand.novelkms.dao.StripeWebhookEventDao;
-import com.richardsand.novelkms.dao.UserSubscriptionDao;
-import com.richardsand.novelkms.dao.UserSubscriptionDao.StripeSubscriptionUpdate;
+import com.richardsand.novelkms.dao.user.UserSubscriptionDao;
+import com.richardsand.novelkms.dao.user.UserSubscriptionDao.StripeSubscriptionUpdate;
 import com.richardsand.novelkms.model.UserSubscription;
 
 import jakarta.inject.Inject;

@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.ai.AiProviderRegistry;
 import com.richardsand.novelkms.auth.CurrentUser;
-import com.richardsand.novelkms.dao.AiCredentialDao;
+import com.richardsand.novelkms.dao.ai.AiCredentialDao;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;

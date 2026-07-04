@@ -12,9 +12,10 @@ import java.util.UUID;
 import org.apache.commons.dbcp2.BasicDataSource;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.richardsand.novelkms.model.EditorSettings;
-import com.richardsand.novelkms.model.EditorSettingsDefaults;
-import com.richardsand.novelkms.model.EditorSettingsDefinition;
+import com.richardsand.novelkms.dao.user.UserStyleDao;
+import com.richardsand.novelkms.model.editor.EditorSettings;
+import com.richardsand.novelkms.model.editor.EditorSettingsDefaults;
+import com.richardsand.novelkms.model.editor.EditorSettingsDefinition;
 
 /**
  * Cascading document ("editor") settings: {@code BOOK -> PROJECT -> USER -> SYSTEM}.

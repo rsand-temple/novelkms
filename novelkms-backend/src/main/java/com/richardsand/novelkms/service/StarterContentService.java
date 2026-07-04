@@ -5,17 +5,17 @@ import java.sql.SQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.richardsand.novelkms.dao.BookDao;
-import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.PartDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
+import com.richardsand.novelkms.dao.book.BookDao;
+import com.richardsand.novelkms.dao.chapter.ChapterDao;
 import com.richardsand.novelkms.model.AppUser;
-import com.richardsand.novelkms.model.Book;
-import com.richardsand.novelkms.model.Chapter;
 import com.richardsand.novelkms.model.Part;
 import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.Scene;
+import com.richardsand.novelkms.model.book.Book;
+import com.richardsand.novelkms.model.chapter.Chapter;
 
 /**
  * Seeds a welcoming starter project hierarchy for a newly registered user so

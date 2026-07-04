@@ -20,14 +20,14 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.richardsand.novelkms.dao.ChapterDao;
-import com.richardsand.novelkms.dao.CodexCategoryDao;
 import com.richardsand.novelkms.dao.SceneDao;
-import com.richardsand.novelkms.model.Chapter;
-import com.richardsand.novelkms.model.CodexCategory;
-import com.richardsand.novelkms.model.CodexField;
-import com.richardsand.novelkms.model.CodexSchema;
+import com.richardsand.novelkms.dao.chapter.ChapterDao;
+import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
 import com.richardsand.novelkms.model.Scene;
+import com.richardsand.novelkms.model.chapter.Chapter;
+import com.richardsand.novelkms.model.codex.CodexCategory;
+import com.richardsand.novelkms.model.codex.CodexField;
+import com.richardsand.novelkms.model.codex.CodexSchema;
 
 /**
  * Exports individual codex entries to DOCX and imports them back, using a

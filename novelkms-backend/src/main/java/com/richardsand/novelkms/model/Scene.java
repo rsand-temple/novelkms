@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.richardsand.novelkms.model.codex.CodexCategory;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

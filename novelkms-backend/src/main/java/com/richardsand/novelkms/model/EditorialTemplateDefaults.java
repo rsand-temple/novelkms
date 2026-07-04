@@ -1,5 +1,8 @@
 package com.richardsand.novelkms.model;
 
+import com.richardsand.novelkms.model.ai.AiFormInstructionsDefaults;
+import com.richardsand.novelkms.model.chapter.ChapterMemoryTemplateDefaults;
+
 /**
  * Factory-default system prompt for chapter-editorial generation — the
  * developmental-editor persona the AI adopts when it gives its overall

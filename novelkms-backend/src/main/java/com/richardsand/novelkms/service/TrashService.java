@@ -12,20 +12,20 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.richardsand.novelkms.dao.ArtifactNodeDao;
-import com.richardsand.novelkms.dao.BookDao;
-import com.richardsand.novelkms.dao.ChapterDao;
 import com.richardsand.novelkms.dao.ProjectDao;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.TrashDao;
 import com.richardsand.novelkms.dao.TrashDao.ChapterParents;
 import com.richardsand.novelkms.dao.TrashDao.CodexOwner;
+import com.richardsand.novelkms.dao.artifact.ArtifactNodeDao;
+import com.richardsand.novelkms.dao.book.BookDao;
+import com.richardsand.novelkms.dao.chapter.ChapterDao;
 import com.richardsand.novelkms.model.ArtifactNode;
-import com.richardsand.novelkms.model.Book;
-import com.richardsand.novelkms.model.Chapter;
 import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.Scene;
 import com.richardsand.novelkms.model.TrashItem;
+import com.richardsand.novelkms.model.book.Book;
+import com.richardsand.novelkms.model.chapter.Chapter;
 
 /**
  * The per-user trash can. Deleting an entity soft-deletes it and records a
