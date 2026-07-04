@@ -1,4 +1,4 @@
-package com.richardsand.novelkms.resource;
+package com.richardsand.novelkms.resource.template;
 
 import java.sql.SQLException;
 import java.util.UUID;
@@ -24,24 +24,28 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
 
 /**
- * Chapter-summary prompt template editing. The author can override the system
+ * Book-summary prompt template editing. The author can override the system
  * default at three independent scopes over the non-editable system default.
  *
  * <p>Endpoints mirror {@link MemoryTemplateResource}:
  * <ul>
- *   <li>{@code GET|PUT|DELETE /chapter-summary-template/global}</li>
- *   <li>{@code GET|PUT|DELETE /projects/{id}/chapter-summary-template}</li>
- *   <li>{@code GET|PUT|DELETE /books/{id}/chapter-summary-template}</li>
+ *   <li>{@code GET|PUT|DELETE /book-summary-template/global}</li>
+ *   <li>{@code GET|PUT|DELETE /projects/{id}/book-summary-template}</li>
+ *   <li>{@code GET|PUT|DELETE /books/{id}/book-summary-template}</li>
  * </ul>
  * Each GET returns {@code { scope, content, hasOwnOverride }}. PUT requires
  * non-blank {@code content}. DELETE reverts to the next-most-specific value.
+ *
+ * <p>When a user-provided template is active, the word-count ceiling stated in
+ * that template governs; the provider uses the template verbatim. The system
+ * default states "no more than 1 000 words."
  */
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-public class ChapterSummaryTemplateResource {
+public class BookSummaryTemplateResource {
 
-    private static final TemplateType TYPE = TemplateType.CHAPTER_SUMMARY;
+    private static final TemplateType TYPE = TemplateType.BOOK_SUMMARY;
 
     private final AiPromptTemplateDao dao;
 
@@ -49,7 +53,7 @@ public class ChapterSummaryTemplateResource {
     ContainerRequestContext request;
 
     @Inject
-    public ChapterSummaryTemplateResource(AiPromptTemplateDao dao) {
+    public BookSummaryTemplateResource(AiPromptTemplateDao dao) {
         this.dao = dao;
     }
 
@@ -72,13 +76,13 @@ public class ChapterSummaryTemplateResource {
     // ── Global (user) ─────────────────────────────────────────────────────────
 
     @GET
-    @Path("/chapter-summary-template/global")
+    @Path("/book-summary-template/global")
     public Response getGlobal() {
         return run(() -> Response.ok(new View(dao.resolveGlobal(TYPE, userId()))).build());
     }
 
     @PUT
-    @Path("/chapter-summary-template/global")
+    @Path("/book-summary-template/global")
     public Response putGlobal(TemplateRequest body) {
         if (isBlank(body)) return blankError();
         return run(() -> {
@@ -88,7 +92,7 @@ public class ChapterSummaryTemplateResource {
     }
 
     @DELETE
-    @Path("/chapter-summary-template/global")
+    @Path("/book-summary-template/global")
     public Response deleteGlobal() {
         return run(() -> {
             dao.deleteGlobal(TYPE, userId());
@@ -99,13 +103,13 @@ public class ChapterSummaryTemplateResource {
     // ── Project override ──────────────────────────────────────────────────────
 
     @GET
-    @Path("/projects/{id}/chapter-summary-template")
+    @Path("/projects/{id}/book-summary-template")
     public Response getProject(@PathParam("id") UUID projectId) {
         return run(() -> Response.ok(new View(dao.resolveForProject(TYPE, userId(), projectId))).build());
     }
 
     @PUT
-    @Path("/projects/{id}/chapter-summary-template")
+    @Path("/projects/{id}/book-summary-template")
     public Response putProject(@PathParam("id") UUID projectId, TemplateRequest body) {
         if (isBlank(body)) return blankError();
         return run(() -> {
@@ -115,7 +119,7 @@ public class ChapterSummaryTemplateResource {
     }
 
     @DELETE
-    @Path("/projects/{id}/chapter-summary-template")
+    @Path("/projects/{id}/book-summary-template")
     public Response deleteProject(@PathParam("id") UUID projectId) {
         return run(() -> {
             dao.clearProject(TYPE, projectId);
@@ -126,13 +130,13 @@ public class ChapterSummaryTemplateResource {
     // ── Book override ─────────────────────────────────────────────────────────
 
     @GET
-    @Path("/books/{id}/chapter-summary-template")
+    @Path("/books/{id}/book-summary-template")
     public Response getBook(@PathParam("id") UUID bookId) {
         return run(() -> Response.ok(new View(dao.resolveForBook(TYPE, userId(), bookId))).build());
     }
 
     @PUT
-    @Path("/books/{id}/chapter-summary-template")
+    @Path("/books/{id}/book-summary-template")
     public Response putBook(@PathParam("id") UUID bookId, TemplateRequest body) {
         if (isBlank(body)) return blankError();
         return run(() -> {
@@ -142,7 +146,7 @@ public class ChapterSummaryTemplateResource {
     }
 
     @DELETE
-    @Path("/books/{id}/chapter-summary-template")
+    @Path("/books/{id}/book-summary-template")
     public Response deleteBook(@PathParam("id") UUID bookId) {
         return run(() -> {
             dao.clearBook(TYPE, bookId);

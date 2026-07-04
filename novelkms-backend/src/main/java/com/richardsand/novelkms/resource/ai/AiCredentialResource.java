@@ -1,4 +1,4 @@
-package com.richardsand.novelkms.resource;
+package com.richardsand.novelkms.resource.ai;
 
 import java.sql.SQLException;
 import java.util.Map;

@@ -1,13 +1,13 @@
-package com.richardsand.novelkms.resource;
+package com.richardsand.novelkms.resource.template;
 
 import java.sql.SQLException;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
-import com.richardsand.novelkms.dao.AiPromptTemplateDao;
-import com.richardsand.novelkms.dao.AiPromptTemplateDao.Resolved;
-import com.richardsand.novelkms.dao.AiPromptTemplateDao.TemplateType;
+import com.richardsand.novelkms.dao.MemoryTemplateDao;
+import com.richardsand.novelkms.dao.MemoryTemplateDao.Resolved;
+import com.richardsand.novelkms.resource.ai.AiFormInstructionsResource;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -24,51 +24,52 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
 
 /**
- * Book-summary prompt template editing. The author can override the system
- * default at three independent scopes over the non-editable system default.
+ * Memory-document template editing — the section structure the AI fills in when
+ * generating a chapter's memory document. The author can override it at three
+ * independent scopes over the non-editable system default.
  *
- * <p>Endpoints mirror {@link MemoryTemplateResource}:
+ * <p>Endpoints mirror {@link AiFormInstructionsResource}:
  * <ul>
- *   <li>{@code GET|PUT|DELETE /book-summary-template/global}</li>
- *   <li>{@code GET|PUT|DELETE /projects/{id}/book-summary-template}</li>
- *   <li>{@code GET|PUT|DELETE /books/{id}/book-summary-template}</li>
+ *   <li>{@code /memory-template/global} — the user global (USER -&gt; SYSTEM),
+ *       owned by the caller via {@link CurrentUser}.</li>
+ *   <li>{@code /projects/{id}/memory-template} — project override.</li>
+ *   <li>{@code /books/{id}/memory-template} — book override.</li>
  * </ul>
- * Each GET returns {@code { scope, content, hasOwnOverride }}. PUT requires
- * non-blank {@code content}. DELETE reverts to the next-most-specific value.
- *
- * <p>When a user-provided template is active, the word-count ceiling stated in
- * that template governs; the provider uses the template verbatim. The system
- * default states "no more than 1 000 words."
+ * The {@code projects/{id}} and {@code books/{id}} segments are authorized by the
+ * tenant filter. Each GET returns {@code scope}, {@code content}, and
+ * {@code hasOwnOverride}; PUT requires non-blank text; clearing an override is
+ * DELETE, which returns the value the scope now falls back to.
  */
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-public class BookSummaryTemplateResource {
+public class MemoryTemplateResource {
 
-    private static final TemplateType TYPE = TemplateType.BOOK_SUMMARY;
-
-    private final AiPromptTemplateDao dao;
+    private final MemoryTemplateDao dao;
 
     @Context
     ContainerRequestContext request;
 
     @Inject
-    public BookSummaryTemplateResource(AiPromptTemplateDao dao) {
+    public MemoryTemplateResource(MemoryTemplateDao dao) {
         this.dao = dao;
     }
 
+    /** Request body for PUT. */
     public static class TemplateRequest {
-        @JsonProperty public String content;
+        @JsonProperty
+        public String content;
     }
 
+    /** Response view returned by every endpoint. */
     public static class View {
         @JsonProperty public String  scope;
         @JsonProperty public String  content;
         @JsonProperty public boolean hasOwnOverride;
 
         View(Resolved r) {
-            this.scope          = r.scope();
-            this.content        = r.content();
+            this.scope = r.scope();
+            this.content = r.content();
             this.hasOwnOverride = r.hasOwnOverride();
         }
     }
@@ -76,87 +77,85 @@ public class BookSummaryTemplateResource {
     // ── Global (user) ─────────────────────────────────────────────────────────
 
     @GET
-    @Path("/book-summary-template/global")
+    @Path("/memory-template/global")
     public Response getGlobal() {
-        return run(() -> Response.ok(new View(dao.resolveGlobal(TYPE, userId()))).build());
+        return run(() -> Response.ok(new View(dao.resolveGlobal(CurrentUser.id(request)))).build());
     }
 
     @PUT
-    @Path("/book-summary-template/global")
+    @Path("/memory-template/global")
     public Response putGlobal(TemplateRequest body) {
         if (isBlank(body)) return blankError();
         return run(() -> {
-            dao.upsertGlobal(TYPE, userId(), body.content.trim());
-            return Response.ok(new View(dao.resolveGlobal(TYPE, userId()))).build();
+            dao.upsertGlobal(CurrentUser.id(request), body.content.trim());
+            return Response.ok(new View(dao.resolveGlobal(CurrentUser.id(request)))).build();
         });
     }
 
     @DELETE
-    @Path("/book-summary-template/global")
+    @Path("/memory-template/global")
     public Response deleteGlobal() {
         return run(() -> {
-            dao.deleteGlobal(TYPE, userId());
-            return Response.ok(new View(dao.resolveGlobal(TYPE, userId()))).build();
+            dao.deleteGlobal(CurrentUser.id(request));
+            return Response.ok(new View(dao.resolveGlobal(CurrentUser.id(request)))).build();
         });
     }
 
     // ── Project override ──────────────────────────────────────────────────────
 
     @GET
-    @Path("/projects/{id}/book-summary-template")
+    @Path("/projects/{id}/memory-template")
     public Response getProject(@PathParam("id") UUID projectId) {
-        return run(() -> Response.ok(new View(dao.resolveForProject(TYPE, userId(), projectId))).build());
+        return run(() -> Response.ok(new View(dao.resolveForProject(CurrentUser.id(request), projectId))).build());
     }
 
     @PUT
-    @Path("/projects/{id}/book-summary-template")
+    @Path("/projects/{id}/memory-template")
     public Response putProject(@PathParam("id") UUID projectId, TemplateRequest body) {
         if (isBlank(body)) return blankError();
         return run(() -> {
-            dao.setProject(TYPE, projectId, body.content.trim());
-            return Response.ok(new View(dao.resolveForProject(TYPE, userId(), projectId))).build();
+            dao.setProject(projectId, body.content.trim());
+            return Response.ok(new View(dao.resolveForProject(CurrentUser.id(request), projectId))).build();
         });
     }
 
     @DELETE
-    @Path("/projects/{id}/book-summary-template")
+    @Path("/projects/{id}/memory-template")
     public Response deleteProject(@PathParam("id") UUID projectId) {
         return run(() -> {
-            dao.clearProject(TYPE, projectId);
-            return Response.ok(new View(dao.resolveForProject(TYPE, userId(), projectId))).build();
+            dao.clearProject(projectId);
+            return Response.ok(new View(dao.resolveForProject(CurrentUser.id(request), projectId))).build();
         });
     }
 
     // ── Book override ─────────────────────────────────────────────────────────
 
     @GET
-    @Path("/books/{id}/book-summary-template")
+    @Path("/books/{id}/memory-template")
     public Response getBook(@PathParam("id") UUID bookId) {
-        return run(() -> Response.ok(new View(dao.resolveForBook(TYPE, userId(), bookId))).build());
+        return run(() -> Response.ok(new View(dao.resolveForBook(CurrentUser.id(request), bookId))).build());
     }
 
     @PUT
-    @Path("/books/{id}/book-summary-template")
+    @Path("/books/{id}/memory-template")
     public Response putBook(@PathParam("id") UUID bookId, TemplateRequest body) {
         if (isBlank(body)) return blankError();
         return run(() -> {
-            dao.setBook(TYPE, bookId, body.content.trim());
-            return Response.ok(new View(dao.resolveForBook(TYPE, userId(), bookId))).build();
+            dao.setBook(bookId, body.content.trim());
+            return Response.ok(new View(dao.resolveForBook(CurrentUser.id(request), bookId))).build();
         });
     }
 
     @DELETE
-    @Path("/books/{id}/book-summary-template")
+    @Path("/books/{id}/memory-template")
     public Response deleteBook(@PathParam("id") UUID bookId) {
         return run(() -> {
-            dao.clearBook(TYPE, bookId);
-            return Response.ok(new View(dao.resolveForBook(TYPE, userId(), bookId))).build();
+            dao.clearBook(bookId);
+            return Response.ok(new View(dao.resolveForBook(CurrentUser.id(request), bookId))).build();
         });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private UUID userId() { return CurrentUser.id(request); }
 
     private static boolean isBlank(TemplateRequest body) {
         return body == null || body.content == null || body.content.isBlank();

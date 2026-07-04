@@ -1,4 +1,4 @@
-package com.richardsand.novelkms.resource;
+package com.richardsand.novelkms.resource.codex;
 
 import java.io.InputStream;
 import java.sql.SQLException;

@@ -1,4 +1,4 @@
-package com.richardsand.novelkms.resource;
+package com.richardsand.novelkms.resource.codex;
 
 import java.sql.SQLException;
 import java.util.List;

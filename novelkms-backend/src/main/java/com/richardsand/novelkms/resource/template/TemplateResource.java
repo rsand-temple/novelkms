@@ -1,4 +1,4 @@
-package com.richardsand.novelkms.resource;
+package com.richardsand.novelkms.resource.template;
 
 import java.sql.SQLException;
 import java.util.UUID;

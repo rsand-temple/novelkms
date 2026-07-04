@@ -1,4 +1,4 @@
-package com.richardsand.novelkms.resource;
+package com.richardsand.novelkms.resource.ai;
 
 import java.sql.SQLException;
 import java.util.UUID;
@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.AiFormInstructionsDao;
 import com.richardsand.novelkms.dao.AiFormInstructionsDao.Resolved;
+import com.richardsand.novelkms.resource.EditorSettingsResource;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
