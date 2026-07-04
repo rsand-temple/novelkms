@@ -31,7 +31,20 @@ import { AI_PROVIDERS, AI_PROVIDER_MAP } from './aiProviders'
 const PROVIDERS = AI_PROVIDERS
 const PROVIDER_MAP = AI_PROVIDER_MAP
 
-const EMPTY_FORM = { id: null, provider: 'OPENAI', label: '', apiKey: '', defaultModel: '', makeDefault: false }
+const MASK_PREFIX = '••••'
+const EMPTY_FORM = {
+	id: null,
+	provider: 'OPENAI',
+	label: '',
+	apiKey: '',
+	apiKeyDirty: false,
+	defaultModel: '',
+	makeDefault: false,
+}
+
+function maskedKey(last4) {
+	return `${MASK_PREFIX}${last4 ?? '????'}`
+}
 
 function errMessage(err) {
 	const data = err?.response?.data
@@ -63,20 +76,49 @@ export default function AiCredentialsPanel() {
 
 	const providerMeta = form ? (PROVIDER_MAP[form.provider] ?? PROVIDERS[0]) : null
 
-	const startAdd = () => { setErrorMsg(null); setForm({ ...EMPTY_FORM }) }
+	const startAdd = () => {
+		setErrorMsg(null)
+		setForm({ ...EMPTY_FORM })
+	}
+
 	const startEdit = (c) => {
 		setErrorMsg(null)
-		setForm({ id: c.id, provider: c.provider, label: c.label ?? '', apiKey: '', defaultModel: c.defaultModel ?? '', makeDefault: false })
+		setForm({
+			id: c.id,
+			provider: c.provider,
+			label: c.label ?? '',
+			apiKey: maskedKey(c.keyLast4),
+			apiKeyDirty: false,
+			defaultModel: c.defaultModel ?? '',
+			makeDefault: false,
+		})
 	}
+
 	const cancelForm = () => { setErrorMsg(null); setForm(null) }
+
+	const handleApiKeyChange = (e) => {
+		setForm(f => ({
+			...f,
+			apiKey: e.target.value,
+			apiKeyDirty: true,
+		}))
+	}
 
 	const handleSave = () => {
 		setErrorMsg(null)
 		const label = form.label.trim() || 'Default'
 		const defaultModel = form.defaultModel.trim()
+
 		if (isEdit) {
 			updateCredential(
-				{ id: form.id, data: { label, apiKey: form.apiKey, defaultModel } },
+				{
+					id: form.id,
+					data: {
+						label,
+						apiKey: form.apiKeyDirty ? form.apiKey.trim() : '',
+						defaultModel,
+					},
+				},
 				{ onSuccess: () => setForm(null), onError: (e) => setErrorMsg(errMessage(e)) },
 			)
 		} else {
@@ -206,10 +248,12 @@ export default function AiCredentialsPanel() {
 
 					<TextField
 						label="API Key" type="password" value={form.apiKey}
-						onChange={(e) => setForm(f => ({ ...f, apiKey: e.target.value }))}
-						placeholder={isEdit ? 'Leave blank to keep current key' : (providerMeta?.keyPrefix ?? '…')}
+						onChange={handleApiKeyChange}
+						placeholder={isEdit ? maskedKey(null) : (providerMeta?.keyPrefix ?? '…')}
 						fullWidth size="small" sx={{ mb: 2 }}
-						helperText={isEdit ? 'Leave blank to keep the existing key.' : (providerMeta?.keyHelper ?? '')}
+						helperText={isEdit
+							? 'Leave the masked value unchanged to keep the existing key, or replace it with a new API key.'
+							: (providerMeta?.keyHelper ?? '')}
 						autoComplete="off"
 					/>
 

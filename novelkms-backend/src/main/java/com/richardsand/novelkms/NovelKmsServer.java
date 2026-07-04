@@ -3,7 +3,6 @@ package com.richardsand.novelkms;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.EnumSet;
-import java.util.Map;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.flywaydb.core.Flyway;
@@ -15,7 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.richardsand.novelkms.ai.AiProvider;
+import com.richardsand.novelkms.ai.AiProviderRegistry;
 import com.richardsand.novelkms.ai.impl.AnthropicProvider;
 import com.richardsand.novelkms.ai.impl.GeminiProvider;
 import com.richardsand.novelkms.ai.impl.OpenAiProvider;
@@ -259,13 +258,10 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         AiCredentialDao aiCredentialDao = new AiCredentialDao(ds, secretCipher);
 
         // AI Review Service — provider registry
-        OpenAiProvider          openAiProvider    = new OpenAiProvider();
-        AnthropicProvider       anthropicProvider = new AnthropicProvider();
-        GeminiProvider          geminiProvider    = new GeminiProvider();
-        Map<String, AiProvider> aiProviders       = Map.of(
-                openAiProvider.providerKey(), openAiProvider,
-                anthropicProvider.providerKey(), anthropicProvider,
-                geminiProvider.providerKey(), geminiProvider);
+        OpenAiProvider     openAiProvider     = new OpenAiProvider();
+        AnthropicProvider  anthropicProvider  = new AnthropicProvider();
+        GeminiProvider     geminiProvider     = new GeminiProvider();
+        AiProviderRegistry aiProviderRegistry = AiProviderRegistry.create(openAiProvider, anthropicProvider, geminiProvider);
 
         AiReviewService aiReviewService = new AiReviewService(
                 chapterDao, sceneDao, bookDao, aiCredentialDao, aiReviewDao,
@@ -273,12 +269,12 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 aiPromptTemplateDao,
                 chapterSummaryDao, bookSummaryDao,
                 chapterEditorialDao,
-                codexDao, codexCategoryDao, aiProviders);
+                codexDao, codexCategoryDao, aiProviderRegistry.getAiProviderMap());
 
         // Author utility tools
         CalendarToolsService calendarToolsService = new CalendarToolsService();
         WeatherLookupService weatherLookupService = new WeatherLookupService(
-                new OpenMeteoWeatherProvider(), aiCredentialDao, aiProviders);
+                new OpenMeteoWeatherProvider(), aiCredentialDao, aiProviderRegistry.getAiProviderMap());
 
         // Manage lifecycle
         env.lifecycle().manage(new Managed() {
@@ -356,9 +352,11 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(aiCredentialDao).to(AiCredentialDao.class);
                 bind(aiFormInstructionsDao).to(AiFormInstructionsDao.class);
                 bind(aiPromptTemplateDao).to(AiPromptTemplateDao.class);
+                bind(aiProviderRegistry).to(AiProviderRegistry.class);
                 bind(aiReviewDao).to(AiReviewDao.class);
                 bind(aiReviewService).to(AiReviewService.class);
                 bind(archiveDao).to(ArchiveDao.class);
+                bind(archiveService).to(ArchiveService.class);
                 bind(artifactNodeDao).to(ArtifactNodeDao.class);
                 bind(artifactBlobDao).to(ArtifactBlobDao.class);
                 bind(artifactStorage).to(ArtifactStorage.class);
@@ -378,7 +376,6 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(epubExportService).to(EpubExportService.class);
                 bind(exportService).to(ExportService.class);
                 bind(importService).to(ImportService.class);
-                bind(archiveService).to(ArchiveService.class);
                 bind(mapper).to(ObjectMapper.class);
                 bind(memoryTemplateDao).to(MemoryTemplateDao.class);
                 bind(oauthService).to(OAuthService.class);

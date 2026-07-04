@@ -25,8 +25,7 @@ import com.richardsand.novelkms.model.AiCredential;
  */
 public class AiCredentialDao {
 
-    private static final String SELECT_COLUMNS =
-            "id, user_id, provider, label, default_model, is_default, status, key_last4, created_at, updated_at";
+    private static final String SELECT_COLUMNS = "id, user_id, provider, label, default_model, is_default, status, key_last4, created_at, updated_at";
 
     private final DataSource   dataSource;
     private final SecretCipher cipher;
@@ -53,12 +52,13 @@ public class AiCredentialDao {
 
     public List<AiCredential> findByUser(UUID userId) throws SQLException {
         String sql = "SELECT " + SELECT_COLUMNS + " FROM ai_credential WHERE user_id = ? "
-                + "ORDER BY provider, is_default DESC, label";
+                + "ORDER BY is_default DESC, provider, label";
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 List<AiCredential> result = new ArrayList<>();
-                while (rs.next()) result.add(map(rs));
+                while (rs.next())
+                    result.add(map(rs));
                 return result;
             }
         }
@@ -76,9 +76,9 @@ public class AiCredentialDao {
     }
 
     /**
-     * Returns the user's default credential. v1 is single-provider, so at most
-     * one default exists; with multiple providers this returns whichever default
-     * was created most recently (the service may also resolve by explicit id).
+     * Returns the user's default active credential. Exactly one active credential
+     * should be marked default per user, regardless of provider. If legacy data has
+     * no marked default, this falls back to the newest active credential.
      */
     public Optional<AiCredential> findDefault(UUID userId) throws SQLException {
         String sql = "SELECT " + SELECT_COLUMNS + " FROM ai_credential "
@@ -98,7 +98,8 @@ public class AiCredentialDao {
             ps.setObject(1, id);
             ps.setObject(2, userId);
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return null;
+                if (!rs.next())
+                    return null;
                 return cipher.decrypt(rs.getString("api_key_encrypted"));
             }
         }
@@ -106,21 +107,23 @@ public class AiCredentialDao {
 
     /**
      * Creates a credential. If {@code makeDefault} is true, or this is the user's
-     * first credential for the provider, it becomes the default for that provider
-     * (clearing any sibling default).
+     * first active credential overall, it becomes the user's default credential.
+     *
+     * The default is global per user, not per provider.
      */
     public AiCredential create(UUID userId, String provider, String label, String apiKey,
-                               String defaultModel, boolean makeDefault) throws SQLException {
-        UUID id = UUID.randomUUID();
-        Instant now = Instant.now();
-        String encrypted = cipher.encrypt(apiKey);
-        String last4 = lastFour(apiKey);
+            String defaultModel, boolean makeDefault) throws SQLException {
+        UUID    id        = UUID.randomUUID();
+        Instant now       = Instant.now();
+        String  encrypted = cipher.encrypt(apiKey);
+        String  last4     = lastFour(apiKey);
 
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                boolean isDefault = makeDefault || !providerHasCredential(c, userId, provider);
-                if (isDefault) clearProviderDefault(c, userId, provider);
+                boolean isDefault = makeDefault || !userHasActiveCredential(c, userId);
+                if (isDefault)
+                    clearUserDefault(c, userId);
 
                 String sql = "INSERT INTO ai_credential "
                         + "(id, user_id, provider, label, api_key_encrypted, key_last4, default_model, "
@@ -139,6 +142,7 @@ public class AiCredentialDao {
                     ps.setTimestamp(10, Timestamp.from(now));
                     ps.executeUpdate();
                 }
+
                 c.commit();
             } catch (SQLException e) {
                 c.rollback();
@@ -147,16 +151,18 @@ public class AiCredentialDao {
                 c.setAutoCommit(true);
             }
         }
+
         return findById(id, userId).orElseThrow();
     }
 
     /**
-     * Updates a credential's label, default model, and (optionally) API key. When
-     * {@code apiKey} is null/blank the stored key is left untouched.
+     * Updates a credential's label, default model, and optionally API key. When
+     * {@code apiKey} is null/blank, the stored key is left untouched.
      */
     public Optional<AiCredential> update(UUID id, UUID userId, String label, String apiKey,
-                                         String defaultModel) throws SQLException {
+            String defaultModel) throws SQLException {
         Instant now = Instant.now();
+
         if (apiKey != null && !apiKey.isBlank()) {
             String sql = "UPDATE ai_credential SET label = ?, default_model = ?, "
                     + "api_key_encrypted = ?, key_last4 = ?, updated_at = ? WHERE id = ? AND user_id = ?";
@@ -182,26 +188,64 @@ public class AiCredentialDao {
                 ps.executeUpdate();
             }
         }
+
         return findById(id, userId);
     }
 
+    /**
+     * Deletes a credential. If the deleted credential was the user's default,
+     * promote the newest remaining active credential to default.
+     */
     public boolean delete(UUID id, UUID userId) throws SQLException {
-        String sql = "DELETE FROM ai_credential WHERE id = ? AND user_id = ?";
-        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setObject(1, id);
-            ps.setObject(2, userId);
-            return ps.executeUpdate() > 0;
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                boolean wasDefault;
+                try (PreparedStatement ps = c.prepareStatement(
+                        "SELECT is_default FROM ai_credential WHERE id = ? AND user_id = ?")) {
+                    ps.setObject(1, id);
+                    ps.setObject(2, userId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            c.rollback();
+                            return false;
+                        }
+                        wasDefault = rs.getBoolean("is_default");
+                    }
+                }
+
+                try (PreparedStatement ps = c.prepareStatement(
+                        "DELETE FROM ai_credential WHERE id = ? AND user_id = ?")) {
+                    ps.setObject(1, id);
+                    ps.setObject(2, userId);
+                    ps.executeUpdate();
+                }
+
+                if (wasDefault)
+                    promoteNewestActiveCredentialToDefault(c, userId);
+
+                c.commit();
+                return true;
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
         }
     }
 
-    /** Makes the given credential the default for its provider. */
+    /**
+     * Makes the given active credential the user's default credential.
+     *
+     * The default is global per user, not per provider.
+     */
     public Optional<AiCredential> setDefault(UUID id, UUID userId) throws SQLException {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                String provider;
                 try (PreparedStatement ps = c.prepareStatement(
-                        "SELECT provider FROM ai_credential WHERE id = ? AND user_id = ?")) {
+                        "SELECT 1 FROM ai_credential WHERE id = ? AND user_id = ? AND status = 'ACTIVE'")) {
                     ps.setObject(1, id);
                     ps.setObject(2, userId);
                     try (ResultSet rs = ps.executeQuery()) {
@@ -209,10 +253,11 @@ public class AiCredentialDao {
                             c.rollback();
                             return Optional.empty();
                         }
-                        provider = rs.getString("provider");
                     }
                 }
-                clearProviderDefault(c, userId, provider);
+
+                clearUserDefault(c, userId);
+
                 try (PreparedStatement ps = c.prepareStatement(
                         "UPDATE ai_credential SET is_default = TRUE, updated_at = ? WHERE id = ? AND user_id = ?")) {
                     ps.setTimestamp(1, Timestamp.from(Instant.now()));
@@ -220,6 +265,7 @@ public class AiCredentialDao {
                     ps.setObject(3, userId);
                     ps.executeUpdate();
                 }
+
                 c.commit();
             } catch (SQLException e) {
                 c.rollback();
@@ -228,33 +274,62 @@ public class AiCredentialDao {
                 c.setAutoCommit(true);
             }
         }
+
         return findById(id, userId);
     }
 
-    private boolean providerHasCredential(Connection c, UUID userId, String provider) throws SQLException {
+    private boolean userHasActiveCredential(Connection c, UUID userId) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(
-                "SELECT 1 FROM ai_credential WHERE user_id = ? AND provider = ?")) {
+                "SELECT 1 FROM ai_credential WHERE user_id = ? AND status = 'ACTIVE'")) {
             ps.setObject(1, userId);
-            ps.setString(2, provider);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
             }
         }
     }
 
-    private void clearProviderDefault(Connection c, UUID userId, String provider) throws SQLException {
+    private void clearUserDefault(Connection c, UUID userId) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(
-                "UPDATE ai_credential SET is_default = FALSE WHERE user_id = ? AND provider = ?")) {
+                "UPDATE ai_credential SET is_default = FALSE WHERE user_id = ?")) {
             ps.setObject(1, userId);
-            ps.setString(2, provider);
+            ps.executeUpdate();
+        }
+    }
+
+    private void promoteNewestActiveCredentialToDefault(Connection c, UUID userId) throws SQLException {
+        UUID replacementId = null;
+
+        try (PreparedStatement ps = c.prepareStatement(
+                "SELECT id FROM ai_credential "
+                        + "WHERE user_id = ? AND status = 'ACTIVE' "
+                        + "ORDER BY created_at DESC")) {
+            ps.setObject(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next())
+                    replacementId = rs.getObject("id", UUID.class);
+            }
+        }
+
+        if (replacementId == null)
+            return;
+
+        clearUserDefault(c, userId);
+
+        try (PreparedStatement ps = c.prepareStatement(
+                "UPDATE ai_credential SET is_default = TRUE, updated_at = ? WHERE id = ? AND user_id = ?")) {
+            ps.setTimestamp(1, Timestamp.from(Instant.now()));
+            ps.setObject(2, replacementId);
+            ps.setObject(3, userId);
             ps.executeUpdate();
         }
     }
 
     private static String lastFour(String key) {
-        if (key == null) return null;
+        if (key == null)
+            return null;
         String trimmed = key.trim();
-        if (trimmed.isEmpty()) return null;
+        if (trimmed.isEmpty())
+            return null;
         return trimmed.length() <= 4 ? trimmed : trimmed.substring(trimmed.length() - 4);
     }
 

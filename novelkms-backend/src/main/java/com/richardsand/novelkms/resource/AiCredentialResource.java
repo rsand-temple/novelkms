@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.richardsand.novelkms.ai.AiProviderRegistry;
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.AiCredentialDao;
 
@@ -41,7 +42,7 @@ public class AiCredentialResource {
     private static final Logger logger = LoggerFactory.getLogger(AiCredentialResource.class);
 
     /** Providers a credential may be stored for in v1. */
-    private static final Set<String> SUPPORTED_PROVIDERS = Set.of("OPENAI");
+    private final Set<String> providerKeyNames;
 
     private final AiCredentialDao dao;
 
@@ -49,8 +50,9 @@ public class AiCredentialResource {
     ContainerRequestContext request;
 
     @Inject
-    public AiCredentialResource(AiCredentialDao dao) {
+    public AiCredentialResource(AiCredentialDao dao, AiProviderRegistry aiProviderRegistry) {
         this.dao = dao;
+        this.providerKeyNames = aiProviderRegistry.getKeys();
     }
 
     public static class CreateRequest {
@@ -82,7 +84,7 @@ public class AiCredentialResource {
             return error(Status.BAD_REQUEST, "missing_api_key", "An API key is required.");
         }
         String provider = normalize(body.provider, "OPENAI");
-        if (!SUPPORTED_PROVIDERS.contains(provider)) {
+        if (!providerKeyNames.contains(provider)) {
             return error(Status.BAD_REQUEST, "unsupported_provider", "Provider " + provider + " is not supported yet.");
         }
         String label = isBlank(body.label) ? "Default" : body.label.trim();
