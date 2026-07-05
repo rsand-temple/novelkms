@@ -47,208 +47,215 @@ import jakarta.ws.rs.core.Response.Status;
 @Consumes(MediaType.APPLICATION_JSON)
 public class AiReviewResource {
 
-    private static final Logger logger = LoggerFactory.getLogger(AiReviewResource.class);
+	private static final Logger logger = LoggerFactory.getLogger(AiReviewResource.class);
 
-    private static final Set<String> VALID_STATUSES = Set.of(
-            "OPEN",
-            "DONE",
-            "DISMISSED",
-            "DEFERRED",
-            "DELETED",
-            "PROMOTED");
+	private static final Set<String> VALID_STATUSES = Set.of(
+			"OPEN",
+			"DONE",
+			"DISMISSED",
+			"DEFERRED",
+			"DELETED",
+			"PROMOTED");
 
-    private final AiReviewService service;
-    private final AiReviewDao     reviewDao;
-    private final TrashService    trashService;
+	private final AiReviewService service;
+	private final AiReviewDao     reviewDao;
+	private final TrashService    trashService;
 
-    @Context
-    ContainerRequestContext request;
+	@Context
+	ContainerRequestContext request;
 
-    @Inject
-    public AiReviewResource(AiReviewService service, AiReviewDao reviewDao, TrashService trashService) {
-        this.service = service;
-        this.reviewDao = reviewDao;
-        this.trashService = trashService;
-    }
+	@Inject
+	public AiReviewResource(AiReviewService service, AiReviewDao reviewDao, TrashService trashService) {
+		this.service = service;
+		this.reviewDao = reviewDao;
+		this.trashService = trashService;
+	}
 
-    public static class RunRequest {
-        @JsonProperty
-        public UUID   credentialId;
-        @JsonProperty
-        public String model;
-        /** Optional one-time author note for this run only; null/blank = none. */
-        @JsonProperty
-        public String userGuidance;
-        /**
-         * When true (the default when omitted), pinned Codex entries are folded
-         * into the review's reference context. The review rail sends false to
-         * skip pinned context for a single run without unpinning anything.
-         */
-        @JsonProperty
-        public Boolean includePinnedContext;
-    }
+	public static class RunRequest {
+		@JsonProperty
+		public UUID   credentialId;
+		@JsonProperty
+		public String model;
+		/** Optional one-time author note for this run only; null/blank = none. */
+		@JsonProperty
+		public String userGuidance;
+		/**
+		 * When true (the default when omitted), pinned Codex entries are folded
+		 * into the review's reference context. The review rail sends false to
+		 * skip pinned context for a single run without unpinning anything.
+		 */
+		@JsonProperty
+		public Boolean includePinnedContext;
+	}
 
-    public static class StatusRequest {
-        @JsonProperty
-        public String status;
-    }
+	public static class StatusRequest {
+		@JsonProperty
+		public String status;
+	}
 
-    public static class PromoteRequest {
-        @JsonProperty
-        public String codexCategory;
-        @JsonProperty
-        public String codexTitle;
-    }
+	public static class PromoteRequest {
+		@JsonProperty
+		public String codexCategory;
+		@JsonProperty
+		public String codexTitle;
+		/**
+		 * Author-edited version of the recommendation text. When non-blank,
+		 * this overrides the stored recommendation as the Codex entry body.
+		 */
+		@JsonProperty
+		public String codexNote;
+	}
 
-    @POST
-    @Path("/ai/reviews/chapters/{chapterId}")
-    public Response runChapterReview(@PathParam("chapterId") UUID chapterId, RunRequest body) {
-        logger.info("AiReviewResource.runChapterReview invoked: chapterId={}", chapterId);
-        UUID   userId       = CurrentUser.id(request);
-        UUID   credentialId = body == null ? null : body.credentialId;
-        String model        = body == null ? null : body.model;
-        String userGuidance = body == null ? null : body.userGuidance;
-        boolean includePinned = body == null || body.includePinnedContext == null || body.includePinnedContext;
-        try {
-            AiReview review = service.runChapterReview(userId, chapterId, credentialId, model, userGuidance, includePinned);
-            return Response.ok(review).build();
-        } catch (ReviewException e) {
-            logger.warn("Chapter AI review rejected for chapterId={}: status={} code={} message={}", chapterId, e.status(), e.code(), e.getMessage());
-            return Response.status(e.status())
-                    .entity(Map.of("error", e.code(), "message", e.getMessage()))
-                    .build();
-        } catch (SQLException e) {
-            logger.error("Database error running chapter AI review for chapterId={}: {}", chapterId, e.getMessage(), e);
-            return Response.serverError().entity(Map.of("error", "server_error")).build();
-        }
-    }
+	@POST
+	@Path("/ai/reviews/chapters/{chapterId}")
+	public Response runChapterReview(@PathParam("chapterId") UUID chapterId, RunRequest body) {
+		logger.info("AiReviewResource.runChapterReview invoked: chapterId={}", chapterId);
+		UUID   userId       = CurrentUser.id(request);
+		UUID   credentialId = body == null ? null : body.credentialId;
+		String model        = body == null ? null : body.model;
+		String userGuidance = body == null ? null : body.userGuidance;
+		boolean includePinned = body == null || body.includePinnedContext == null || body.includePinnedContext;
+		try {
+			AiReview review = service.runChapterReview(userId, chapterId, credentialId, model, userGuidance, includePinned);
+			return Response.ok(review).build();
+		} catch (ReviewException e) {
+			logger.warn("Chapter AI review rejected for chapterId={}: status={} code={} message={}", chapterId, e.status(), e.code(), e.getMessage());
+			return Response.status(e.status())
+					.entity(Map.of("error", e.code(), "message", e.getMessage()))
+					.build();
+		} catch (SQLException e) {
+			logger.error("Database error running chapter AI review for chapterId={}: {}", chapterId, e.getMessage(), e);
+			return Response.serverError().entity(Map.of("error", "server_error")).build();
+		}
+	}
 
-    @POST
-    @Path("/ai/reviews/scenes/{sceneId}")
-    public Response runSceneReview(@PathParam("sceneId") UUID sceneId, RunRequest body) {
-        logger.info("AiReviewResource.runSceneReview invoked: sceneId={}", sceneId);
-        UUID   userId       = CurrentUser.id(request);
-        UUID   credentialId = body == null ? null : body.credentialId;
-        String model        = body == null ? null : body.model;
-        String userGuidance = body == null ? null : body.userGuidance;
-        boolean includePinned = body == null || body.includePinnedContext == null || body.includePinnedContext;
-        try {
-            AiReview review = service.runSceneReview(userId, sceneId, credentialId, model, userGuidance, includePinned);
-            return Response.ok(review).build();
-        } catch (ReviewException e) {
-            logger.warn("Scene AI review rejected for sceneId={}: status={} code={} message={}", sceneId, e.status(), e.code(), e.getMessage());
-            return Response.status(e.status())
-                    .entity(Map.of("error", e.code(), "message", e.getMessage()))
-                    .build();
-        } catch (SQLException e) {
-            logger.error("Database error running scene AI review for sceneId={}: {}", sceneId, e.getMessage(), e);
-            return Response.serverError().entity(Map.of("error", "server_error")).build();
-        }
-    }
+	@POST
+	@Path("/ai/reviews/scenes/{sceneId}")
+	public Response runSceneReview(@PathParam("sceneId") UUID sceneId, RunRequest body) {
+		logger.info("AiReviewResource.runSceneReview invoked: sceneId={}", sceneId);
+		UUID   userId       = CurrentUser.id(request);
+		UUID   credentialId = body == null ? null : body.credentialId;
+		String model        = body == null ? null : body.model;
+		String userGuidance = body == null ? null : body.userGuidance;
+		boolean includePinned = body == null || body.includePinnedContext == null || body.includePinnedContext;
+		try {
+			AiReview review = service.runSceneReview(userId, sceneId, credentialId, model, userGuidance, includePinned);
+			return Response.ok(review).build();
+		} catch (ReviewException e) {
+			logger.warn("Scene AI review rejected for sceneId={}: status={} code={} message={}", sceneId, e.status(), e.code(), e.getMessage());
+			return Response.status(e.status())
+					.entity(Map.of("error", e.code(), "message", e.getMessage()))
+					.build();
+		} catch (SQLException e) {
+			logger.error("Database error running scene AI review for sceneId={}: {}", sceneId, e.getMessage(), e);
+			return Response.serverError().entity(Map.of("error", "server_error")).build();
+		}
+	}
 
-    @GET
-    @Path("/ai/reviews/{reviewId}")
-    public Response getReview(@PathParam("reviewId") UUID reviewId) {
-        logger.debug("AiReviewResource.getReview invoked: reviewId={}", reviewId);
-        return run(() -> reviewDao.findByIdForUser(reviewId, CurrentUser.id(request))
-                .map(review -> Response.ok(review).build())
-                .orElseGet(() -> noContent()));
-    }
+	@GET
+	@Path("/ai/reviews/{reviewId}")
+	public Response getReview(@PathParam("reviewId") UUID reviewId) {
+		logger.debug("AiReviewResource.getReview invoked: reviewId={}", reviewId);
+		return run(() -> reviewDao.findByIdForUser(reviewId, CurrentUser.id(request))
+				.map(review -> Response.ok(review).build())
+				.orElseGet(() -> noContent()));
+	}
 
-    /**
-     * Moves a whole review artifact to the per-user trash. Ownership is enforced
-     * by {@link TrashService} (the trash context query is scoped to the caller's
-     * user id), so this path does not rely on the tenant filter.
-     */
-    @DELETE
-    @Path("/ai/reviews/{reviewId}")
-    public Response deleteReview(@PathParam("reviewId") UUID reviewId) {
-        logger.info("AiReviewResource.deleteReview invoked: reviewId={}", reviewId);
-        return run(() -> trashService.trashReview(CurrentUser.id(request), reviewId).isPresent()
-                ? Response.noContent().build()
-                : noContent());
-    }
+	/**
+	 * Moves a whole review artifact to the per-user trash. Ownership is enforced
+	 * by {@link TrashService} (the trash context query is scoped to the caller's
+	 * user id), so this path does not rely on the tenant filter.
+	 */
+	@DELETE
+	@Path("/ai/reviews/{reviewId}")
+	public Response deleteReview(@PathParam("reviewId") UUID reviewId) {
+		logger.info("AiReviewResource.deleteReview invoked: reviewId={}", reviewId);
+		return run(() -> trashService.trashReview(CurrentUser.id(request), reviewId).isPresent()
+				? Response.noContent().build()
+				: noContent());
+	}
 
-    @POST
-    @Path("/ai/reviews/{reviewId}/recommendations/{recId}/promote")
-    public Response promoteRecommendation(@PathParam("reviewId") UUID reviewId,
-            @PathParam("recId") UUID recId,
-            PromoteRequest body) {
-        logger.info("AiReviewResource.promoteRecommendation invoked: reviewId={}, recId={}", reviewId, recId);
-        UUID userId = CurrentUser.id(request);
-        try {
-            AiReview review = service.promoteRecommendation(
-                    userId,
-                    reviewId,
-                    recId,
-                    body == null ? null : body.codexCategory,
-                    body == null ? null : body.codexTitle);
-            return Response.ok(review).build();
-        } catch (ReviewException e) {
-            logger.warn("AI recommendation promotion rejected for reviewId={}, recId={}: status={} code={} message={}", reviewId, recId, e.status(), e.code(), e.getMessage());
-            return Response.status(e.status())
-                    .entity(Map.of("error", e.code(), "message", e.getMessage()))
-                    .build();
-        } catch (SQLException e) {
-            logger.error("Database error promoting AI recommendation reviewId={}, recId={}: {}", reviewId, recId, e.getMessage(), e);
-            return Response.serverError().entity(Map.of("error", "server_error")).build();
-        }
-    }
+	@POST
+	@Path("/ai/reviews/{reviewId}/recommendations/{recId}/promote")
+	public Response promoteRecommendation(@PathParam("reviewId") UUID reviewId,
+			@PathParam("recId") UUID recId,
+			PromoteRequest body) {
+		logger.info("AiReviewResource.promoteRecommendation invoked: reviewId={}, recId={}", reviewId, recId);
+		UUID userId = CurrentUser.id(request);
+		try {
+			AiReview review = service.promoteRecommendation(
+					userId,
+					reviewId,
+					recId,
+					body == null ? null : body.codexCategory,
+					body == null ? null : body.codexTitle,
+					body == null ? null : body.codexNote);
+			return Response.ok(review).build();
+		} catch (ReviewException e) {
+			logger.warn("AI recommendation promotion rejected for reviewId={}, recId={}: status={} code={} message={}", reviewId, recId, e.status(), e.code(), e.getMessage());
+			return Response.status(e.status())
+					.entity(Map.of("error", e.code(), "message", e.getMessage()))
+					.build();
+		} catch (SQLException e) {
+			logger.error("Database error promoting AI recommendation reviewId={}, recId={}: {}", reviewId, recId, e.getMessage(), e);
+			return Response.serverError().entity(Map.of("error", "server_error")).build();
+		}
+	}
 
-    @GET
-    @Path("/chapters/{chapterId}/reviews")
-    public Response listForChapter(@PathParam("chapterId") UUID chapterId) {
-        logger.debug("AiReviewResource.listForChapter invoked: chapterId={}", chapterId);
-        return run(() -> Response.ok(reviewDao.findByChapter(chapterId)).build());
-    }
+	@GET
+	@Path("/chapters/{chapterId}/reviews")
+	public Response listForChapter(@PathParam("chapterId") UUID chapterId) {
+		logger.debug("AiReviewResource.listForChapter invoked: chapterId={}", chapterId);
+		return run(() -> Response.ok(reviewDao.findByChapter(chapterId)).build());
+	}
 
-    @PUT
-    @Path("/ai/reviews/{reviewId}/recommendations/{recId}")
-    public Response setRecommendationStatus(@PathParam("reviewId") UUID reviewId,
-            @PathParam("recId") UUID recId,
-            StatusRequest body) {
-        logger.info("AiReviewResource.setRecommendationStatus invoked: reviewId={}, recId={}, status={}", reviewId, recId, body == null ? null : body.status);
-        if (body == null || body.status == null) {
-            return error(Status.BAD_REQUEST, "bad_request", "A status is required.");
-        }
-        String status = body.status.trim().toUpperCase();
-        if (!VALID_STATUSES.contains(status)) {
-            return error(Status.BAD_REQUEST, "invalid_status",
-                    "status must be OPEN, DONE, DISMISSED, DEFERRED, DELETED, or PROMOTED.");
-        }
-        return run(() -> {
-            UUID userId = CurrentUser.id(request);
-            // Ownership: the review (and therefore its recommendations) must belong to the user.
-            if (reviewDao.findByIdForUser(reviewId, userId).isEmpty()) {
-                return noContent();
-            }
-            if (!reviewDao.updateRecommendationStatus(recId, reviewId, status)) {
-                return noContent();
-            }
-            return reviewDao.findByIdForUser(reviewId, userId)
-                    .map(review -> Response.ok(review).build())
-                    .orElseGet(() -> noContent());
-        });
-    }
+	@PUT
+	@Path("/ai/reviews/{reviewId}/recommendations/{recId}")
+	public Response setRecommendationStatus(@PathParam("reviewId") UUID reviewId,
+			@PathParam("recId") UUID recId,
+			StatusRequest body) {
+		logger.info("AiReviewResource.setRecommendationStatus invoked: reviewId={}, recId={}, status={}", reviewId, recId, body == null ? null : body.status);
+		if (body == null || body.status == null) {
+			return error(Status.BAD_REQUEST, "bad_request", "A status is required.");
+		}
+		String status = body.status.trim().toUpperCase();
+		if (!VALID_STATUSES.contains(status)) {
+			return error(Status.BAD_REQUEST, "invalid_status",
+					"status must be OPEN, DONE, DISMISSED, DEFERRED, DELETED, or PROMOTED.");
+		}
+		return run(() -> {
+			UUID userId = CurrentUser.id(request);
+			// Ownership: the review (and therefore its recommendations) must belong to the user.
+			if (reviewDao.findByIdForUser(reviewId, userId).isEmpty()) {
+				return noContent();
+			}
+			if (!reviewDao.updateRecommendationStatus(recId, reviewId, status)) {
+				return noContent();
+			}
+			return reviewDao.findByIdForUser(reviewId, userId)
+					.map(review -> Response.ok(review).build())
+					.orElseGet(() -> noContent());
+		});
+	}
 
-    private static Response noContent() {
-        return Response.status(Status.NO_CONTENT).build();
-    }
+	private static Response noContent() {
+		return Response.status(Status.NO_CONTENT).build();
+	}
 
-    private static Response error(Status status, String code, String message) {
-        return Response.status(status).entity(Map.of("error", code, "message", message)).build();
-    }
+	private static Response error(Status status, String code, String message) {
+		return Response.status(status).entity(Map.of("error", code, "message", message)).build();
+	}
 
-    private Response run(SqlCall call) {
-        try {
-            return call.call();
-        } catch (SQLException e) {
-            logger.error("Database error in AiReviewResource: {}", e.getMessage(), e);
-            return Response.serverError().entity(Map.of("error", "server_error")).build();
-        }
-    }
+	private Response run(SqlCall call) {
+		try {
+			return call.call();
+		} catch (SQLException e) {
+			logger.error("Database error in AiReviewResource: {}", e.getMessage(), e);
+			return Response.serverError().entity(Map.of("error", "server_error")).build();
+		}
+	}
 
-    private interface SqlCall {
-        Response call() throws SQLException;
-    }
+	private interface SqlCall {
+		Response call() throws SQLException;
+	}
 }

@@ -1,6 +1,39 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { codexEntryApi } from '../api/codexEntry'
 import { SCENE_KEYS } from './useScenes'
+
+// ── Cache keys ────────────────────────────────────────────────────────────────
+
+export const CODEX_ENTRY_KEYS = {
+	// Chapter list for the fill dialog; keyed per scene so different entries
+	// don't share cache even if they happen to be in the same codex.
+	chapters: (sceneId) => ['codexEntry', 'chapters', sceneId],
+}
+
+// ── Queries ───────────────────────────────────────────────────────────────────
+
+/**
+ * Fetches every manuscript chapter in the codex entry's scope (book or project)
+ * along with per-chapter summary status. Used by CodexFillDialog to populate
+ * the chapter-selection list.
+ *
+ * The query is only enabled when both `sceneId` is present and `enabled` is
+ * true (the dialog is open), so it does not fire before the dialog is opened.
+ * staleTime is 0 so the list is always fresh when the dialog mounts.
+ *
+ * @param {string}  sceneId - UUID of the codex entry scene
+ * @param {boolean} enabled - set to `open` state of the dialog
+ */
+export function useCodexChapters(sceneId, enabled = true) {
+	return useQuery({
+		queryKey: CODEX_ENTRY_KEYS.chapters(sceneId),
+		queryFn:  () => codexEntryApi.getCodexChapters(sceneId),
+		enabled:  !!sceneId && enabled,
+		staleTime: 0,
+	})
+}
+
+// ── Mutations ─────────────────────────────────────────────────────────────────
 
 /**
  * Triggers a browser download of the codex entry as a DOCX file.
@@ -10,7 +43,7 @@ import { SCENE_KEYS } from './useScenes'
  *   exportDocx.mutate({ sceneId, filename: 'Elena Vasquez.docx' })
  *
  * The `filename` prop is used as the download attribute on the anchor element.
- * Fall back to 'codex-entry.docx' if omitted.
+ * Falls back to 'codex-entry.docx' if omitted.
  */
 export const useExportCodexDocx = () => {
 	return useMutation({
@@ -62,18 +95,24 @@ export const useImportCodexDocx = () => {
  * Does NOT save automatically — the caller applies the result to component
  * state, which triggers the existing autosave debounce.
  *
- * Usage:
+ * Usage (from CodexFillDialog):
  *   const fillWithAi = useFillCodexWithAi()
- *   fillWithAi.mutate({ sceneId, credentialId: null, userGuidance: '...' })
+ *   fillWithAi.mutate({
+ *     sceneId,
+ *     credentialId: null,
+ *     userGuidance: '...',
+ *     selectedChapterIds: ['uuid-1', 'uuid-2'],
+ *   })
  *
  * onSuccess receives { fields: { key: value }, body: string, promptVersion }.
  */
 export const useFillCodexWithAi = () => {
 	return useMutation({
-		mutationFn: ({ sceneId, credentialId, userGuidance }) =>
+		mutationFn: ({ sceneId, credentialId, userGuidance, selectedChapterIds }) =>
 			codexEntryApi.fillWithAi(sceneId, {
-				credentialId: credentialId ?? null,
-				userGuidance: userGuidance ?? null,
+				credentialId:       credentialId       ?? null,
+				userGuidance:       userGuidance       ?? null,
+				selectedChapterIds: selectedChapterIds ?? null,
 			}),
 	})
 }

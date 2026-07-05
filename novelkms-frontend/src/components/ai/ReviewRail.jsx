@@ -271,12 +271,12 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, width =
 		setRecStatus({ reviewId, recId: rec.id, status: value ?? STATUS.OPEN, chapterId })
 	}
 
-	const handlePromote = (rec, codexCategory, codexTitle) => {
+	const handlePromote = (rec, codexCategory, codexTitle, codexNote) => {
 		const reviewId = rec._reviewId
 		if (!reviewId) return
 		setPromotingId(rec.id)
 		promote(
-			{ reviewId, recId: rec.id, codexCategory, codexTitle, chapterId },
+			{ reviewId, recId: rec.id, codexCategory, codexTitle, codexNote, chapterId },
 			{ onSettled: () => setPromotingId(null), onError: (e) => setRunError(errMessage(e)) },
 		)
 	}

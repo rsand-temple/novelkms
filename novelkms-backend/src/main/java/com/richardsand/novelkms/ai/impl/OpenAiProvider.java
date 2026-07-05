@@ -335,7 +335,7 @@ public class OpenAiProvider implements AiProvider {
                 - severity: exactly one of LOW, MEDIUM, or HIGH.
                 - location: a brief description of where in the %1$s the note applies.
                 - recommendation: the editorial note itself.
-                - codexCategory: exactly one of CHARACTER, VOICE, PLOT, WORLD, TIMELINE, CANON, NOTES — \
+                - codexCategory: exactly one of CANON, CHARACTER, VOICE, PLOT, WORLD, TIMELINE, NOTES — \
                   a suggestion for how the author could file this note in the project's knowledge base \
                   (the "codex") in one click. Use CANON for established facts, rules, or continuity \
                   points to lock in; CHARACTER for character facts/arcs; VOICE for how a character \

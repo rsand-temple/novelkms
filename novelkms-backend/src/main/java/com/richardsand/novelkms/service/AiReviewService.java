@@ -927,7 +927,8 @@ public class AiReviewService {
 
     public AiReview promoteRecommendation(UUID userId, UUID reviewId, UUID recId,
             String codexCategoryOverride,
-            String codexTitleOverride) throws SQLException {
+            String codexTitleOverride,
+            String codexNoteOverride) throws SQLException {
         AiReview review = reviewDao.findByIdForUser(reviewId, userId)
                 .orElseThrow(() -> new ReviewException(Status.NO_CONTENT));
 
@@ -952,13 +953,17 @@ public class AiReviewService {
             throw new ReviewException(Status.BAD_REQUEST, "no_project", "This review is not associated with a project.");
         }
 
+        // When the author edits the note text in the promotion dialog, use their
+        // version; otherwise fall back to the stored recommendation text.
+        String noteText  = (codexNoteOverride != null && !codexNoteOverride.isBlank())
+                ? codexNoteOverride.trim() : rec.getRecommendation();
         String category = resolveCodexCategory(firstNonBlank(codexCategoryOverride, rec.getCodexCategory()));
         String title    = firstNonBlank(
                 codexTitleOverride,
                 rec.getCodexTitle(),
-                truncate(rec.getRecommendation(), 80),
+                truncate(noteText, 80),
                 "Untitled");
-        String content  = "<p>" + escapeHtml(rec.getRecommendation()) + "</p>";
+        String content  = "<p>" + escapeHtml(noteText) + "</p>";
 
         Codex   codex           = getOrCreateProjectCodex(projectId);
         Chapter categoryChapter = getOrCreateCategoryChapter(codex.getId(), category);

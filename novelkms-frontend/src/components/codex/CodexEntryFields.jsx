@@ -22,12 +22,11 @@ import { useAiCredentials } from '../../hooks/useAiCredentials'
 import {
 	useExportCodexDocx,
 	useImportCodexDocx,
-	useFillCodexWithAi,
 } from '../../hooks/useCodexEntry'
+import CodexFillDialog from './CodexFillDialog'
 
 const SAVE_DEBOUNCE_MS = 600
 const REMOVED_KEY = '_removedFields'
-const MAX_GUIDANCE_CHARS = 1000
 
 /**
  * Parses the stored structured_data into a plain object. Accepts either the raw
@@ -67,6 +66,10 @@ function wouldOverwriteExisting(currentValues, incomingFields) {
  * An action row above the Details card provides Export to Word, Import from
  * Word, and Generate with AI buttons.
  *
+ * "Generate with AI" opens CodexFillDialog, which lets the author choose which
+ * chapters to use as context and optionally generate missing summaries in-place
+ * before submitting the fill request.
+ *
  * Authors can remove individual fields from a specific entry via the × button.
  * Removed field keys are tracked in a `_removedFields` array inside the same
  * structured_data object, so the removal is per-entry and persists. A "Show
@@ -97,21 +100,17 @@ export default function CodexEntryFields({
 	const timerRef            = useRef(null)
 	const saveStructured      = useSaveSceneStructured()
 
-	// ── AI Generate state ─────────────────────────────────────────────────────
-	const [guidanceOpen, setGuidanceOpen]           = useState(false)
-	const [guidance, setGuidance]                   = useState('')
+	// ── Dialog state ──────────────────────────────────────────────────────────
+	const [fillDialogOpen, setFillDialogOpen]       = useState(false)
 	const [confirmOpen, setConfirmOpen]             = useState(false)
 	const [pendingAiResult, setPendingAiResult]     = useState(null)
-	const [aiError, setAiError]                     = useState(null)
 
 	// ── Hooks ─────────────────────────────────────────────────────────────────
 	const { data: credentials } = useAiCredentials()
 	const aiEnabled = (credentials ?? []).some((c) => c.status === 'ACTIVE')
 
-	const exportDocx  = useExportCodexDocx()
-	const importDocx  = useImportCodexDocx()
-	const fillWithAi  = useFillCodexWithAi()
-
+	const exportDocx   = useExportCodexDocx()
+	const importDocx   = useImportCodexDocx()
 	const fileInputRef = useRef(null)
 
 	// ── Autosave ──────────────────────────────────────────────────────────────
@@ -218,13 +217,12 @@ export default function CodexEntryFields({
 		)
 	}
 
-	// ── AI Generate ───────────────────────────────────────────────────────────
+	// ── AI fill (result application) ──────────────────────────────────────────
 
-	const handleGenerateClick = () => {
-		setAiError(null)
-		setGuidanceOpen((prev) => !prev)
-	}
-
+	/**
+	 * Applies an AI fill result to the form. Called by handleApplyAiResult
+	 * after any overwrite confirmation.
+	 */
 	const applyAiResult = (result) => {
 		if (!result) return
 		// Merge AI fields on top of current values, preserving _removedFields etc.
@@ -246,26 +244,19 @@ export default function CodexEntryFields({
 		}
 	}
 
-	const runAiFill = () => {
-		setAiError(null)
-		fillWithAi.mutate(
-			{ sceneId, credentialId: null, userGuidance: guidance.trim() || null },
-			{
-				onSuccess: (result) => {
-					if (!result) return
-					if (wouldOverwriteExisting(valuesRef.current, result.fields)) {
-						setPendingAiResult(result)
-						setConfirmOpen(true)
-					} else {
-						applyAiResult(result)
-					}
-				},
-				onError: (err) => {
-					const serverMsg = err?.response?.data?.message
-					setAiError(serverMsg || 'AI generation failed. Check your AI settings and try again.')
-				},
-			}
-		)
+	/**
+	 * Receives the raw fill result from CodexFillDialog. Shows the overwrite
+	 * confirm dialog when the result would clobber existing non-empty field
+	 * values; otherwise applies directly.
+	 */
+	const handleApplyAiResult = (result) => {
+		if (!result) return
+		if (wouldOverwriteExisting(valuesRef.current, result.fields)) {
+			setPendingAiResult(result)
+			setConfirmOpen(true)
+		} else {
+			applyAiResult(result)
+		}
 	}
 
 	const handleConfirmReplace = () => {
@@ -361,7 +352,7 @@ export default function CodexEntryFields({
 
 				<Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
-				{/* Generate with AI */}
+				{/* Generate with AI — opens the chapter-selection dialog */}
 				<Tooltip
 					title={
 						aiEnabled
@@ -372,89 +363,17 @@ export default function CodexEntryFields({
 					<span>
 						<Button
 							size="small"
-							variant={guidanceOpen ? 'contained' : 'outlined'}
+							variant="outlined"
 							color="primary"
-							onClick={handleGenerateClick}
-							disabled={!aiEnabled || fillWithAi.isPending}
+							onClick={() => setFillDialogOpen(true)}
+							disabled={!aiEnabled}
 							sx={{ textTransform: 'none', minWidth: 140 }}
 						>
-							{fillWithAi.isPending ? (
-								<CircularProgress size={14} sx={{ mr: 0.75 }} />
-							) : null}
 							Generate with AI
 						</Button>
 					</span>
 				</Tooltip>
 			</Box>
-
-			{/* ── AI guidance field ────────────────────────────────────────── */}
-			{guidanceOpen && (
-				<Box
-					sx={{
-						maxWidth: '72ch',
-						mx: 'auto',
-						width: '100%',
-						mb: 2,
-						display: 'flex',
-						flexDirection: 'column',
-						gap: 1,
-					}}
-				>
-					<TextField
-						size="small"
-						fullWidth
-						multiline
-						minRows={2}
-						maxRows={5}
-						label="Guidance for this generation (optional)"
-						placeholder="e.g. Focus on her relationship with the antagonist; she switched sides in chapter 4."
-						value={guidance}
-						onChange={(e) => {
-							if (e.target.value.length <= MAX_GUIDANCE_CHARS) {
-								setGuidance(e.target.value)
-							}
-						}}
-						helperText={
-							guidance
-								? `${guidance.length}/${MAX_GUIDANCE_CHARS} — This note is used only for this generation and is not saved`
-								: 'Optional: steer this generation. Not saved permanently.'
-						}
-					/>
-					<Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-						<Button
-							size="small"
-							variant="contained"
-							color="primary"
-							onClick={runAiFill}
-							disabled={fillWithAi.isPending}
-							sx={{ textTransform: 'none' }}
-						>
-							{fillWithAi.isPending ? (
-								<>
-									<CircularProgress size={14} sx={{ mr: 0.75, color: 'inherit' }} />
-									Generating…
-								</>
-							) : (
-								'Generate'
-							)}
-						</Button>
-						{guidance && (
-							<Button
-								size="small"
-								onClick={() => setGuidance('')}
-								sx={{ textTransform: 'none', color: 'text.secondary' }}
-							>
-								Clear guidance
-							</Button>
-						)}
-					</Box>
-					{aiError && (
-						<Alert severity="error" onClose={() => setAiError(null)} sx={{ mt: 0.5 }}>
-							{aiError}
-						</Alert>
-					)}
-				</Box>
-			)}
 
 			{/* ── Import error feedback ─────────────────────────────────────── */}
 			{importDocx.isError && (
@@ -553,6 +472,14 @@ export default function CodexEntryFields({
 					)}
 				</Box>
 			)}
+
+			{/* ── Chapter-selection fill dialog ─────────────────────────────── */}
+			<CodexFillDialog
+				open={fillDialogOpen}
+				onClose={() => setFillDialogOpen(false)}
+				sceneId={sceneId}
+				onApply={handleApplyAiResult}
+			/>
 
 			{/* ── Overwrite confirm dialog ──────────────────────────────────── */}
 			<Dialog open={confirmOpen} onClose={handleCancelConfirm} maxWidth="xs" fullWidth>

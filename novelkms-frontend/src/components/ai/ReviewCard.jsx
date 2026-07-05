@@ -46,7 +46,7 @@ import {
  * Props:
  *   rec                  recommendation record
  *   onSetStatus(rec, s)  set lifecycle status (OPEN|DONE|DISMISSED|DEFERRED)
- *   onPromote(rec, cat, title)  promote to codex
+ *   onPromote(rec, cat, title, note)  promote to codex
  *   promoting            boolean — this card's promote is in flight
  *   onHighlight(anchorText) — scroll the editor to the quoted passage
  */
@@ -64,6 +64,7 @@ export default function ReviewCard({
 	const [addOpen, setAddOpen] = useState(false)
 	const [draftTitle, setDraftTitle] = useState(() => defaultTitle(rec))
 	const [draftCategory, setDraftCategory] = useState(initialCategory)
+	const [draftNote, setDraftNote] = useState('')
 	const [copied, setCopied] = useState(false)
 
 	const status = normalizeStatus(rec.status)
@@ -85,13 +86,15 @@ export default function ReviewCard({
 		closeMenu()
 		setDraftTitle(defaultTitle(rec))
 		setDraftCategory(initialCategory)
+		setDraftNote(rec.recommendation ?? '')
 		setAddOpen(true)
 	}
 
 	const confirmAdd = () => {
 		const title = draftTitle.trim() || defaultTitle(rec)
+		const note  = draftNote.trim()
 		setAddOpen(false)
-		onPromote(rec, draftCategory, title)
+		onPromote(rec, draftCategory, title, note)
 	}
 
 	const copyNote = async () => {
@@ -226,10 +229,16 @@ export default function ReviewCard({
 						))}
 					</TextField>
 
-					<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-						Finding
-					</Typography>
-					<Typography variant="body2">{rec.recommendation}</Typography>
+					<TextField
+						label="Finding"
+						fullWidth
+						size="small"
+						multiline
+						minRows={3}
+						maxRows={10}
+						value={draftNote}
+						onChange={(e) => setDraftNote(e.target.value)}
+					/>
 				</DialogContent>
 				<DialogActions>
 					<Button onClick={() => setAddOpen(false)}>Cancel</Button>
