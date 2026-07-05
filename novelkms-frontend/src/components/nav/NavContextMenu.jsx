@@ -221,7 +221,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const [manageContextCodexId, setManageContextCodexId] = useState(null)
 	const [manageContextTitle, setManageContextTitle] = useState('')
 
-	// Chapter memory document (nav "Generate / Edit memory document").
+	// Chapter memory document (nav "Generate / Clear memory document").
 	const { mutate: generateMemory, isPending: generatingMemory } = useGenerateChapterMemory()
 	const [memorySnack, setMemorySnack] = useState(null) // { severity, message } | null
 	const { data: chapterMemStatus = [] } = useChapterMemoryStatus(
@@ -280,8 +280,8 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				onSuccess: () => setMemorySnack({
 					severity: 'success',
 					message: next
-						? `“${node.title?.trim() || 'Entry'}” is now shared with the AI.`
-						: `“${node.title?.trim() || 'Entry'}” is no longer shared with the AI.`,
+						? `"${node.title?.trim() || 'Entry'}" is now shared with the AI.`
+						: `"${node.title?.trim() || 'Entry'}" is no longer shared with the AI.`,
 				}),
 				onError: (e) => setMemorySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Could not update AI context.' }),
 			},
@@ -317,11 +317,11 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	}
 
 	const doGenerateMemory = (node) => {
-		setMemorySnack({ severity: 'info', message: `Producing memory document for “${node.title?.trim() || 'chapter'}”…`, persist: true })
+		setMemorySnack({ severity: 'info', message: `Producing memory document for "${node.title?.trim() || 'chapter'}"…`, persist: true })
 		generateMemory(
 			{ chapterId: node.id, bookId: node.bookId, credentialId: defaultCredentialId },
 			{
-				onSuccess: () => setMemorySnack({ severity: 'success', message: `Memory document generated for “${node.title?.trim() || 'chapter'}”.`, persist: false }),
+				onSuccess: () => setMemorySnack({ severity: 'success', message: `Memory document generated for "${node.title?.trim() || 'chapter'}".`, persist: false }),
 				onError: (e) => setMemorySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.', persist: false }),
 			},
 		)
@@ -355,29 +355,10 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		clearMemory(
 			{ chapterId: node.id, bookId: node.bookId },
 			{
-				onSuccess: () => setMemorySnack({ severity: 'success', message: `Memory document cleared for “${node.title?.trim() || 'chapter'}”.` }),
+				onSuccess: () => setMemorySnack({ severity: 'success', message: `Memory document cleared for "${node.title?.trim() || 'chapter'}".` }),
 				onError: (e) => setMemorySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Clear failed.' }),
 			},
 		)
-	}
-
-	// "Edit memory document…" now selects the chapter's Memory leaf in the nav
-	// tree (opened for full rich-text editing in EditorPanel) instead of opening
-	// a standalone dialog — the dialog was removed once that nav node existed.
-	const openMemoryDocument = () => {
-		const node = menuNode
-		closeMenu()
-		if (!node) return
-		setSelection((prev) => ({
-			...prev,
-			bookId: node.bookId,
-			partId: node.partId ?? null,
-			chapterId: node.id,
-			sceneId: null,
-			codexId: null,
-			codexCategory: null,
-			aiDocType: 'memory',
-		}))
 	}
 
 	// ── Chapter & book summaries (nav) ─────────────────────────────────────────
@@ -399,32 +380,14 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		const node = menuNode
 		if (!node) return
 		closeMenu()
-		setSummarySnack({ severity: 'info', message: `Producing chapter summary for “${node.title?.trim() || 'chapter'}”…`, persist: true })
+		setSummarySnack({ severity: 'info', message: `Producing chapter summary for "${node.title?.trim() || 'chapter'}"…`, persist: true })
 		generateChapterSummary(
 			{ chapterId: node.id, bookId: node.bookId, credentialId: defaultCredentialId },
 			{
-				onSuccess: () => setSummarySnack({ severity: 'success', message: `Chapter summary generated for “${node.title?.trim() || 'chapter'}”.`, persist: false }),
+				onSuccess: () => setSummarySnack({ severity: 'success', message: `Chapter summary generated for "${node.title?.trim() || 'chapter'}".`, persist: false }),
 				onError: (e) => setSummarySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.', persist: false }),
 			},
 		)
-	}
-
-	// "Edit chapter summary…" now selects the chapter's Summary leaf in the nav
-	// tree, the same way openMemoryDocument does.
-	const openChapterSummaryDocument = () => {
-		const node = menuNode
-		closeMenu()
-		if (!node) return
-		setSelection((prev) => ({
-			...prev,
-			bookId: node.bookId,
-			partId: node.partId ?? null,
-			chapterId: node.id,
-			sceneId: null,
-			codexId: null,
-			codexCategory: null,
-			aiDocType: 'chapterSummary',
-		}))
 	}
 
 	const openBookSummaryDialog = () => {
@@ -462,7 +425,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		clearChapterSummary(
 			{ chapterId: node.id, bookId: node.bookId },
 			{
-				onSuccess: () => setSummarySnack({ severity: 'success', message: `Chapter summary cleared for “${node.title?.trim() || 'chapter'}”.` }),
+				onSuccess: () => setSummarySnack({ severity: 'success', message: `Chapter summary cleared for "${node.title?.trim() || 'chapter'}".` }),
 				onError: (e) => setSummarySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Clear failed.' }),
 			},
 		)
@@ -487,33 +450,14 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		const node = menuNode
 		if (!node) return
 		closeMenu()
-		setEditorialSnack({ severity: 'info', message: `Producing editorial for “${node.title?.trim() || 'chapter'}”…`, persist: true })
+		setEditorialSnack({ severity: 'info', message: `Producing editorial for "${node.title?.trim() || 'chapter'}"…`, persist: true })
 		generateEditorial(
 			{ chapterId: node.id, bookId: node.bookId, credentialId: defaultCredentialId },
 			{
-				onSuccess: () => setEditorialSnack({ severity: 'success', message: `Editorial generated for “${node.title?.trim() || 'chapter'}”.`, persist: false }),
+				onSuccess: () => setEditorialSnack({ severity: 'success', message: `Editorial generated for "${node.title?.trim() || 'chapter'}".`, persist: false }),
 				onError: (e) => setEditorialSnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Generation failed.', persist: false }),
 			},
 		)
-	}
-
-	// "Edit editorial…" selects the chapter's Editorial leaf in the nav tree
-	// (opened for full rich-text editing in EditorPanel), the same way
-	// openMemoryDocument / openChapterSummaryDocument do.
-	const openEditorialDocument = () => {
-		const node = menuNode
-		closeMenu()
-		if (!node) return
-		setSelection((prev) => ({
-			...prev,
-			bookId: node.bookId,
-			partId: node.partId ?? null,
-			chapterId: node.id,
-			sceneId: null,
-			codexId: null,
-			codexCategory: null,
-			aiDocType: 'editorial',
-		}))
 	}
 
 	const openClearEditorialConfirm = () => {
@@ -528,7 +472,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		clearEditorial(
 			{ chapterId: node.id, bookId: node.bookId },
 			{
-				onSuccess: () => setEditorialSnack({ severity: 'success', message: `Editorial cleared for “${node.title?.trim() || 'chapter'}”.` }),
+				onSuccess: () => setEditorialSnack({ severity: 'success', message: `Editorial cleared for "${node.title?.trim() || 'chapter'}".` }),
 				onError: (e) => setEditorialSnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Clear failed.' }),
 			},
 		)
@@ -868,9 +812,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
-				{/* AI Review — chapter and scene manuscript nodes only. Flat MenuItems
-				    (no Fragment children): MUI's Menu indexes direct children, and adjacent
-				    fragments can cross-wire a click to the wrong item. */}
+				{/* ── AI actions — chapter and scene manuscript nodes only ────────
+				    Divider here is the intentional boundary between structural
+				    actions (rename, reorder, add, export) and AI actions. Flat
+				    MenuItems only (no Fragment children): MUI's Menu indexes
+				    direct children, and adjacent fragments can cross-wire a
+				    click to the wrong item. */}
 				{isManuscriptNode && (reviewNodeType === 'chapter' || reviewNodeType === 'scene') && <Divider />}
 				{isManuscriptNode && (reviewNodeType === 'chapter' || reviewNodeType === 'scene') && (
 					<MenuItem
@@ -894,8 +841,9 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 						<ListItemText>Review history…</ListItemText>
 					</MenuItem>
 				)}
-
-				{/* Chapter memory document — chapter manuscript nodes only */}
+				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
+				{/* Memory document — Generate and Clear only; editing is via the
+				    Memory nav leaf in the editor panel. */}
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
 					<MenuItem
 						dense
@@ -904,15 +852,6 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					>
 						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Generate memory document</ListItemText>
-					</MenuItem>
-				)}
-				{isManuscriptNode && reviewNodeType === 'chapter' && (
-					<MenuItem
-						dense
-						onClick={openMemoryDocument}
-					>
-						<ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Edit memory document…</ListItemText>
 					</MenuItem>
 				)}
 				{isManuscriptNode && reviewNodeType === 'chapter' && menuChapterHasDoc && (
@@ -925,7 +864,8 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
-				{/* Chapter summary — chapter manuscript nodes only */}
+				{/* Chapter summary — Generate and Clear only; editing is via the
+				    Summary nav leaf in the editor panel. */}
 				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
 					<MenuItem
@@ -935,15 +875,6 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					>
 						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Generate chapter summary</ListItemText>
-					</MenuItem>
-				)}
-				{isManuscriptNode && reviewNodeType === 'chapter' && (
-					<MenuItem
-						dense
-						onClick={openChapterSummaryDocument}
-					>
-						<ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Edit chapter summary…</ListItemText>
 					</MenuItem>
 				)}
 				{isManuscriptNode && reviewNodeType === 'chapter' && menuChapterHasSummary && (
@@ -956,7 +887,8 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
-				{/* Chapter editorial — chapter manuscript nodes only */}
+				{/* Editorial — Generate and Clear only; editing is via the
+				    Editorial nav leaf in the editor panel. */}
 				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
 					<MenuItem
@@ -966,15 +898,6 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					>
 						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Generate editorial</ListItemText>
-					</MenuItem>
-				)}
-				{isManuscriptNode && reviewNodeType === 'chapter' && (
-					<MenuItem
-						dense
-						onClick={openEditorialDocument}
-					>
-						<ListItemIcon><DriveFileRenameOutlineIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Edit editorial…</ListItemText>
 					</MenuItem>
 				)}
 				{isManuscriptNode && reviewNodeType === 'chapter' && menuChapterHasEditorial && (
@@ -1120,7 +1043,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				flagged={gateFlagged}
 				bookId={gateNode?.bookId}
 				credentialId={defaultCredentialId}
-				title="Earlier chapters’ memory is missing or out of date"
+				title="Earlier chapters' memory is missing or out of date"
 				intro="Memory documents read best as a complete chain in book order."
 				proceedLabel="Generate anyway"
 				regenerateLabel="Regenerate earlier first"
@@ -1131,7 +1054,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				<DialogTitle>Clear memory document</DialogTitle>
 				<DialogContent>
 					<Typography variant="body2">
-						Delete the memory document for {clearNode?.title?.trim() ? `“${clearNode.title.trim()}”` : 'this chapter'}? You can generate a new one at any time.
+						Delete the memory document for {clearNode?.title?.trim() ? `"${clearNode.title.trim()}"` : 'this chapter'}? You can generate a new one at any time.
 					</Typography>
 				</DialogContent>
 				<DialogActions>
@@ -1174,7 +1097,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				<DialogTitle>Clear chapter summary</DialogTitle>
 				<DialogContent>
 					<Typography variant="body2">
-						Delete the summary for {clearSummaryNode?.title?.trim() ? `“${clearSummaryNode.title.trim()}”` : 'this chapter'}? You can generate a new one at any time.
+						Delete the summary for {clearSummaryNode?.title?.trim() ? `"${clearSummaryNode.title.trim()}"` : 'this chapter'}? You can generate a new one at any time.
 					</Typography>
 				</DialogContent>
 				<DialogActions>
@@ -1202,7 +1125,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				<DialogTitle>Clear editorial</DialogTitle>
 				<DialogContent>
 					<Typography variant="body2">
-						Delete the editorial for {clearEditorialNode?.title?.trim() ? `“${clearEditorialNode.title.trim()}”` : 'this chapter'}? You can generate a new one at any time.
+						Delete the editorial for {clearEditorialNode?.title?.trim() ? `"${clearEditorialNode.title.trim()}"` : 'this chapter'}? You can generate a new one at any time.
 					</Typography>
 				</DialogContent>
 				<DialogActions>
