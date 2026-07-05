@@ -399,8 +399,8 @@ export default function App() {
 		}
 	}, [setSelection])
 
-	const openSettings = () => {
-		setSettings({ open: true, tab: 'document' })
+	const openSettings = (tab = 'document') => {
+		setSettings({ open: true, tab })
 	}
 
 	const openContextSettings = () => {
