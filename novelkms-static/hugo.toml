@@ -1,3 +1,8 @@
-baseURL = 'https://example.org/'
-locale = 'en-us'
-title = 'My New Hugo Project'
+baseURL = 'https://novelkms.com/'
+languageCode = 'en-us'
+title = 'NovelKMS'
+
+enableRobotsTXT = true
+
+[params]
+  description = 'Novel writing and story knowledge management software for authors.'

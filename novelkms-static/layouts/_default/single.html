@@ -1,0 +1,19 @@
+{{ define "main" }}
+<article class="content-page">
+  <header class="content-header">
+    <p class="eyebrow">NovelKMS</p>
+    <h1>{{ .Title }}</h1>
+    {{ with .Description }}
+    <p class="lede">{{ . }}</p>
+    {{ end }}
+  </header>
+
+  <div class="prose">
+    {{ .Content }}
+  </div>
+</article>
+
+{{ if not (or (eq .RelPermalink "/privacy/") (eq .RelPermalink "/pricing/")) }}
+  {{ partial "cta.html" . }}
+{{ end }}
+{{ end }}

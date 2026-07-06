@@ -1,0 +1,39 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>{{ if .IsHome }}NovelKMS — Novel Writing and Story Knowledge Management{{ else }}{{ .Title }} — NovelKMS{{ end }}</title>
+
+{{ with .Description }}
+<meta name="description" content="{{ . }}">
+{{ else }}
+<meta name="description" content="NovelKMS helps fiction authors write long-form manuscripts while organizing characters, canon, timelines, summaries, AI review notes, imports, exports, and research.">
+{{ end }}
+
+<link rel="canonical" href="{{ .Permalink }}">
+
+<meta property="og:title" content="{{ if .IsHome }}NovelKMS — Novel Writing and Story Knowledge Management{{ else }}{{ .Title }} — NovelKMS{{ end }}">
+<meta property="og:description" content="{{ with .Description }}{{ . }}{{ else }}NovelKMS helps fiction authors write long-form manuscripts while organizing the story knowledge around them.{{ end }}">
+<meta property="og:type" content="{{ if .IsHome }}website{{ else }}article{{ end }}">
+<meta property="og:url" content="{{ .Permalink }}">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#0E1B31">
+
+{{ $css := resources.Get "css/main.css" | minify | fingerprint }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}">
+
+{{ if .IsHome }}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "NovelKMS",
+  "applicationCategory": "WritingApplication",
+  "operatingSystem": "Web",
+  "description": "NovelKMS is a novel writing and knowledge-management system for authors managing manuscripts, characters, canon, timelines, AI review notes, summaries, imports, and exports.",
+  "url": "{{ .Site.BaseURL }}"
+}
+</script>
+{{ end }}

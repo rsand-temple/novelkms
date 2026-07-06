@@ -1,7 +1,8 @@
----
-title: "NovelKMS"
-description: "Novel writing and story knowledge management software for authors."
----
++++
+title = "NovelKMS"
+description = "Novel writing and story knowledge management software for authors."
+draft = false
++++
 
 Write your story. Remember your world.
 

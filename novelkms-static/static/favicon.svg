@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 420" role="img" aria-labelledby="title desc">
+  <title id="title">NovelKMS favicon</title>
+  <desc id="desc">Open book with an N-shaped constellation above it.</desc>
+
+  <defs>
+    <linearGradient id="goldLine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E8D7A5"/>
+      <stop offset="100%" stop-color="#C9A85D"/>
+    </linearGradient>
+    <linearGradient id="navyDeep" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#10254A"/>
+      <stop offset="100%" stop-color="#091A36"/>
+    </linearGradient>
+    <radialGradient id="cloudFill" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#0E2B57" stop-opacity="0.97"/>
+      <stop offset="80%" stop-color="#0B2145" stop-opacity="0.88"/>
+      <stop offset="100%" stop-color="#0B2145" stop-opacity="0.00"/>
+    </radialGradient>
+    <filter id="softBlur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <style>
+      .brand-word { font-family: 'Cormorant Garamond', 'Source Serif 4', Georgia, serif; fill:#10254A; }
+      .tagline { font-family: 'Source Serif 4', Georgia, serif; font-style: italic; fill:#29497B; }
+      .gold { fill:url(#goldLine); stroke:url(#goldLine); }
+      .navy { fill:#0C2347; stroke:#0C2347; }
+      .cream { fill:#FBF7F0; stroke:#FBF7F0; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="460" height="420" rx="72" fill="#0A1730"/>
+  <rect x="18" y="18" width="424" height="384" rx="62" fill="#0D2244" opacity="0.92"/>
+  <g transform="translate(0,4)">
+
+  <!-- watercolor cloud -->
+  <g opacity="1">
+    <circle cx="154" cy="120" r="64" fill="#7E8CA8" opacity="0.50" filter="url(#softBlur)"/>
+    <circle cx="232" cy="90" r="62" fill="#7E8CA8" opacity="0.40" filter="url(#softBlur)"/>
+    <circle cx="286" cy="120" r="60" fill="#7E8CA8" opacity="0.48" filter="url(#softBlur)"/>
+    <circle cx="195" cy="170" r="88" fill="url(#cloudFill)"/>
+    <circle cx="262" cy="168" r="92" fill="url(#cloudFill)"/>
+    <circle cx="126" cy="186" r="58" fill="#8794AF" opacity="0.34" filter="url(#softBlur)"/>
+    <circle cx="328" cy="202" r="56" fill="#8794AF" opacity="0.34" filter="url(#softBlur)"/>
+  </g>
+
+  <!-- N constellation -->
+  <g stroke="url(#goldLine)" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <line x1="176" y1="66" x2="176" y2="258"/>
+    <line x1="286" y1="66" x2="286" y2="258"/>
+    <line x1="176" y1="66" x2="286" y2="258"/>
+  </g>
+  <g fill="url(#goldLine)">
+    <!-- main stars -->
+    <path d="M176 44 l6 16 17 6 -17 6 -6 16 -6-16 -17-6 17-6z"/>
+    <path d="M286 44 l4.5 12 12 4.5 -12 4.5 -4.5 12 -4.5-12 -12-4.5 12-4.5z"/>
+    <path d="M176 240 l4.5 12 12 4.5 -12 4.5 -4.5 12 -4.5-12 -12-4.5 12-4.5z"/>
+    <path d="M286 240 l6 16 17 6 -17 6 -6 16 -6-16 -17-6 17-6z"/>
+    <path d="M231 151 l7 19 20 7 -20 7 -7 19 -7-19 -20-7 20-7z"/>
+    <!-- nodes -->
+    <circle cx="176" cy="132" r="5.4"/>
+    <circle cx="176" cy="183" r="5.4"/>
+    <circle cx="286" cy="132" r="5.4"/>
+    <circle cx="286" cy="183" r="5.4"/>
+    <!-- ambient stars -->
+    <path d="M115 155 l3 8 8 3 -8 3 -3 8 -3-8 -8-3 8-3z" opacity="0.95"/>
+    <path d="M139 103 l2.2 6 6 2.2 -6 2.2 -2.2 6 -2.2-6 -6-2.2 6-2.2z" opacity="0.95"/>
+    <path d="M246 102 l3.2 9 9 3.2 -9 3.2 -3.2 9 -3.2-9 -9-3.2 9-3.2z" opacity="0.95"/>
+    <path d="M346 160 l3 8 8 3 -8 3 -3 8 -3-8 -8-3 8-3z" opacity="0.95"/>
+    <path d="M320 210 l2.5 7 7 2.5 -7 2.5 -2.5 7 -2.5-7 -7-2.5 7-2.5z" opacity="0.95"/>
+    <path d="M134 214 l2.5 7 7 2.5 -7 2.5 -2.5 7 -2.5-7 -7-2.5 7-2.5z" opacity="0.95"/>
+    <circle cx="216" cy="226" r="2.3" opacity="0.9"/>
+    <circle cx="271" cy="104" r="1.7" opacity="0.9"/>
+    <circle cx="248" cy="233" r="1.7" opacity="0.9"/>
+  </g>
+
+  <!-- open book -->
+  <g>
+    <path class="cream" stroke-width="2" d="M72 314 C126 297, 166 296, 220 316 C229 319, 238 325, 244 332 C208 322, 163 322, 72 330 Z"/>
+    <path class="cream" stroke-width="2" d="M390 314 C336 297, 296 296, 242 316 C233 319, 224 325, 218 332 C254 322, 299 322, 390 330 Z"/>
+    <path class="navy" stroke-width="5" fill="none" d="M72 330 C122 324, 166 323, 218 340"/>
+    <path class="navy" stroke-width="5" fill="none" d="M390 330 C340 324, 296 323, 244 340"/>
+    <path class="navy" stroke-width="4" fill="none" d="M84 299 C130 290, 172 291, 220 310"/>
+    <path class="navy" stroke-width="4" fill="none" d="M378 299 C332 290, 290 291, 242 310"/>
+    <path class="navy" stroke-width="3.6" fill="none" d="M95 285 C140 278, 180 279, 223 297"/>
+    <path class="navy" stroke-width="3.6" fill="none" d="M367 285 C322 278, 282 279, 239 297"/>
+    <path class="navy" stroke-width="3.2" fill="none" d="M106 273 C149 268, 188 269, 224 286"/>
+    <path class="navy" stroke-width="3.2" fill="none" d="M356 273 C313 268, 274 269, 238 286"/>
+    <path class="navy" stroke-width="3.2" fill="none" d="M117 262 C156 258, 192 259, 224 275"/>
+    <path class="navy" stroke-width="3.2" fill="none" d="M345 262 C306 258, 270 259, 238 275"/>
+    <path class="navy" stroke-width="3.6" d="M68 330 C118 327, 172 328, 232 349" fill="none"/>
+    <path class="navy" stroke-width="3.6" d="M394 330 C344 327, 290 328, 230 349" fill="none"/>
+    <path d="M228 349 C231 357, 241 357, 244 349" fill="none" stroke="#C9A85D" stroke-width="4" stroke-linecap="round"/>
+    <ellipse cx="236" cy="350" rx="25" ry="11" fill="#0C2347"/>
+  </g>
+
+  </g>
+</svg>
