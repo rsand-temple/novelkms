@@ -9,11 +9,24 @@ import { AuthProvider } from './auth/AuthProvider'
 import { HelpProvider, HelpCenter } from './help'
 import 'prosemirror-view/style/prosemirror.css'
 
-const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 1000 * 30, retry: (failureCount, error) => { const status = error?.response?.status; if (status && status < 500) return false; return failureCount < 1 } } } })
+const queryClient = new QueryClient({
+	defaultOptions: {
+		queries: {
+			staleTime: 1000 * 30,
+			retry: (failureCount, error) => {
+				const status = error?.response?.status
+				if (status && status < 500) return false
+				return failureCount < 1
+			}
+		}
+	}
+})
+
+const routerBasename = import.meta.env.VITE_APP_BASENAME || undefined
 
 ReactDOM.createRoot(document.getElementById('root')).render(
 	<React.StrictMode>
-		<BrowserRouter>
+		<BrowserRouter basename={routerBasename}>
 			<QueryClientProvider client={queryClient}>
 				<ThemeProvider theme={theme}>
 					<CssBaseline />
