@@ -79,7 +79,7 @@ notifications:
 
 auth:
   publicBaseUrl: {{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:8080', true)}}
-  frontendBaseUrl: {{NOVELKMS_FRONTEND_BASE_URL | d('http://localhost:3000', true)}}
+  frontendBaseUrl: {{NOVELKMS_FRONTEND_BASE_URL | d('http://localhost:3000/app', true)}}
   secureCookies: {{NOVELKMS_SECURE_COOKIES | d('false', true)}}
   sessionDays: 30
 
@@ -122,8 +122,8 @@ billing:
   stripeSecretKey: {{STRIPE_SECRET_KEY}}
   stripeWebhookSecret: {{STRIPE_WEBHOOK_SECRET}}
   stripePriceId: {{STRIPE_PRICE_ID}}
-  successUrl: "{{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:3000', true)}}/billing/success"
-  cancelUrl: "{{NOVELKMS_PUBLIC_BASE_URL | d('http://localhost:3000', true)}}/billing/cancel"
+  successUrl: "{{NOVELKMS_FRONTEND_BASE_URL | d('http://localhost:3000/app', true)}}/billing/success"
+  cancelUrl: "{{NOVELKMS_FRONTEND_BASE_URL | d('http://localhost:3000/app', true)}}/billing/cancel"
   enforceSubscriptions: true
 
 # Artifacts: per-project store for non-manuscript files (query letters, research,
