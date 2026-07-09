@@ -182,3 +182,99 @@ Phase 1 (V36) backend gave each AI doc family a provider dimension. Phase 2 surf
 **Codex-scope context.** A codex is scoped to one book (`Codex.bookId`) or one project (`Codex.projectId`). Context assembly matches: book-scoped → that book's chapter summaries; project-scoped → every book via `BookDao.findByProjectId(...)`, concatenated under `## Book Title` headings when multi-book. **Bug found and fixed same session:** the first implementation took only `bookId` and returned null for project-scoped codexes (the common case for series-wide characters), so the model received no manuscript context and returned all-empty fields. Fix: `assembleManuscriptContext(Codex, provider)` branches on scope. The `no_chapter_summaries` gate applies to both scopes and names whether it inspected the book or project. **Lesson:** when a feature reads "the manuscript" for a codex, mirror the `bookId`/`projectId` duality the `Codex` model encodes.
 
 **Frontend.** Action row at top of `CodexEntryFields`: Export to Word, Import from Word, Generate with AI. Generate expands inline guidance field. Overwrite confirmation dialog when AI would replace non-empty fields. `EditorPanel` passes `entryTitle` and `onBodyGenerated={(html) => editor?.commands.setContent(html, false)}` so AI body lands in the editor. New `api/codexEntry.js` + `hooks/useCodexEntry.js`.
+
+### Static marketing site and `/app` application split
+
+NovelKMS now separates the public marketing/documentation surface from the authenticated React application while preserving the single-container/single-JAR deployment model.
+
+**Routing model.**
+
+```text
+/                         Hugo static public site
+/faq/                     Hugo public page
+/privacy/                 Hugo public page
+/terms/                   Hugo public page
+/app/                     React/Vite SPA
+/app/billing/success      React route
+/app/billing/cancel       React route
+/app/admin                React route, authenticated/admin-gated
+/api/*                    Dropwizard/Jersey API
+```
+
+**Maven module model.**
+
+A fourth Maven module, `novelkms-static`, builds the Hugo site. The module packages Hugo output as classpath resources under `site/`. Generated Hugo output is not committed.
+
+The existing `novelkms-frontend` module continues to build the React/Vite app and package it under `webapp/`. The frontend production build uses:
+
+```env
+VITE_APP_BASENAME=/app
+```
+
+so Vite emits app assets under `/app/assets/...`.
+
+The `novelkms-distro` module depends on backend, frontend, and static modules. The final shaded JAR includes both:
+
+```text
+site/**
+webapp/**
+```
+
+The backend development placeholder resources for `site/**` and `webapp/**` are excluded from the shaded JAR so the generated Hugo and React resources are authoritative in the packaged distribution.
+
+**Dropwizard static serving.**
+
+Dropwizard registers two named asset bundles to avoid servlet-name collisions:
+
+```java
+bootstrap.addBundle(
+        new AssetsBundle(
+                "/site",
+                "/",
+                "index.html",
+                "site-assets"));
+
+bootstrap.addBundle(
+        new AssetsBundle(
+                "/webapp",
+                "/app/",
+                "index.html",
+                "app-assets"));
+```
+
+The prior root-mounted React bundle was replaced. The React app no longer owns `/`; it owns `/app/`.
+
+**SPA fallback.**
+
+The existing SPA fallback filter was updated rather than adding a second filter. It now only falls back to the React SPA for `/app` and `/app/*` browser routes. It leaves `/api/*` to Jersey and root/static paths to the Hugo site.
+
+The fallback behavior is:
+
+```text
+/api/*                 pass through
+/app                  forward to /app/index.html
+/app/                 forward to /app/index.html
+/app/* static asset   pass through to AssetsBundle
+/app/* route          forward to /app/index.html
+/*                    pass through to Hugo/static bundle
+```
+
+This allows direct navigation to React routes such as `/app/billing/success` while preventing the SPA from swallowing Hugo public pages.
+
+**React routing decision.**
+
+React Router is configured with `BrowserRouter basename="/app"` using `import.meta.env.VITE_APP_BASENAME`. Code that makes route decisions must use React Router’s `useLocation()` so routes are seen without the `/app` prefix. For example, `/app/billing/success` is seen inside React as `/billing/success`.
+
+Direct use of `window.location.pathname` for in-app route branching is incorrect because it includes `/app` and bypasses React Router basename handling.
+
+**Asset decision.**
+
+React-owned public assets live in `novelkms-frontend/public` and are referenced through `import.meta.env.BASE_URL`, for example:
+
+```jsx
+src={`${import.meta.env.BASE_URL}brand/novelkms-logo.png`}
+```
+
+Hugo-owned public assets live in `novelkms-static/static` and are served from root paths such as `/brand/...`.
+
+Small branding assets may be duplicated between `novelkms-static/static/brand` and `novelkms-frontend/public/brand` when both the public site and the React app need them. Generated output directories such as `novelkms-static/public/` and `novelkms-frontend/dist/` remain uncommitted.

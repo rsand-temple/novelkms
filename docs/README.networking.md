@@ -37,38 +37,100 @@ novelkms-container/
 └── caddy-config/
 ```
 
-## 2. Application Packaging
+## 2. Application packaging
 
-The NovelKMS distribution is a single shaded/uber JAR named `novelkms.jar`. The JAR contains both the Dropwizard backend and the compiled React frontend under the classpath directory `webapp/`.
+The NovelKMS distribution is a shaded/uber JAR named `novelkms.jar`. The JAR contains:
 
-Confirmed JAR entries include:
+- Dropwizard backend and Jersey API.
+- React/Vite authenticated application under `webapp/`.
+- Hugo-generated public static site under `site/`.
 
-```text
-webapp/index.html
-webapp/assets/index-*.js
+Runtime URL ownership:
+
+```
+https://novelkms.com/        -> Hugo static site
+https://novelkms.com/app/    -> React SPA
+https://novelkms.com/api/*   -> Dropwizard/Jersey API
 ```
 
-The application also requires an external `config.yaml`. The choice between H2 and PostgreSQL is controlled through the database section of that file.
+The Maven module split is:
 
-## 3. Frontend Serving
+```
+novelkms-backend   -> backend/API/server
+novelkms-frontend  -> React/Vite SPA, packaged as webapp/**
+novelkms-static    -> Hugo site, packaged as site/**
+novelkms-distro    -> shaded runnable JAR
+```
 
-Initially, Dropwizard returned `404` for `/` even though the React build was packaged into the JAR.
+Generated frontend and Hugo output are not committed. Maven builds them and merges them into the final distro JAR.
 
-The fix was to register Dropwizard's `AssetsBundle` in `NovelKmsServer.initialize()`:
+## 3. Frontend and static-site serving
 
-```java
+Dropwizard serves the public Hugo site and the React app as separate static bundles:
+
+```
 bootstrap.addBundle(
-    new AssetsBundle(
-        "/webapp",
-        "/",
-        "index.html"
-    )
-);
+        new AssetsBundle(
+                "/site",
+                "/",
+                "index.html",
+                "site-assets"));
+
+bootstrap.addBundle(
+        new AssetsBundle(
+                "/webapp",
+                "/app/",
+                "index.html",
+                "app-assets"));
 ```
 
-After rebuilding the uber-JAR, the React frontend became available directly from `http://media:8080/` and later through the public HTTPS endpoint.
+The two bundles must use unique names. Using the default `assets` name for both causes a servlet-name collision.
 
-## 4. Application Container
+The React app is built with:
+
+```
+VITE_APP_BASENAME=/app
+```
+
+so production asset paths are emitted as:
+
+```
+/app/assets/...
+```
+
+The SPA fallback filter is scoped to `/app` routes. It must not swallow `/`, `/faq/`, `/privacy/`, `/terms/`, or other Hugo-owned public paths.
+
+Expected route behavior:
+
+```
+/                         Hugo
+/faq/                     Hugo
+/privacy/                 Hugo
+/terms/                   Hugo
+/app/                     React
+/app/billing/success      React via SPA fallback
+/app/billing/cancel       React via SPA fallback
+/app/admin                React via SPA fallback
+/api/auth/status          API
+```
+
+## 4. OAuth checklist update
+
+When deploying the `/app` split, keep OAuth provider callback URLs under `/api`:
+
+```
+https://novelkms.com/api/auth/{provider}/callback
+```
+
+But configure the frontend landing/base URL as:
+
+```
+https://novelkms.com/app
+```
+
+If the canonical domain changes, update both the application config and each OAuth provider console.
+
+## 5. Application Container
 
 The NovelKMS image is built from this Containerfile:
 
@@ -109,7 +171,7 @@ podman run \
 
 The `:Z` suffix is required on Fedora so SELinux permits the container to access the mounted files and directories.
 
-## 5. Configuration and Secrets
+## 6. Configuration and Secrets
 
 Secrets were not moved into `config.yaml`. Instead, configuration placeholders continue to use Dropwizard environment substitution, and secret/environment-specific values are stored in `novelkms.env`.
 
@@ -138,34 +200,22 @@ https://novelkms.richardsand.com/api/auth/google/callback
 
 That exact URI was added to the Google OAuth client's authorized redirect URIs.
 
-## 6. H2 Persistence
+## 7. PostgreSQL Persistence
 
-For the initial deployment, NovelKMS is still using H2.
-
-The H2 JDBC path inside the container points into `/data`, for example:
+NovelKMS production is using PostgreSQL, which runs in its own pod.
 
 ```yaml
 database:
-  url: jdbc:h2:file:/data/novelkms
+  url: jdbc:postgresql://novelkms-postgres:5432/novelkmsdb
 ```
 
-The host directory `/home/rsand/novelkms-container/data` is mounted into the container at `/data`. This allows the H2 database to survive container deletion and image replacement.
 
-The container is disposable; the database files are not.
 
-## 7. Dynamic DNS
+## 8. Dynamic DNS
 
-DuckDNS is being used as the dynamic DNS provider. A CNAME record was created so that:
+Cloudflare tunneling is used to route in novelkms.com
 
-```text
-novelkms.richardsand.com
-```
-
-points to the DuckDNS hostname. This allows users and OAuth providers to use the custom domain while DuckDNS tracks changes to the FiOS public IPv4 address.
-
-The public IP observed during setup was `100.14.78.20`. That address is dynamic and should not be hardcoded as a permanent endpoint.
-
-## 8. Home Network Topology
+## 9. Home Network Topology
 
 The home network has two routing layers:
 
@@ -185,41 +235,7 @@ Media server
 
 The media server is physically connected to an Eero mesh device, while the gateway Eero is connected to the Verizon router. This creates double NAT.
 
-The Verizon router cannot forward directly to `192.168.5.50`, because that address exists behind the Eero router.
-
-## 9. Port Forwarding
-
-The working forwarding chain is:
-
-```text
-Public TCP 443
-    |
-Verizon router
-    | forwards to 192.168.1.157:8443
-    |
-Gateway Eero
-    | forwards TCP 8443
-    |
-Media server 192.168.5.50:8443
-    |
-Caddy container port 443
-```
-
-### Verizon FiOS router
-
-```text
-External TCP 443
-→ Eero WAN IP 192.168.1.157
-→ destination port 8443
-```
-
-### Eero
-
-```text
-External TCP 8443
-→ media server 192.168.5.50
-→ destination port 8443
-```
+Port forwarding is no longer needed because we are using Cloudflare tunneling.
 
 ### Podman/Caddy
 
@@ -231,7 +247,7 @@ Fedora host port 8443
 Users do not include port `8443` in the URL. They use standard HTTPS:
 
 ```text
-https://novelkms.richardsand.com
+https://novelkms.com
 ```
 
 ## 10. Fedora Firewall
@@ -252,14 +268,18 @@ Caddy is running in a separate container and terminates HTTPS.
 The Caddyfile is:
 
 ```caddyfile
-novelkms.richardsand.com {
-    reverse_proxy host.containers.internal:8080
+novelkms.com {
+    reverse_proxy novelkms:8080
+}
+
+www.novelkms.com, novelkms.richardsand.com {
+    redir https://novelkms.com{uri} permanent
 }
 ```
 
 Caddy forwards requests to NovelKMS through the Fedora host's published port 8080.
 
-The container has been run manually with:
+The container can be run manually with:
 
 ```bash
 podman run \
@@ -276,115 +296,24 @@ Persistent Caddy state is stored in `caddy-data/` and `caddy-config/`. The `cadd
 
 Caddy successfully obtained and now serves a trusted public certificate for `novelkms.richardsand.com`.
 
-## 12. VPN Routing Problem Encountered
-
-Certificate issuance initially failed even after the double-NAT port forwarding was corrected.
-
-Packet capture showed inbound connections arriving on the physical Ethernet interface `enp4s0`, but replies leaving through `tun0`.
-
-The host-level VPN had installed the default route through the tunnel, producing asymmetric routing:
-
-```text
-Inbound:
-Internet → FiOS → Eero → enp4s0
-
-Outbound reply:
-media server → tun0/VPN
-```
-
-Because the reply took a different path, public clients and Let's Encrypt could not complete the TCP handshake.
-
-Disabling the VPN corrected the routing immediately.
-
-Important operational conclusion:
-
-> A full-tunnel VPN must not be active on the Fedora host while NovelKMS is being served publicly, unless policy routing or split tunneling is configured.
-
-The preferred future design is either to leave the host outside the VPN, or place only the applications that require VPN access into their own VPN-aware containers.
-
-## 13. Google OAuth
-
-Once HTTPS was working, Google OAuth still rejected the original callback because it referenced the development/LAN origin.
-
-The deployment was updated to use:
-
-```text
-https://novelkms.richardsand.com
-```
-
-The exact authorized callback is:
-
-```text
-https://novelkms.richardsand.com/api/auth/google/callback
-```
-
-After updating both `config.yaml` and the Google Cloud Console OAuth client settings, Google authentication succeeded from a mobile device over the public internet.
-
-## 14. Application Wiring Issue Found
-
-The deployed application later logged repeated HK2 dependency errors for `/api/styles/global`.
-
-`StyleResource` now depends on `UserStyleDao`, but `NovelKmsServer` was still constructing and binding only `StyleDao`.
-
-Since `StyleDao` was no longer referenced by any resource or service, the intended correction is:
-
-- remove the unused `StyleDao` import
-- remove its construction
-- remove its HK2 binding
-- instantiate `UserStyleDao`
-- bind `UserStyleDao` using its exact class
-
-Example:
-
-```java
-UserStyleDao userStyleDao = new UserStyleDao(ds);
-```
-
-and:
-
-```java
-bind(userStyleDao).to(UserStyleDao.class);
-```
-
-A rebuilt JAR and rebuilt Podman image are required after this source fix.
-
-## 15. Current Deployment State
+## 12. Current Deployment State
 
 At the current checkpoint:
 
+- Cloudflare provides DDNS and ingres. 
+- Cloudflare daemon runs on media server
 - Public DNS works
-- DuckDNS tracks the home IP
-- The custom domain resolves correctly
-- FiOS and Eero forwarding work
 - Fedora accepts inbound 8443
 - Caddy serves a trusted certificate
 - The React frontend loads publicly
-- Google OAuth works
+- OAuth works from several providers
 - NovelKMS runs in a rootless Podman container
-- H2 persistence is external to the container
+- PostgreSQL persistence is external to the container
 - Caddy certificate state is external to the container
 
 The application and Caddy are still being run manually.
 
-## 16. Planned Next Steps
-
-1. Finish and verify the `UserStyleDao` production wiring fix.
-2. Rebuild and redeploy the NovelKMS image.
-3. Confirm that the style endpoints no longer produce HK2 exceptions.
-4. Convert the manually run containers into rootless Podman Quadlet/systemd services.
-5. Enable user lingering so the services start at boot and survive logout.
-6. Reboot-test both services.
-7. Define and test backups for:
-   - H2 database files
-   - `config.yaml`
-   - `novelkms.env`
-   - Caddy certificate state
-   - deployment definitions
-8. Replace H2 with PostgreSQL.
-9. Add PostgreSQL backup and restore procedures.
-10. Consider isolating any VPN-dependent workload so the host's public routing remains stable.
-
-## 17. Operational Commands
+## 13. Useful commands
 
 ### View running containers
 

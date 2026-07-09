@@ -12,8 +12,40 @@ The immediate goal is practical validation: determine whether NovelKMS manages a
 
 - Repository: `https://github.com/rsand-temple/novelkms`
 - Branch: `master`
-- Architecture: Maven multi-module (backend, frontend, distro).
-- Dev workflow: Eclipse for backend, Vite dev server for frontend, H2 locally, PostgreSQL hosted.
+- Architecture: Maven multi-module project with backend, frontend, static marketing site, and distro modules.
+  - `novelkms-backend` — Dropwizard/Jersey API and application server.
+  - `novelkms-frontend` — React/Vite SPA, built under `/webapp` and served at `/app/`.
+  - `novelkms-static` — Hugo static marketing/public site, built under `/site` and served at `/`.
+  - `novelkms-distro` — shaded runnable JAR combining backend, React app, Hugo site, and runtime dependencies.
+- Development workflow: Eclipse for Dropwizard/backend, Vite dev server for frontend, Hugo dev server for the static site, H2 for local development, PostgreSQL for the hosted deployment.
+
+## Current production/deployment status
+
+- Public deployment runs on the Fedora media server as rootless Podman Quadlet/systemd user services.
+- Services include PostgreSQL, NovelKMS, and Caddy.
+- Caddy terminates HTTPS and reverse-proxies all public traffic to the NovelKMS container over the private Podman network.
+- The NovelKMS JAR now serves three public surfaces:
+  - `/` — Hugo-generated static marketing/public site.
+  - `/app/` — React/Vite authenticated application.
+  - `/api/*` — Dropwizard/Jersey backend API.
+- PostgreSQL is the hosted production database; H2 remains useful for local development and migration source/backup scenarios.
+- Persistent state is outside disposable containers: PostgreSQL volume, config/secrets, Caddy ACME state, logs, artifact blob storage, and Quadlet definitions.
+- Backups target Dropbox as completed archives, not live database files.
+- The canonical public domain should be `https://novelkms.com`; legacy aliases such as `www.novelkms.com` and `novelkms.richardsand.com` should redirect to the canonical domain when Caddy is configured that way.
+
+### Static public site and `/app` routing
+
+- A Hugo static site is now integrated into the Maven build as the `novelkms-static` module.
+- Hugo source files live in `novelkms-static`; generated output is not committed.
+- Maven builds the Hugo site into the static module artifact under `site/`.
+- The React SPA remains produced by `novelkms-frontend`, but it now builds with `VITE_APP_BASENAME=/app` so generated asset URLs resolve under `/app/assets/...`.
+- The final shaded distro JAR contains both:
+  - `site/**` for the public static site.
+  - `webapp/**` for the React application.
+- Dropwizard serves the Hugo site from `/` and the React SPA from `/app/` using separate named `AssetsBundle` registrations.
+- The SPA fallback filter is now `/app`-aware: React deep links such as `/app/billing/success`, `/app/billing/cancel`, and `/app/admin` are forwarded to `/app/index.html`; root public pages such as `/faq/`, `/privacy/`, and `/terms/` are owned by Hugo.
+- React routing uses `BrowserRouter basename="/app"` through `VITE_APP_BASENAME`, so in-app route checks should use React Router’s `useLocation()` rather than `window.location.pathname`.
+- Public links from the React login page to FAQ, privacy, and terms pages use normal browser anchors such as `href="/faq/"`, not React Router links.
 
 ## Technology stack
 
