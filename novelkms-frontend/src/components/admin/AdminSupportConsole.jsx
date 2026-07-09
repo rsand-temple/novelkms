@@ -523,7 +523,7 @@ export default function AdminSupportConsole() {
 	const [billing, setBilling] = useState(null)
 	const [auditRows, setAuditRows] = useState([])
 	const [loadingUsers, setLoadingUsers] = useState(true)
-	const [loadingDetail] = useState(false)
+	const [loadingDetail, setLoadingDetail] = useState(false)
 	const [savingFamilyAccess, setSavingFamilyAccess] = useState(false)
 	const [deletingUser, setDeletingUser] = useState(false)
 	const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
@@ -629,6 +629,69 @@ export default function AdminSupportConsole() {
 		}
 	}, [])
 
+	const loadSelectedUserDetail = useCallback(async (userId, { signalLoading = true } = {}) => {
+		if (!userId) {
+			setSelectedUser(null)
+			setBilling(null)
+			setAuditRows([])
+			return
+		}
+
+		if (signalLoading) setLoadingDetail(true)
+
+		try {
+			const [userDetail, billingDetail, audit] = await Promise.all([
+				adminApi.getUser(userId),
+				adminApi.getBilling(userId),
+				adminApi.getUserAudit(userId, 25),
+			])
+
+			setSelectedUser(userDetail)
+			setBilling(billingDetail)
+			setAuditRows(audit)
+			setError(null)
+		} catch (err) {
+			if (err.response?.status === 403) {
+				setError('You are authenticated, but this account does not have administrator access.')
+			} else {
+				setError(err.response?.data?.message ?? 'Could not load user detail.')
+			}
+		} finally {
+			if (signalLoading) setLoadingDetail(false)
+		}
+	}, [])
+
+	// Whenever the selected user changes (clicking a different row in the list,
+	// or the initial/search-driven auto-selection), (re)load that user's detail,
+	// billing, and audit panels. Without this effect the right-hand panel only
+	// ever gets populated as a side effect of granting family access, so it
+	// stays stuck on whichever user was last mutated, and a fresh page load
+	// never populates it at all.
+	useEffect(() => {
+		let cancelled = false
+
+		async function run() {
+			if (!selectedUserId) {
+				if (!cancelled) {
+					setSelectedUser(null)
+					setBilling(null)
+					setAuditRows([])
+				}
+				return
+			}
+
+			if (!cancelled) setLoadingDetail(true)
+			await loadSelectedUserDetail(selectedUserId, { signalLoading: false })
+			if (!cancelled) setLoadingDetail(false)
+		}
+
+		run()
+
+		return () => {
+			cancelled = true
+		}
+	}, [selectedUserId, loadSelectedUserDetail])
+
 	const loadMetrics = useCallback(async () => {
 		setLoadingMetrics(true)
 
@@ -666,16 +729,7 @@ export default function AdminSupportConsole() {
 
 		try {
 			await adminApi.grantFamilyAccess(selectedUserId, body)
-
-			const [userDetail, billingDetail, audit] = await Promise.all([
-				adminApi.getUser(selectedUserId),
-				adminApi.getBilling(selectedUserId),
-				adminApi.getUserAudit(selectedUserId, 25),
-			])
-
-			setSelectedUser(userDetail)
-			setBilling(billingDetail)
-			setAuditRows(audit)
+			await loadSelectedUserDetail(selectedUserId)
 			setSuccess('Family access granted.')
 			setFamilyDialogOpen(false)
 		} catch (err) {
