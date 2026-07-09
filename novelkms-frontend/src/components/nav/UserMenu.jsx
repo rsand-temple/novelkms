@@ -84,7 +84,7 @@ export default function UserMenu({ onOpenSettings }) {
 					<MenuItem
 						onClick={() => {
 							setAnchorEl(null)
-							window.location.href = '/admin'
+							window.location.href = '/app/admin'
 						}}
 					>
 						<ListItemIcon>
