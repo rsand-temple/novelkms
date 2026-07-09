@@ -1,14 +1,16 @@
 package com.richardsand.novelkms.dropwizard.web;
 
 import java.io.IOException;
+import java.util.Set;
 
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
-import jakarta.servlet.FilterConfig;
+import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Supports HTML5 history-mode client-side routing (React Router's
@@ -40,41 +42,76 @@ import jakarta.servlet.http.HttpServletRequest;
  */
 public class SpaFallbackFilter implements Filter {
 
-    private static final String INDEX_PATH = "/index.html";
-    private static final String API_PREFIX = "/api/";
+    private static final Set<String> STATIC_EXTENSIONS = Set.of(
+            ".js",
+            ".css",
+            ".map",
+            ".json",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".svg",
+            ".ico",
+            ".webp",
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".eot",
+            ".txt",
+            ".xml");
 
     @Override
-    public void init(FilterConfig filterConfig) {
-        // no-op
-    }
-
-    @Override
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+    public void doFilter(
+            ServletRequest request,
+            ServletResponse response,
+            FilterChain chain)
             throws IOException, ServletException {
-        HttpServletRequest req = (HttpServletRequest) request;
 
-        if (isSpaRoute(req)) {
-            req.getRequestDispatcher(INDEX_PATH).forward(request, response);
+        HttpServletRequest  httpRequest  = (HttpServletRequest) request;
+        HttpServletResponse httpResponse = (HttpServletResponse) response;
+
+        String path = httpRequest.getRequestURI();
+
+        if (path.startsWith("/api/") || path.equals("/api")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
+        if (path.equals("/app") || path.equals("/app/")) {
+            forwardToAppIndex(httpRequest, httpResponse);
+            return;
+        }
+
+        if (path.startsWith("/app/")) {
+            if (looksLikeStaticAsset(path)) {
+                chain.doFilter(request, response);
+                return;
+            }
+
+            forwardToAppIndex(httpRequest, httpResponse);
             return;
         }
 
         chain.doFilter(request, response);
     }
 
-    @Override
-    public void destroy() {
-        // no-op
+    private static boolean looksLikeStaticAsset(String path) {
+        String lower = path.toLowerCase();
+        for (String extension : STATIC_EXTENSIONS) {
+            if (lower.endsWith(extension)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    private boolean isSpaRoute(HttpServletRequest req) {
-        if (!"GET".equalsIgnoreCase(req.getMethod()))
-            return false;
+    private static void forwardToAppIndex(
+            HttpServletRequest request,
+            HttpServletResponse response)
+            throws ServletException, IOException {
 
-        String path = req.getRequestURI();
-        if (path.equals("/api") || path.startsWith(API_PREFIX))
-            return false;
-
-        String lastSegment = path.substring(path.lastIndexOf('/') + 1);
-        return !lastSegment.contains(".");
+        RequestDispatcher dispatcher = request.getRequestDispatcher("/app/index.html");
+        dispatcher.forward(request, response);
     }
 }

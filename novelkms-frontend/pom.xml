@@ -16,7 +16,6 @@
 		is staged under target/classes/webapp, so the produced jar contains:
 			webapp/index.html
 			webapp/assets/...
-		Dropwizard's AssetsBundle("/webapp", "/", "index.html") serves it.
 	-->
 	<packaging>jar</packaging>
 

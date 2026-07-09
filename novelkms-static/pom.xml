@@ -1,0 +1,68 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<artifactId>novelkms-static</artifactId>
+	<name>Novel Authoring Knowledge Management System - Marketing Site</name>
+	<parent>
+		<groupId>com.richardsand.novelkms</groupId>
+		<artifactId>novelkms-parent</artifactId>
+		<version>1.0</version>
+	</parent>
+
+	<!-- Packaged as a JAR so the distro module can merge the generated Hugo 
+		site into the runnable uber jar. The Hugo output is staged under: target/classes/site/ 
+		Dropwizard's AssetsBundle("/site", "/", "index.html", "site-assets") serves 
+		it. -->
+	<packaging>jar</packaging>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<version>3.1.0</version>
+				<executions>
+					<execution>
+						<id>hugo-build</id>
+						<phase>generate-resources</phase>
+						<goals>
+							<goal>exec</goal>
+						</goals>
+						<configuration>
+							<executable>hugo</executable>
+							<arguments>
+								<argument>--minify</argument>
+								<argument>--destination</argument>
+								<argument>${project.build.directory}/hugo-public</argument>
+							</arguments>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-resources-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>copy-site-to-classes</id>
+						<phase>prepare-package</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.outputDirectory}/site</outputDirectory>
+							<resources>
+								<resource>
+									<directory>${project.build.directory}/hugo-public</directory>
+									<filtering>false</filtering>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+</project>

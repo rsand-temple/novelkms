@@ -4,6 +4,7 @@ import {
 	IconButton, Tooltip, Divider, Link,
 	Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@mui/material'
+import { useLocation } from 'react-router-dom'
 import DescriptionIcon from '@mui/icons-material/Description'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import FileUploadIcon from '@mui/icons-material/FileUpload'
@@ -34,12 +35,8 @@ import { ReviewProvider } from './review/ReviewProvider'
 import { useHelp } from './help'
 import { usePreferences } from './hooks/usePreferences'
 import { hydrateSkipDeleteConfirm } from './utils/deleteConfirmPrefs'
-import BillingReturnPage from './components/subscription/BillingReturnPage'
 import AdminSupportConsole from './components/admin/AdminSupportConsole'
 import ToolsMenu from './components/tools/ToolsMenu'
-import FaqPage from './public/faq'
-import PrivacyPage from './public/privacy'
-import TermsPage from './public/terms'
 
 /* eslint-disable no-undef */
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
@@ -217,6 +214,9 @@ export default function App() {
 	)
 
 	const resizeRef = useRef(null)
+	const location = useLocation()
+	const path = location.pathname
+	console.error('Path: ' + path)
 
 	const { data: preferences } = usePreferences()
 	useEffect(() => {
@@ -429,30 +429,8 @@ export default function App() {
 		setContactSupportOpen(true)
 	}
 
-	const path = window.location.pathname
-
 	if (path === '/admin') {
 		return <AdminSupportConsole />
-	}
-
-	if (path === '/billing/success') {
-		return <BillingReturnPage result="success" />
-	}
-
-	if (path === '/billing/cancel') {
-		return <BillingReturnPage result="cancel" />
-	}
-
-	if (path === '/faq') {
-		return <FaqPage />
-	}
-
-	if (path === '/privacy') {
-		return <PrivacyPage />
-	}
-
-	if (path === '/terms') {
-		return <TermsPage />
 	}
 
 	return (

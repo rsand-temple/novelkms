@@ -27,6 +27,11 @@
 			<artifactId>novelkms-frontend</artifactId>
 			<version>${project.version}</version>
 		</dependency>
+		<dependency>
+			<groupId>com.richardsand.novelkms</groupId>
+			<artifactId>novelkms-static</artifactId>
+			<version>${project.version}</version>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -70,6 +75,7 @@
 									<artifact>com.richardsand.novelkms:novelkms-backend</artifact>
 									<excludes>
 										<exclude>webapp/**</exclude>
+										<exclude>site/**</exclude>
 									</excludes>
 								</filter>
 							</filters>

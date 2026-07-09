@@ -1,12 +1,8 @@
 import { Box, Button, Divider, Paper, Stack, Typography } from '@mui/material'
-import { Link as RouterLink, useLocation } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { authApi } from '../../api/auth'
 import { LogoLockup, LogoMark } from '../../components/branding/Logo'
 import EditorMockup from '../../components/marketing/EditorMockup'
-import FaqPage from '../../public/faq'
-import PrivacyPage from '../../public/privacy'
-import TermsPage from '../../public/terms'
 
 function ProviderIcon({ src, size = 20 }) {
 	return (
@@ -20,12 +16,14 @@ function ProviderIcon({ src, size = 20 }) {
 	)
 }
 
+const appAsset = (path) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
+
 const PROVIDERS = [
-	{ key: 'google', label: 'Continue with Google', icon: '/auth-icons/google.svg' },
-	{ key: 'microsoft', label: 'Continue with Microsoft', icon: '/auth-icons/microsoft.svg' },
-	{ key: 'apple', label: 'Continue with Apple', icon: '/auth-icons/apple.svg' },
-	{ key: 'meta', label: 'Continue with Facebook', icon: '/auth-icons/facebook.svg' },
-	{ key: 'github', label: 'Continue with GitHub', icon: '/auth-icons/github.svg' },
+	{ key: 'google', label: 'Continue with Google', icon: appAsset('auth-icons/google.svg') },
+	{ key: 'microsoft', label: 'Continue with Microsoft', icon: appAsset('auth-icons/microsoft.svg') },
+	{ key: 'apple', label: 'Continue with Apple', icon: appAsset('auth-icons/apple.svg') },
+	{ key: 'meta', label: 'Continue with Facebook', icon: appAsset('auth-icons/facebook.svg') },
+	{ key: 'github', label: 'Continue with GitHub', icon: appAsset('auth-icons/github.svg') },
 ]
 
 const FEATURES = [
@@ -79,7 +77,6 @@ function FeatureRow({ title, body }) {
 }
 
 export default function LoginPage() {
-	const location = useLocation()
 	const [providers, setProviders] = useState({
 		google: false,
 		microsoft: false,
@@ -110,18 +107,6 @@ export default function LoginPage() {
 		() => PROVIDERS.filter((p) => providers[p.key]),
 		[providers]
 	)
-
-	if (location.pathname === '/faq') {
-		return <FaqPage />
-	}
-
-	if (location.pathname === '/privacy') {
-		return <PrivacyPage />
-	}
-
-	if (location.pathname === '/terms') {
-		return <TermsPage />
-	}
 
 	return (
 		<Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: 'background.paper' }}>
@@ -232,7 +217,7 @@ export default function LoginPage() {
 									as an early subscriber. No credit card required!
 								</Typography>
 								<Typography color="text.secondary" sx={{ fontSize: '1rem' }}>
-									We charge a flat fee and never markup AI costs. 
+									We charge a flat fee and never markup AI costs.
 									Plug in your own API key (like OpenAI or Anthropic)
 									to edit with no hidden upcharge.
 								</Typography>
@@ -240,8 +225,8 @@ export default function LoginPage() {
 									Sign in below and meet your manuscript workspace!
 								</Typography>
 								<Box
-									component={RouterLink}
-									to="/faq"
+									component="a"
+									href="/faq"
 									sx={{
 										color: 'primary.main',
 										fontWeight: 650,
@@ -284,10 +269,9 @@ export default function LoginPage() {
 
 						<Typography color="text.secondary" sx={{ fontStyle: 'italic' }}>
 							<Box
-								component={RouterLink}
-								to="/privacy"
+								component="a"
+								href="/privacy"
 								sx={{
-									color: 'primary.main',
 									textDecoration: 'none',
 									'&:hover': { textDecoration: 'underline' },
 								}}
@@ -296,10 +280,9 @@ export default function LoginPage() {
 							</Box>
 							{', '}
 							<Box
-								component={RouterLink}
-								to="/terms"
+								component="a"
+								href="/terms"
 								sx={{
-									color: 'primary.main',
 									textDecoration: 'none',
 									'&:hover': { textDecoration: 'underline' },
 								}}

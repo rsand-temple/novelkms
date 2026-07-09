@@ -11,7 +11,7 @@ export function LogoMark({ size = 32, onDark = true, sx, ...rest }) {
 	return (
 		<Box
 			component="img"
-			src={onDark ? '/brand/novelkms-icon-dark.png' : '/brand/novelkms-icon.png'}
+			src={`${import.meta.env.BASE_URL}brand/${onDark ? 'novelkms-icon-dark.png' : 'novelkms-icon.png'}`}
 			alt="NovelKMS"
 			width={size}
 			height={size}
@@ -26,7 +26,7 @@ export function LogoLockup({ width = 280, sx, ...rest }) {
 	return (
 		<Box
 			component="img"
-			src="/brand/novelkms-logo.png"
+			src={`${import.meta.env.BASE_URL}brand/novelkms-logo.png`}
 			alt="NovelKMS — Write your story, remember your world"
 			sx={{ width, height: 'auto', display: 'block', ...sx }}
 			{...rest}
@@ -39,7 +39,7 @@ export function LogoBanner({ width = 420, sx, ...rest }) {
 	return (
 		<Box
 			component="img"
-			src="/brand/novelkms-banner.png"
+			src={`${import.meta.env.BASE_URL}brand/novelkms-banner.png`}
 			alt="NovelKMS — Write your story, remember your world"
 			sx={{ width, height: 'auto', display: 'block', ...sx }}
 			{...rest}

@@ -136,8 +136,15 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         bootstrap.addBundle(
                 new AssetsBundle(
                         "/webapp",
+                        "/app/",
+                        "index.html",
+                        "webapp-assets"));
+        bootstrap.addBundle(
+                new AssetsBundle(
+                        "/site",
                         "/",
-                        "index.html"));
+                        "index.html",
+                        "site-assets"));
     }
 
     @Override

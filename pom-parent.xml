@@ -25,7 +25,6 @@
   <modules>
     <module>novelkms-backend</module>
     <module>novelkms-frontend</module>
-    <module>novelkms-static</module>
     <module>novelkms-distro</module>
   </modules>
 
