@@ -4,7 +4,13 @@ draft = false
 title = 'AI Review'
 description = "NovelKMS uses AI as an editorial review assistant, not as an automatic manuscript writer."
 +++
+NovelKMS was built by a working novelist to solve real drafting and revision problems. AI-assisted review is one part of that — not the whole pitch.
+
 NovelKMS uses AI to help authors review, summarize, and organize revision work. It does not automatically rewrite your manuscript.
+
+**Watch: the four ways NovelKMS uses AI** — chapter review, memory documents, summaries, and editorials, in under four minutes.
+
+{{< youtube G8qJxQoFpS8 "The four ways NovelKMS uses AI" >}}
 
 ## Review, not replacement
 

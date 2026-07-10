@@ -12,13 +12,15 @@ This policy explains what NovelKMS, LLC collects, how it is used, and how manusc
 NovelKMS is built for author control. We collect the information needed to provide accounts,
 authentication, subscriptions, manuscript management, AI-assisted review when you choose to use it,
 and basic support. We do not sell your personal information, and NovelKMS does not claim ownership
-of your manuscript.
+of your manuscript. Registration requires only a display name; providing your first name, last name,
+or phone number is optional, and we never ask for a mailing address.
 
 ## Information we collect
 
 NovelKMS collects information you provide directly and information required to operate the service.
 
 * Account information, such as your email address, display name, and authentication provider identity.
+* Optional profile details you choose to provide during registration, such as first name, last name, and phone number. Only a display name is required; NovelKMS does not collect a mailing address.
 * Manuscript and project data you create, import, edit, organize, or store in NovelKMS.
 * Codex entries, summaries, AI review artifacts, templates, settings, and related project metadata.
 * Billing status and subscription identifiers synchronized from Stripe. NovelKMS does not store any card numbers.
@@ -62,7 +64,8 @@ subscription status information needed to provide access to the service.
 
 ## Sharing and third-party services
 
-NovelKMS does not sell your personal information. We share information with third-party service
+NovelKMS does not sell your personal information. We do not share, rent, or sell your information
+to advertisers, marketers, or data brokers. We share information with third-party service
 providers only as needed to operate the service, such as authentication providers, Stripe for
 billing, AI providers when you invoke AI features, hosting/infrastructure services, and backup or diagnostic tools.
 

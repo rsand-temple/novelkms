@@ -28,7 +28,7 @@ heroLede = "NovelKMS helps fiction authors draft long-form manuscripts while pre
 
 [[features]]
   title = "Story knowledge that lasts"
-  body = "Keep project knowledge durable and searchable instead of scattering it across notes, documents, and chat transcripts."
+  body = "Keep your manuscript and everything around it — notes, synopses, query letters, cover art, bio clips — durable and searchable in one place, instead of scattered across drives and email."
 
 [[features]]
   title = "AI as your personal editor, not co-author"

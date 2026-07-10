@@ -14,6 +14,10 @@ Organize a project into books, parts, chapters, and scenes. Scenes are the prima
 
 NovelKMS is designed to preserve the knowledge around the manuscript: characters, canon, timeline notes, research, summaries, review history, and other project material.
 
+## One home for everything about your book
+
+Not just the manuscript. Every project gets a dedicated Artifacts store for the material that surrounds the book — synopses, query letters, cover art, author bio clips, research — instead of scattering it across email, a desktop folder, and three different cloud drives.
+
 ## AI review artifacts
 
 AI output is treated as reviewable project data, not as a transient chat. Review findings can be triaged, resolved, dismissed, deferred, or promoted into project knowledge.
