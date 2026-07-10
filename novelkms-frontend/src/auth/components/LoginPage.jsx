@@ -1,8 +1,9 @@
 import { Box, Button, Divider, Paper, Stack, Typography } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import { authApi } from '../../api/auth'
-import { LogoLockup, LogoMark } from '../../components/branding/Logo'
+import { LogoLockup } from '../../components/branding/Logo'
 import EditorMockup from '../../components/marketing/EditorMockup'
+import SiteHeader from '../../components/marketing/SiteHeader'
 
 function ProviderIcon({ src, size = 20 }) {
 	return (
@@ -109,77 +110,80 @@ export default function LoginPage() {
 	)
 
 	return (
-		<Box sx={{ minHeight: '100vh', display: 'flex', bgcolor: 'background.paper' }}>
-			{/* Marketing column - desktop only */}
-			<Box
-				sx={{
-					display: { xs: 'none', md: 'flex' },
-					flexDirection: 'column',
-					justifyContent: 'flex-start',
-					gap: 2.5,
-					width: '58%',
-					px: { md: 6, lg: 8, xl: 10 },
-					pt: { md: 5, lg: 6 },
-					pb: 4,
-				}}
-			>
-				<Box sx={{ width: '100%' }}>
-					<LogoLockup width={260} />
+		<Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper' }}>
+			<SiteHeader />
 
-					<Typography
-						variant="h4"
-						sx={{
-							mt: 1.75,
-							fontWeight: 750,
-							lineHeight: 1.15,
-							color: 'text.primary',
-							maxWidth: 760,
-						}}
-					>
-						A structured editorial workspace for long manuscripts. AI review. No ghostwriting.
-					</Typography>
-
-					<Typography sx={{ mt: 2, color: 'text.secondary', fontSize: '1rem', maxWidth: 860 }}>
-						NovelKMS bridges the gap between chaotic drafting and elite developmental editing.
-						Keep your manuscript, continuity notes, and deep story memory in one structured workspace
-						built specifically for long-form fiction authors.
-					</Typography>
-				</Box>
-
+			<Box sx={{ flex: 1, display: 'flex' }}>
+				{/* Marketing column - desktop only */}
 				<Box
 					sx={{
-						display: 'grid',
-						gridTemplateColumns: { md: '1fr', lg: '1fr 1fr' },
-						columnGap: 3,
-						rowGap: 1.75,
-						width: '100%',
-						maxWidth: 'none',
-						pr: { md: 1, lg: 2 },
+						display: { xs: 'none', md: 'flex' },
+						flexDirection: 'column',
+						justifyContent: 'flex-start',
+						gap: 2.5,
+						width: '58%',
+						px: { md: 6, lg: 8, xl: 10 },
+						pt: { md: 5, lg: 6 },
+						pb: 4,
 					}}
 				>
-					{FEATURES.map((f) => (
-						<FeatureRow key={f.title} {...f} />
-					))}
+					<Box sx={{ width: '100%' }}>
+						<LogoLockup width={260} />
+
+						<Typography
+							variant="h4"
+							sx={{
+								mt: 1.75,
+								fontWeight: 750,
+								lineHeight: 1.15,
+								color: 'text.primary',
+								maxWidth: 760,
+							}}
+						>
+							A structured editorial workspace for long manuscripts. AI review. No ghostwriting.
+						</Typography>
+
+						<Typography sx={{ mt: 2, color: 'text.secondary', fontSize: '1rem', maxWidth: 860 }}>
+							NovelKMS bridges the gap between chaotic drafting and elite developmental editing.
+							Keep your manuscript, continuity notes, and deep story memory in one structured workspace
+							built specifically for long-form fiction authors.
+						</Typography>
+					</Box>
+
+					<Box
+						sx={{
+							display: 'grid',
+							gridTemplateColumns: { md: '1fr', lg: '1fr 1fr' },
+							columnGap: 3,
+							rowGap: 1.75,
+							width: '100%',
+							maxWidth: 'none',
+							pr: { md: 1, lg: 2 },
+						}}
+					>
+						{FEATURES.map((f) => (
+							<FeatureRow key={f.title} {...f} />
+						))}
+					</Box>
+
+					<Box sx={{ width: '100%', maxWidth: 760, mt: 0.5 }}>
+						<EditorMockup />
+					</Box>
 				</Box>
 
-				<Box sx={{ width: '100%', maxWidth: 760, mt: 0.5 }}>
-					<EditorMockup />
-				</Box>
-			</Box>
-
-			{/* Sign-in column */}
-			<Box
-				sx={{
-					flex: 1,
-					display: 'flex',
-					alignItems: { xs: 'center', md: 'flex-start' },
-					justifyContent: 'center',
-					p: 2,
-					pt: { xs: 2, md: 20, lg: 22 },
-					borderLeft: { md: '1px solid' },
-					borderColor: { md: 'divider' },
-				}}
-			>
+				{/* Sign-in column */}
+				<Box
+					sx={{
+						flex: 1,
+						display: 'flex',
+						alignItems: { xs: 'center', md: 'flex-start' },
+						justifyContent: 'center',
+						p: 2,
+						pt: { xs: 2, md: 20, lg: 22 },
+						borderLeft: { md: '1px solid' },
+						borderColor: { md: 'divider' },
+					}}
+				>
 				<Paper
 					elevation={3}
 					sx={{
@@ -191,19 +195,6 @@ export default function LoginPage() {
 					}}
 				>
 					<Stack spacing={3}>
-						<Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center', gap: 1.25 }}>
-							<LogoMark size={32} onDark={false} />
-							<Typography
-								sx={{
-									fontFamily: 'Georgia, "Times New Roman", serif',
-									fontWeight: 700,
-									color: 'primary.main',
-								}}
-							>
-								NovelKMS
-							</Typography>
-						</Box>
-
 						<Box>
 							<Stack spacing={1.25}>
 								<Typography variant="h5" fontWeight={700}>
@@ -292,6 +283,7 @@ export default function LoginPage() {
 						</Typography>
 					</Stack>
 				</Paper>
+			</Box>
 			</Box>
 		</Box>
 	)
