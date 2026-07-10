@@ -1,11 +1,9 @@
+{{ $cta := .Site.Data.cta }}
 <section class="cta-panel">
   <div>
-    <p class="eyebrow">Ready to try it?</p>
-    <h2>Write your story with a memory system behind it.</h2>
-    <p>
-      Launch NovelKMS and start organizing the manuscript, notes, summaries,
-      review artifacts, and story knowledge around your book.
-    </p>
+    <p class="eyebrow">{{ $cta.eyebrow }}</p>
+    <h2>{{ $cta.heading }}</h2>
+    <p>{{ $cta.body }}</p>
   </div>
-  <a class="button primary" href="/app/">Launch NovelKMS</a>
+  <a class="button primary" href="{{ $cta.buttonHref }}">{{ $cta.buttonLabel }}</a>
 </section>

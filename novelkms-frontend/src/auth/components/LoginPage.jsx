@@ -29,28 +29,16 @@ const PROVIDERS = [
 
 const FEATURES = [
 	{
-		title: 'Review findings like a revision inbox',
-		body: 'Run chapter reviews to catch continuity errors or plot holes, then triage each finding as Done, Dismissed, or Deferred.',
+		title: 'Straight to your project',
+		body: 'Sign in and land directly in your manuscript tree — no onboarding maze between you and your book.',
 	},
 	{
-		title: 'Carry story context forward',
-		body: 'Build chapter memory so later reviews understand what happened earlier in the manuscript.',
+		title: 'One account, no new password',
+		body: 'Use the Google, Microsoft, Apple, Facebook, or GitHub account you already have.',
 	},
 	{
-		title: 'Catch the big-picture problems',
-		body: 'Surface continuity breaks, pacing dips, tone drift, genre mismatch, and character arc issues before beta readers see them.',
-	},
-	{
-		title: 'Generate clean story summaries',
-		body: 'Create chapter summaries and aggregate them into a full-book synopsis for revision, querying, and orientation.',
-	},
-	{
-		title: 'Keep world knowledge beside the page',
-		body: 'Store characters, canon, timeline notes, voice sheets, and research near the manuscript they support.',
-	},
-	{
-		title: 'Stay in control of your prose',
-		body: 'Import, export, revise, and review freely. NovelKMS analyzes your manuscript; it does not rewrite it for you.',
+		title: 'See it in action first?',
+		body: 'Features and AI Review (above) cover what the editor and review workflow actually do.',
 	},
 ]
 
@@ -140,25 +128,22 @@ export default function LoginPage() {
 								maxWidth: 760,
 							}}
 						>
-							A structured editorial workspace for long manuscripts. AI review. No ghostwriting.
+							Sign in to your manuscript workspace.
 						</Typography>
 
 						<Typography sx={{ mt: 2, color: 'text.secondary', fontSize: '1rem', maxWidth: 860 }}>
-							NovelKMS bridges the gap between chaotic drafting and elite developmental editing.
-							Keep your manuscript, continuity notes, and deep story memory in one structured workspace
-							built specifically for long-form fiction authors.
+							NovelKMS keeps your manuscript, Codex, and AI review history together in one place.
+							Haven't seen what it does yet? Features and AI Review are in the menu above.
 						</Typography>
 					</Box>
 
 					<Box
 						sx={{
-							display: 'grid',
-							gridTemplateColumns: { md: '1fr', lg: '1fr 1fr' },
-							columnGap: 3,
-							rowGap: 1.75,
+							display: 'flex',
+							flexDirection: 'column',
+							gap: 1.75,
 							width: '100%',
-							maxWidth: 'none',
-							pr: { md: 1, lg: 2 },
+							maxWidth: 620,
 						}}
 					>
 						{FEATURES.map((f) => (
@@ -198,22 +183,27 @@ export default function LoginPage() {
 						<Box>
 							<Stack spacing={1.25}>
 								<Typography variant="h5" fontWeight={700}>
-									Start your NovelKMS trial
+									Start your 14-day trial
 								</Typography>
 								<Typography color="text.secondary" sx={{ fontSize: '1rem' }}>
-									Best for novelists revising complex drafts, series fiction, historical fiction, speculative fiction, and continuity-heavy manuscripts.
+									For novelists working on series fiction, historical fiction, speculative fiction,
+									or any other continuity-heavy manuscript.
 								</Typography>
 								<Typography color="text.secondary" sx={{ fontSize: '1rem' }}>
-									<strong>Founders access is open!</strong> Start your 14-day trial, then continue for $9/month
-									as an early subscriber. No credit card required!
-								</Typography>
-								<Typography color="text.secondary" sx={{ fontSize: '1rem' }}>
-									We charge a flat fee and never markup AI costs.
-									Plug in your own API key (like OpenAI or Anthropic)
-									to edit with no hidden upcharge.
-								</Typography>
-								<Typography color="text.secondary" sx={{ fontSize: '1rem', fontStyle: 'italic' }}>
-									Sign in below and meet your manuscript workspace!
+									No credit card required. Then $9/month as an early subscriber —{' '}
+									<Box
+										component="a"
+										href="/pricing"
+										sx={{
+											color: 'primary.main',
+											fontWeight: 650,
+											textDecoration: 'none',
+											'&:hover': { textDecoration: 'underline' },
+										}}
+									>
+										see full pricing
+									</Box>
+									.
 								</Typography>
 								<Box
 									component="a"
