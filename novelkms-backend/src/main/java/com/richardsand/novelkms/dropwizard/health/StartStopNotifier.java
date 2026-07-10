@@ -31,6 +31,7 @@ public class StartStopNotifier implements Managed {
 
     @Override
     public void stop() throws Exception {
+        logger.info("Shutting down...");
         if (sns != null)
             sns.notifyStop();
     }
