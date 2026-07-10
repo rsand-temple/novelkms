@@ -9,25 +9,30 @@ import com.richardsand.novelkms.NovelKmsConfig;
 import com.richardsand.novelkms.service.StartStopNotificationService;
 
 import io.dropwizard.lifecycle.Managed;
-import jakarta.inject.Inject;
 
 public class StartStopNotifier implements Managed {
     Logger logger = LoggerFactory.getLogger(getClass());
     
-    @Inject
-    NovelKmsConfig config;
+    final NovelKmsConfig config;
+    
+    public StartStopNotifier(NovelKmsConfig config) {
+        this.config = config;
+    }
 
-    StartStopNotificationService sns = new StartStopNotificationService(config.getNotifications());
+    StartStopNotificationService sns = null;
 
     @Override
     public void start() throws Exception {
         var props = logBuildInfo();
-        sns.notifyStartup(props);
+        sns = new StartStopNotificationService(config.getNotifications());
+        if (sns != null)
+            sns.notifyStartup(props);
     }
 
     @Override
     public void stop() throws Exception {
-        sns.notifyStop();
+        if (sns != null)
+            sns.notifyStop();
     }
 
     private Properties logBuildInfo() {

@@ -419,7 +419,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 oauthService.close();
             }
         });
-        env.lifecycle().manage(new StartStopNotifier());
+        env.lifecycle().manage(new StartStopNotifier(config));
         env.healthChecks().register("database", new DataSourceHealthCheck(ds));
      }
 

@@ -1,7 +1,7 @@
 package com.richardsand.novelkms.service;
 
 import java.nio.charset.StandardCharsets;
-import java.time.ZonedDateTime;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
 import java.util.Properties;
@@ -152,7 +152,7 @@ public class StartStopNotificationService {
                 App version: %s
                 Build number: %s
                 """
-                .formatted(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).format(ZonedDateTime.now()),
+                .formatted(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).format(LocalDateTime.now()),
                         props.getProperty("app.version", "unknown"),
                         props.getProperty("build.number", "unknown"));
     }
@@ -161,7 +161,7 @@ public class StartStopNotificationService {
         return """
                 NovelKMS shutdown at %s
                 """
-                .formatted(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).format(ZonedDateTime.now()));
+                .formatted(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).format(LocalDateTime.now()));
     }
 
     private static String nullToEmpty(String value) {
