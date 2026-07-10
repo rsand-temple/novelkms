@@ -20,12 +20,12 @@ import org.slf4j.LoggerFactory;
 
 import com.richardsand.novelkms.NovelKmsConfig;
 
-public class StartupNotificationService {
-    private static final Logger logger = LoggerFactory.getLogger(StartupNotificationService.class);
+public class StartStopNotificationService {
+    private static final Logger logger = LoggerFactory.getLogger(StartStopNotificationService.class);
 
     private final NovelKmsConfig.Notifications.Registration config;
 
-    public StartupNotificationService(NovelKmsConfig.Notifications notifications) {
+    public StartStopNotificationService(NovelKmsConfig.Notifications notifications) {
         this.config = notifications == null ? null : notifications.registration;
     }
 
@@ -36,6 +36,18 @@ public class StartupNotificationService {
 
         try {
             send(props);
+        } catch (Exception e) {
+            logger.warn("Could not send startup notification", e);
+        }
+    }
+
+    public void notifyStop() {
+        if (!enabled()) {
+            return;
+        }
+
+        try {
+            sendStop();
         } catch (Exception e) {
             logger.warn("Could not send startup notification", e);
         }
@@ -79,6 +91,26 @@ public class StartupNotificationService {
         Transport.send(message);
     }
 
+    private void sendStop() throws Exception {
+        Properties props = new Properties();
+        props.put("mail.transport.protocol", "smtp");
+        props.put("mail.smtp.host", config.smtpHost);
+        props.put("mail.smtp.port", Integer.toString(config.smtpPort));
+        props.put("mail.smtp.auth", Boolean.toString(StringUtils.isNotBlank(config.smtpUsername)));
+        props.put("mail.smtp.starttls.enable", Boolean.toString(config.startTls));
+        props.put("mail.smtp.ssl.enable", Boolean.toString(config.ssl));
+
+        Session session = Session.getInstance(props, authenticator());
+
+        MimeMessage message = new MimeMessage(session);
+        message.setFrom(new InternetAddress(fromAddress()));
+        message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(config.supportAddress, false));
+        message.setSubject(subjectStop(), StandardCharsets.UTF_8.name());
+        message.setText(bodyStop());
+
+        Transport.send(message);
+    }
+
     private Authenticator authenticator() {
         if (StringUtils.isBlank(config.smtpUsername)) {
             return null;
@@ -106,6 +138,12 @@ public class StartupNotificationService {
         String prefix = StringUtils.isBlank(config.subjectPrefix) ? "[NovelKMS]" : config.subjectPrefix.trim();
         return prefix + " Service startup";
     }
+    
+    private String subjectStop() {
+        String prefix = StringUtils.isBlank(config.subjectPrefix) ? "[NovelKMS]" : config.subjectPrefix.trim();
+        return prefix + " Service shutdown";
+    }
+
 
     private String body(Properties props) {
         return """
@@ -117,6 +155,13 @@ public class StartupNotificationService {
                 .formatted(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).format(ZonedDateTime.now()),
                         props.getProperty("app.version", "unknown"),
                         props.getProperty("build.number", "unknown"));
+    }
+
+    private String bodyStop() {
+        return """
+                NovelKMS shutdown at %s
+                """
+                .formatted(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).format(ZonedDateTime.now()));
     }
 
     private static String nullToEmpty(String value) {

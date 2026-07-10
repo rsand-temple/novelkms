@@ -3,7 +3,6 @@ package com.richardsand.novelkms;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.EnumSet;
-import java.util.Properties;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.flywaydb.core.Flyway;
@@ -59,6 +58,7 @@ import com.richardsand.novelkms.dao.user.UserPreferenceDao;
 import com.richardsand.novelkms.dao.user.UserStyleDao;
 import com.richardsand.novelkms.dao.user.UserSubscriptionDao;
 import com.richardsand.novelkms.dropwizard.health.DataSourceHealthCheck;
+import com.richardsand.novelkms.dropwizard.health.StartStopNotifier;
 import com.richardsand.novelkms.dropwizard.web.SpaFallbackFilter;
 import com.richardsand.novelkms.resource.AccountResource;
 import com.richardsand.novelkms.resource.ArchiveResource;
@@ -110,7 +110,6 @@ import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 import com.richardsand.novelkms.service.RegistrationNotificationService;
 import com.richardsand.novelkms.service.StarterContentService;
-import com.richardsand.novelkms.service.StartupNotificationService;
 import com.richardsand.novelkms.service.TrashService;
 import com.richardsand.novelkms.service.admin.AdminBillingService;
 import com.richardsand.novelkms.service.admin.AdminUserDeleteService;
@@ -295,18 +294,6 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         WeatherLookupService weatherLookupService = new WeatherLookupService(
                 new OpenMeteoWeatherProvider(), aiCredentialDao, aiProviderRegistry.getAiProviderMap());
 
-        // Manage lifecycle
-        env.lifecycle().manage(new Managed() {
-            @Override
-            public void start() {
-            }
-
-            @Override
-            public void stop() throws Exception {
-                oauthService.close();
-            }
-        });
-
         // OOTB resources
         env.jersey().register(RolesAllowedDynamicFeature.class);
 
@@ -421,25 +408,20 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
             }
         });
 
-        env.healthChecks().register("database", new DataSourceHealthCheck(ds));
-        var props = logBuildInfo();
-        new StartupNotificationService(config.getNotifications()).notifyStartup(props);
-     }
-
-    private Properties logBuildInfo() {
-        var props = new Properties();
-        try (var in = getClass().getClassLoader().getResourceAsStream("build.properties")) {
-            if (in != null) {
-                props.load(in);
-                logger.info("NovelKMS Version {} Build {}",
-                        props.getProperty("app.version", "unknown"),
-                        props.getProperty("build.number", "unknown"));
+        // Lifecycle and health checks
+        env.lifecycle().manage(new Managed() {
+            @Override
+            public void start() {
             }
-        } catch (Exception e) {
-            logger.warn("Could not read build.properties", e);
-        }
-        return props;
-    }
+
+            @Override
+            public void stop() throws Exception {
+                oauthService.close();
+            }
+        });
+        env.lifecycle().manage(new StartStopNotifier());
+        env.healthChecks().register("database", new DataSourceHealthCheck(ds));
+     }
 
     public static void main(String[] args) throws Exception {
         new NovelKmsServer().run(args);
