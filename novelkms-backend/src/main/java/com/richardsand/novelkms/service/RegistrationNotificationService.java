@@ -13,6 +13,7 @@ import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,12 +50,12 @@ public class RegistrationNotificationService {
             return false;
         }
 
-        if (isBlank(config.smtpHost)) {
+        if (StringUtils.isBlank(config.smtpHost)) {
             logger.warn("Registration notification is enabled but smtpHost is blank");
             return false;
         }
 
-        if (isBlank(config.supportAddress)) {
+        if (StringUtils.isBlank(config.supportAddress)) {
             logger.warn("Registration notification is enabled but supportAddress is blank");
             return false;
         }
@@ -67,7 +68,7 @@ public class RegistrationNotificationService {
         props.put("mail.transport.protocol", "smtp");
         props.put("mail.smtp.host", config.smtpHost);
         props.put("mail.smtp.port", Integer.toString(config.smtpPort));
-        props.put("mail.smtp.auth", Boolean.toString(!isBlank(config.smtpUsername)));
+        props.put("mail.smtp.auth", Boolean.toString(StringUtils.isNotBlank(config.smtpUsername)));
         props.put("mail.smtp.starttls.enable", Boolean.toString(config.startTls));
         props.put("mail.smtp.ssl.enable", Boolean.toString(config.ssl));
 
@@ -83,7 +84,7 @@ public class RegistrationNotificationService {
     }
 
     private Authenticator authenticator() {
-        if (isBlank(config.smtpUsername)) {
+        if (StringUtils.isBlank(config.smtpUsername)) {
             return null;
         }
 
@@ -96,18 +97,18 @@ public class RegistrationNotificationService {
     }
 
     private String fromAddress() {
-        if (!isBlank(config.fromAddress)) {
+        if (StringUtils.isNotBlank(config.fromAddress)) {
             return config.fromAddress;
         }
-        if (!isBlank(config.smtpUsername)) {
+        if (StringUtils.isNotBlank(config.smtpUsername)) {
             return config.smtpUsername;
         }
         return config.supportAddress;
     }
 
     private String subject(AppUser user) {
-        String prefix = isBlank(config.subjectPrefix) ? "[NovelKMS]" : config.subjectPrefix.trim();
-        String name   = user == null || isBlank(user.displayName()) ? "new user" : user.displayName().trim();
+        String prefix = StringUtils.isBlank(config.subjectPrefix) ? "[NovelKMS]" : config.subjectPrefix.trim();
+        String name   = user == null || StringUtils.isBlank(user.displayName()) ? "new user" : user.displayName().trim();
         return prefix + " New registration: " + name;
     }
 
@@ -162,10 +163,6 @@ public class RegistrationNotificationService {
         }
         String s = String.valueOf(value);
         return s == null ? "" : s;
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
     }
 
     private static String nullToEmpty(String value) {

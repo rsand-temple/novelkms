@@ -3,6 +3,7 @@ package com.richardsand.novelkms;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.EnumSet;
+import java.util.Properties;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.flywaydb.core.Flyway;
@@ -109,6 +110,7 @@ import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 import com.richardsand.novelkms.service.RegistrationNotificationService;
 import com.richardsand.novelkms.service.StarterContentService;
+import com.richardsand.novelkms.service.StartupNotificationService;
 import com.richardsand.novelkms.service.TrashService;
 import com.richardsand.novelkms.service.admin.AdminBillingService;
 import com.richardsand.novelkms.service.admin.AdminUserDeleteService;
@@ -420,13 +422,14 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         });
 
         env.healthChecks().register("database", new DataSourceHealthCheck(ds));
-        logBuildInfo();
-    }
+        var props = logBuildInfo();
+        new StartupNotificationService(config.getNotifications()).notifyStartup(props);
+     }
 
-    private void logBuildInfo() {
+    private Properties logBuildInfo() {
+        var props = new Properties();
         try (var in = getClass().getClassLoader().getResourceAsStream("build.properties")) {
             if (in != null) {
-                var props = new java.util.Properties();
                 props.load(in);
                 logger.info("NovelKMS Version {} Build {}",
                         props.getProperty("app.version", "unknown"),
@@ -435,6 +438,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         } catch (Exception e) {
             logger.warn("Could not read build.properties", e);
         }
+        return props;
     }
 
     public static void main(String[] args) throws Exception {
