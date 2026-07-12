@@ -28,6 +28,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import EditNoteIcon from '@mui/icons-material/EditNote'
 import { useReview } from '../../review/ReviewContext'
 import { STYLE_ORDER, STYLE_LABELS, HEADING_KEYS } from '../../utils/styles'
+import { estimatePages } from '../../utils/pageEstimate'
 import AiDocProviderSelect from '../ai/AiDocProviderSelect'
 
 // ── font options ───────────────────────────────────────────────────────────────
@@ -74,6 +75,23 @@ function parseEm(val) {
 	if (!val) return 0
 	const m = String(val).match(/^([\d.]+)em$/)
 	return m ? parseFloat(m[1]) : 0
+}
+
+// Counts paragraph- and heading-type nodes in the live TipTap document — the
+// same "paragraph-like block" unit SceneDao.countParagraphsFromHtml counts
+// server-side from saved HTML (opening <p>/<h1-3> tags), used for the
+// estimated page count. List items and blockquote lines are covered too,
+// since TipTap nests a paragraph node inside each one.
+function countParagraphNodes(doc) {
+	let count = 0
+	doc.descendants(node => {
+		if (node.type.name === 'paragraph' || node.type.name === 'heading') {
+			count++
+			return false
+		}
+		return true
+	})
+	return count
 }
 
 function resolveParaAttrs(editor) {
@@ -155,6 +173,14 @@ function VDivider() {
  *                       count; used for book/part preview modes where there is no editor
  *   headingWordCount  — number — extra words from chapter/part headings not in the
  *                       TipTap document; added to the live count in chapter mode
+ *   paragraphCountOverride — number | null — paragraph-count counterpart to
+ *                       wordCountOverride, from the same book/part word-count API response
+ *   headingParagraphCount — number — paragraph-count counterpart to headingWordCount
+ *                       (1 per chapter/part title line, 1 more per non-blank subtitle)
+ *   pageConfig        — { widthPx, heightPx, marginTopPx, marginBottomPx, marginInnerPx,
+ *                       marginOuterPx } | null — resolved page size for the estimated
+ *                       page count; null hides the estimate (AI-doc/template modes, or
+ *                       no book selected)
  *   canReview         — boolean — true when the selection is a reviewable manuscript
  *                       chapter or scene (enables the AI Review toggle)
  *   isScene           — boolean — true when the selection is a scene (adjusts tooltip)
@@ -181,6 +207,9 @@ export default function EditorToolbar({
 	styleSheet = [],
 	wordCountOverride = null,
 	headingWordCount = 0,
+	paragraphCountOverride = null,
+	headingParagraphCount = 0,
+	pageConfig = null,
 	canReview = false,
 	isScene = false,
 	aiDocMode = false,
@@ -231,6 +260,7 @@ export default function EditorToolbar({
 				markFontSize: e.getAttributes('fontSize')?.size ?? null,
 				textAlign: paraAttrs.textAlign ?? 'left',
 				wordCount: e.storage?.characterCount?.words?.() ?? 0,
+				paragraphCount: countParagraphNodes(e.state.doc),
 			}
 		},
 	}) ?? {}
@@ -257,6 +287,19 @@ export default function EditorToolbar({
 	const displayWordCount = wordCountOverride != null
 		? wordCountOverride
 		: (state.wordCount ?? 0) + (headingWordCount ?? 0)
+
+	// Paragraph-count counterpart to displayWordCount, same override/live
+	// split, feeding the estimated page count below.
+	const displayParagraphCount = paragraphCountOverride != null
+		? paragraphCountOverride
+		: (state.paragraphCount ?? 0) + (headingParagraphCount ?? 0)
+
+	// Rough "~N pages" estimate — see utils/pageEstimate.js. null (from a
+	// missing pageConfig, e.g. AI-doc/template modes) hides the estimate.
+	const estimatedPages = useMemo(
+		() => estimatePages(displayWordCount, displayParagraphCount, pageConfig),
+		[displayWordCount, displayParagraphCount, pageConfig]
+	)
 
 	// ── paragraph-attribute helpers ──────────────────────────────────────────
 
@@ -762,6 +805,7 @@ export default function EditorToolbar({
 					{isSaving && <CircularProgress size={12} />}
 					<Typography variant="caption" color="text.secondary">
 						{displayWordCount.toLocaleString('en-US')} words
+						{estimatedPages != null && ` \u00b7 ~${estimatedPages.toLocaleString('en-US')} pages`}
 					</Typography>
 				</Box>
 			</Toolbar>

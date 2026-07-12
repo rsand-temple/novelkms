@@ -35,6 +35,7 @@ public class SceneDao {
                 .displayOrder(rs.getInt("display_order"))
                 .content(rs.getString("content"))
                 .wordCount(rs.getInt("word_count"))
+                .paragraphCount(rs.getInt("paragraph_count"))
                 .aiContextPinned(rs.getBoolean("ai_context_pinned"))
                 .structuredData(rs.getString("structured_data"))
                 .notes(rs.getString("notes"))
@@ -147,8 +148,8 @@ public class SceneDao {
             title = "New Scene [" + id.toString().substring(0, 4) + "]";
         }
         String sql = """
-                INSERT INTO scene (id, chapter_id, title, display_order, content, word_count, notes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, NULL, 0, ?, ?, ?)
+                INSERT INTO scene (id, chapter_id, title, display_order, content, word_count, paragraph_count, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, NULL, 0, 0, ?, ?, ?)
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
@@ -169,26 +170,33 @@ public class SceneDao {
     }
 
     /**
-     * Saves scene content and word count.
+     * Saves scene content, word count, and paragraph count.
      * wordCount is supplied by the caller:
      * - From the frontend: TipTap's CharacterCount.words() (single-scene mode)
      * or the countWords() HTML-strip helper (multi-scene mode).
      * - From ImportService.finalizeScene: stripHtml + split on the HTML content.
      * Both approaches use /\S+/ matching so results are consistent with the
      * word count displayed in the editor status bar.
+     *
+     * paragraphCount is NOT supplied by the caller — it is derived here from
+     * `content` via {@link #countParagraphsFromHtml}, so every write path
+     * (manual edit, DOCX import, codex AI-fill promotion, starter content)
+     * picks it up automatically without touching each caller.
      */
     public Optional<Scene> saveContent(UUID id, String content, int wordCount) throws SQLException {
-        Instant now = Instant.now();
-        String  sql = """
-                UPDATE scene SET content = ?, word_count = ?, updated_at = ?
+        Instant now            = Instant.now();
+        int     paragraphCount = countParagraphsFromHtml(content);
+        String  sql            = """
+                UPDATE scene SET content = ?, word_count = ?, paragraph_count = ?, updated_at = ?
                 WHERE id = ?
                 """;
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, content);
             ps.setInt(2, wordCount);
-            ps.setTimestamp(3, Timestamp.from(now));
-            ps.setObject(4, id);
+            ps.setInt(3, paragraphCount);
+            ps.setTimestamp(4, Timestamp.from(now));
+            ps.setObject(5, id);
             int rows = ps.executeUpdate();
             if (rows == 0) {
                 return Optional.empty();
@@ -375,13 +383,17 @@ public class SceneDao {
     // -------------------------------------------------------------------------
 
     /**
-     * Recomputes word_count for every scene that has stored content, using the
-     * same /\S+/ algorithm that the frontend's countWords() helper and
-     * ImportService.finalizeScene() both use.
+     * Recomputes word_count and paragraph_count for every scene that has
+     * stored content, using the same algorithms as
+     * {@link #saveContent(UUID, String, int)}: /\S+/ matching for words
+     * (matching the frontend's countWords() helper and
+     * ImportService.finalizeScene()), and {@link #countParagraphsFromHtml} for
+     * paragraphs.
      *
      * Called via POST /api/admin/recalculate-word-counts to repair scenes whose
      * word_count was zeroed by the pre-fix autosave path (which omitted wordCount
-     * from the PUT /scenes/{id}/content request body).
+     * from the PUT /scenes/{id}/content request body), and to backfill
+     * paragraph_count for every scene written before V37.
      *
      * Two-phase approach: read all scenes first on one connection, then write
      * all updates in a single batched transaction on a second connection,
@@ -390,8 +402,9 @@ public class SceneDao {
      * Returns the number of scenes updated.
      */
     public int recalculateAllWordCounts() throws SQLException {
-        // Phase 1 — collect (id, recomputed word count) for every scene with content
-        record Update(UUID id, int wordCount) {
+        // Phase 1 — collect (id, recomputed word count, recomputed paragraph
+        // count) for every scene with content
+        record Update(UUID id, int wordCount, int paragraphCount) {
         }
         List<Update> updates = new ArrayList<>();
 
@@ -402,7 +415,7 @@ public class SceneDao {
             while (rs.next()) {
                 UUID   id      = rs.getObject("id", UUID.class);
                 String content = rs.getString("content");
-                updates.add(new Update(id, countWordsFromHtml(content)));
+                updates.add(new Update(id, countWordsFromHtml(content), countParagraphsFromHtml(content)));
             }
         }
 
@@ -411,7 +424,7 @@ public class SceneDao {
         }
 
         // Phase 2 — apply all updates in one batched transaction
-        String  updateSql = "UPDATE scene SET word_count = ?, updated_at = ? WHERE id = ?";
+        String  updateSql = "UPDATE scene SET word_count = ?, paragraph_count = ?, updated_at = ? WHERE id = ?";
         Instant now       = Instant.now();
         try (Connection c = ds.getConnection();
                 PreparedStatement ps = c.prepareStatement(updateSql)) {
@@ -419,8 +432,9 @@ public class SceneDao {
             try {
                 for (Update u : updates) {
                     ps.setInt(1, u.wordCount());
-                    ps.setTimestamp(2, Timestamp.from(now));
-                    ps.setObject(3, u.id());
+                    ps.setInt(2, u.paragraphCount());
+                    ps.setTimestamp(3, Timestamp.from(now));
+                    ps.setObject(4, u.id());
                     ps.addBatch();
                 }
                 ps.executeBatch();
@@ -463,6 +477,31 @@ public class SceneDao {
             } else {
                 inWord = false;
             }
+        }
+        return count;
+    }
+
+    /**
+     * Counts paragraph-like blocks in TipTap HTML: opening {@code <p>} tags
+     * (which cover plain paragraphs, and — since TipTap nests a paragraph
+     * inside each list item and blockquote — list items and blockquote lines
+     * too) plus opening {@code <h1>}/{@code <h2>}/{@code <h3>} heading tags.
+     *
+     * This is a rough, line-oriented count for the editor status bar's
+     * estimated page count (see utils/pageEstimate.js on the frontend), not an
+     * exact structural parse — an off-by-one here is expected and fine.
+     */
+    private static final java.util.regex.Pattern PARAGRAPH_TAG_PATTERN =
+            java.util.regex.Pattern.compile("<(p|h1|h2|h3)[\\s>]", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    private int countParagraphsFromHtml(String html) {
+        if (html == null || html.isBlank()) {
+            return 0;
+        }
+        java.util.regex.Matcher matcher = PARAGRAPH_TAG_PATTERN.matcher(html);
+        int count = 0;
+        while (matcher.find()) {
+            count++;
         }
         return count;
     }

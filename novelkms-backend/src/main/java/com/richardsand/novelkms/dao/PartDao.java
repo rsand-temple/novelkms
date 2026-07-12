@@ -244,6 +244,65 @@ public class PartDao {
         return total;
     }
 
+    /**
+     * Returns the total paragraph count for a single part, mirroring
+     * {@link #getTotalWordCount(UUID)}: one "paragraph" for the part's own
+     * title (plus one more for a non-blank subtitle), scene.paragraph_count
+     * for every scene in every chapter in this part, and one per chapter
+     * title/non-blank subtitle in this part.
+     *
+     * Feeds the estimated-page-count figure alongside word count and page
+     * size (see utils/pageEstimate.js on the frontend); a rough count is fine
+     * here, not an exact one.
+     */
+    public int getTotalParagraphCount(UUID partId) throws SQLException {
+        int total = 0;
+
+        String partSql = "SELECT title, subtitle FROM part WHERE id = ?";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(partSql)) {
+            ps.setObject(1, partId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    total += 1;
+                    String s = rs.getString("subtitle");
+                    if (s != null && !s.isBlank())
+                        total += 1;
+                }
+            }
+        }
+
+        String sceneSql = """
+                SELECT COALESCE(SUM(s.paragraph_count), 0)
+                FROM scene s
+                JOIN chapter ch ON ch.id = s.chapter_id
+                WHERE ch.part_id = ? AND ch.deleted_at IS NULL AND s.deleted_at IS NULL
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sceneSql)) {
+            ps.setObject(1, partId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) total += rs.getInt(1);
+            }
+        }
+
+        String chapterSql = "SELECT title, subtitle FROM chapter WHERE part_id = ? AND deleted_at IS NULL";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(chapterSql)) {
+            ps.setObject(1, partId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    total += 1;
+                    String s = rs.getString("subtitle");
+                    if (s != null && !s.isBlank())
+                        total += 1;
+                }
+            }
+        }
+
+        return total;
+    }
+
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------

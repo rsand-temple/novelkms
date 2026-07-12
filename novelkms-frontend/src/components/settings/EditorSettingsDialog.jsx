@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import {
 	Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent,
 	DialogTitle, Divider, FormControl, FormControlLabel, InputLabel, MenuItem,
@@ -14,9 +14,9 @@ import {
 	useUpsertProjectEditorSettings, useDeleteProjectEditorSettings,
 } from '../../hooks/useEditorSettings'
 import { usePageLayout, useSavePageLayout, useRemovePageLayout } from '../../hooks/usePageLayout'
-import {
-	useAiFormInstructions, useSaveAiFormInstructions, useRemoveAiFormInstructions,
-} from '../../hooks/useAiFormInstructions'
+import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor'
+import AiPromptTemplateEditor from '../ai/AiPromptTemplateEditor'
+import MemoryTemplateEditor from '../ai/MemoryTemplateEditor'
 import { HelpButton } from '../../help'
 
 const TAB_CONTENT_HEIGHT = '60vh'
@@ -50,9 +50,9 @@ const PAGE_SIZE_PRESETS = [
 function inheritedFromLabel(serverScope) {
 	switch (serverScope) {
 		case 'PROJECT': return 'the project'
-		case 'USER':    return 'your global default'
-		case 'SYSTEM':  return 'the built-in default'
-		default:        return 'the inherited value'
+		case 'USER': return 'your global default'
+		case 'SYSTEM': return 'the built-in default'
+		default: return 'the inherited value'
 	}
 }
 
@@ -297,43 +297,80 @@ function PageLayoutBody({ data, isOwn, scopeWord, busy, inheritedFrom, upsert, r
 
 // ── AI tab ─────────────────────────────────────────────────────────────────────
 
-function AiTab({ scope, id, scopeWord }) {
-	const q = useAiFormInstructions(scope, id)
-	const save = useSaveAiFormInstructions(scope, id)
-	const remove = useRemoveAiFormInstructions(scope, id)
-	if (q.isLoading || !q.data) return <Loading />
-	const data = q.data
-	const busy = save.isPending || remove.isPending
-	return (
-		<AiBody
-			key={`${id}:${data.scope}:${data.hasOwnOverride}`}
-			data={data} isOwn={data.hasOwnOverride} scopeWord={scopeWord} busy={busy}
-			inheritedFrom={inheritedFromLabel(data.scope)}
-			upsert={(text, opts) => save.mutate(text, opts)}
-			remove={() => remove.mutate()}
-		/>
-	)
-}
-
-function AiBody({ data, isOwn, scopeWord, busy, inheritedFrom, upsert, remove }) {
-	const seed = data.instructions ?? ''
-	const [text, setText] = useState(seed)
-	const [dirty, setDirty] = useState(false)
-	const show = isOwn ? text : seed
-	const onToggle = (on) => (on ? upsert(seed) : remove())
-	const onSave = () => upsert(text.trim(), { onSuccess: () => setDirty(false) })
+/**
+ * The four AI prompt subtabs rendered inside the context-settings AI outer tab,
+ * scoped to this book or project. Mirrors SettingsDialog's AiPromptSubtabs
+ * (global scope) — same four subtabs, same underlying shared editor
+ * components, just pointed at `scope`/`id` instead of `'global'`. Each subtab
+ * is mounted fresh when selected so its form state resets cleanly.
+ */
+function AiPromptSubtabs({ scope, id }) {
+	const [aiTab, setAiTab] = useState('reviews')
 
 	return (
-		<OverrideShell label="review instructions" scopeWord={scopeWord} isOwn={isOwn}
-			inheritedFrom={inheritedFrom} busy={busy} dirty={dirty && !!text.trim()} onToggle={onToggle} onSave={onSave}>
-			<Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-				Editorial guidance sent to the AI (its role and constraints). The response format the app
-				relies on is fixed automatically and is not part of this text.
-			</Typography>
-			<TextField value={show} onChange={e => { setText(e.target.value); setDirty(true) }}
-				fullWidth multiline minRows={8} size="small" disabled={!isOwn}
-				placeholder="You are an experienced editor reviewing a section of a novel…" />
-		</OverrideShell>
+		<Box>
+			<Tabs
+				value={aiTab}
+				onChange={(_, v) => setAiTab(v)}
+				sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+				variant="scrollable"
+				scrollButtons="auto"
+			>
+				<Tab value="reviews" label="Reviews" />
+				<Tab value="memory" label="Memory" />
+				<Tab value="summary" label="Summary" />
+				<Tab value="editorial" label="Editorial" />
+			</Tabs>
+
+			{aiTab === 'reviews' && (
+				<AiFormInstructionsEditor scope={scope} id={id} />
+			)}
+
+			{aiTab === 'memory' && (
+				<MemoryTemplateEditor scope={scope} id={id} />
+			)}
+
+			{aiTab === 'summary' && (
+				<Box>
+					<Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+						Chapter Summary Prompt
+					</Typography>
+					<AiPromptTemplateEditor
+						key={`chapterSummary:${scope}:${id}`}
+						templateType="chapterSummary"
+						scope={scope}
+						id={id}
+						description="The instruction the AI follows when it writes a one-paragraph summary of a chapter. These summaries are gathered in book order as the sole input when generating the book summary."
+						placeholder="You are summarizing one chapter of a novel. Write a single, clear, human-readable paragraph…"
+					/>
+
+					<Divider sx={{ my: 3 }} />
+
+					<Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+						Book Summary Prompt
+					</Typography>
+					<AiPromptTemplateEditor
+						key={`bookSummary:${scope}:${id}`}
+						templateType="bookSummary"
+						scope={scope}
+						id={id}
+						description="The instruction the AI follows when it synthesizes the chapter summaries into a whole-book synopsis. The book summary is built entirely from chapter summaries — never the manuscript prose directly."
+						placeholder="You are writing a synopsis of an entire novel from the per-chapter summaries…"
+					/>
+				</Box>
+			)}
+
+			{aiTab === 'editorial' && (
+				<AiPromptTemplateEditor
+					key={`editorial:${scope}:${id}`}
+					templateType="editorial"
+					scope={scope}
+					id={id}
+					description="The developmental-editor persona the AI adopts when it gives its overall impressionistic read of a chapter — tone, genre drift, character arcs, and storyline evolution. An editorial is not a line-level review and is never consumed by any other AI function."
+					placeholder="You are an experienced developmental editor giving the author your overall editorial impression…"
+				/>
+			)}
+		</Box>
 	)
 }
 
@@ -364,7 +401,7 @@ function Content({ scope, projectId, bookId, scopeLabel, onEditGlobal, onTabChan
 			<Box sx={{ height: TAB_CONTENT_HEIGHT, overflowY: 'auto', pr: 0.5 }}>
 				{tab === 'document' && <DocumentTab scope={scope} id={id} ownScope={ownScope} scopeWord={scopeWord} />}
 				{tab === 'layout' && <PageLayoutTab scope={scope} id={id} ownScope={ownScope} scopeWord={scopeWord} />}
-				{tab === 'ai' && <AiTab scope={scope} id={id} scopeWord={scopeWord} />}
+				{tab === 'ai' && <AiPromptSubtabs scope={scope} id={id} />}
 			</Box>
 		</>
 	)
@@ -392,36 +429,41 @@ const CTX_TAB_HELP_TOPICS = {
  *   onClose     {() => void}
  */
 export default function EditorSettingsDialog({ open, scope, projectId, bookId, scopeLabel, onEditGlobal, onClose }) {
+	return (
+		<Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+			{open && scope && (
+				<EditorSettingsDialogBody
+					scope={scope} projectId={projectId} bookId={bookId}
+					scopeLabel={scopeLabel} onEditGlobal={onEditGlobal} onClose={onClose}
+				/>
+			)}
+		</Dialog>
+	)
+}
+
+// Mounted fresh only while the dialog is open (see the `{open && …}` guard
+// above), so `activeTab` always starts at 'document' on each open without
+// needing a ref to detect the open transition — accessing `ref.current`
+// during render is unsafe (see https://react.dev/reference/react/useRef).
+function EditorSettingsDialogBody({ scope, projectId, bookId, scopeLabel, onEditGlobal, onClose }) {
 	const [activeTab, setActiveTab] = useState('document')
-
-	// Reset when the dialog opens so the HelpButton matches the initial tab.
-	const prevOpen = useRef(false)
-	if (open && !prevOpen.current) {
-		if (activeTab !== 'document') {
-			setActiveTab('document')
-		}
-	}
-	prevOpen.current = open
-
 	const helpTopic = CTX_TAB_HELP_TOPICS[activeTab] ?? 'editor.overview'
 
 	return (
-		<Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+		<>
 			<DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 				{scope === 'book' ? 'Book Settings' : 'Project Settings'}
 				<Box sx={{ flex: 1 }} />
 				<HelpButton topic={helpTopic} />
 			</DialogTitle>
 			<DialogContent dividers>
-				{open && scope && (
-					<Content scope={scope} projectId={projectId} bookId={bookId}
-						scopeLabel={scopeLabel} onEditGlobal={onEditGlobal}
-						onTabChange={setActiveTab} />
-				)}
+				<Content scope={scope} projectId={projectId} bookId={bookId}
+					scopeLabel={scopeLabel} onEditGlobal={onEditGlobal}
+					onTabChange={setActiveTab} />
 			</DialogContent>
 			<DialogActions>
 				<Button onClick={onClose}>Close</Button>
 			</DialogActions>
-		</Dialog>
+		</>
 	)
 }

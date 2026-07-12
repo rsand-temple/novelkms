@@ -175,19 +175,21 @@ public class PartResource {
     // -------------------------------------------------------------------------
 
     /**
-     * Returns the total word count for a part: the part heading words, all
-     * scene content in the part's chapters, and all chapter heading words.
-     * Used by the editor status bar when a part is selected.
+     * Returns the total word and paragraph count for a part: the part heading
+     * words, all scene content in the part's chapters, and all chapter
+     * heading words. Used by the editor status bar when a part is selected;
+     * both counts feed the estimated page count.
      *
-     * Returns { "wordCount": N }
+     * Returns { "wordCount": N, "paragraphCount": M }
      */
     @GET
     @Path("/parts/{id}/word-count")
     public Response getWordCount(@PathParam("id") UUID id) {
         logger.debug("PartResource.getWordCount invoked: id={}", id);
         try {
-            int count = partDao.getTotalWordCount(id);
-            return Response.ok(Map.of("wordCount", count)).build();
+            int wordCount = partDao.getTotalWordCount(id);
+            int paragraphCount = partDao.getTotalParagraphCount(id);
+            return Response.ok(Map.of("wordCount", wordCount, "paragraphCount", paragraphCount)).build();
         } catch (SQLException e) {
             return serverError(e);
         }

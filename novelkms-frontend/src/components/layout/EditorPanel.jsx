@@ -506,6 +506,11 @@ export default function EditorPanel({
 	// Part mode: fetch part total from API (includes part + chapter headings).
 	// Chapter mode: TipTap live count + heading words computed below.
 	// Scene mode: TipTap live count only.
+	//
+	// Each response also carries paragraphCount, feeding the estimated page
+	// count (see toolbarPageConfig below) — the project-shelf query doesn't
+	// need it since the estimate isn't shown there (no single book/page size
+	// to estimate against), so only book/part responses are read for it.
 	const { data: projectWordCount } = useQuery({
 		queryKey: ['projects', projectId, 'word-count'],
 		queryFn: () => client.get(`/projects/${projectId}/word-count`).then(r => r.data.wordCount),
@@ -513,18 +518,18 @@ export default function EditorPanel({
 		staleTime: 60_000,
 	});
 
-	const { data: bookWordCount } = useQuery({
+	const { data: bookWordCountData } = useQuery({
 		queryKey: ['books', bookId, 'word-count'],
-		queryFn: () => client.get(`/books/${bookId}/word-count`).then(r => r.data.wordCount),
+		queryFn: () => client.get(`/books/${bookId}/word-count`).then(r => r.data),
 		// Enabled for book draft/cover preview (status bar) and book-scope
 		// template mode (WORDS token in template editor preview).
 		enabled: !!bookId && (bookDraftMode || templateMode),
 		staleTime: 60_000,
 	});
 
-	const { data: partWordCount } = useQuery({
+	const { data: partWordCountData } = useQuery({
 		queryKey: ['parts', partId, 'word-count'],
-		queryFn: () => client.get(`/parts/${partId}/word-count`).then(r => r.data.wordCount),
+		queryFn: () => client.get(`/parts/${partId}/word-count`).then(r => r.data),
 		enabled: !!partId && partDraftMode,
 		staleTime: 60_000,
 	});
@@ -539,15 +544,44 @@ export default function EditorPanel({
 		return countWords(title) + countWords(subtitle);
 	}, [multiSceneMode, chapterData]);
 
+	// Paragraph-count counterpart to chapterHeadingWords: the title line
+	// counts as one "paragraph" line, plus one more for a non-blank subtitle —
+	// matching how BookDao/PartDao count chapter/part headings server-side.
+	const chapterHeadingParagraphs = useMemo(() => {
+		if (!multiSceneMode || !chapterData) return 0;
+		return 1 + (chapterData.subtitle?.trim() ? 1 : 0);
+	}, [multiSceneMode, chapterData]);
+
 	// Override the toolbar word count for modes where there is no live TipTap
 	// editor (or the TipTap count is stale/irrelevant).
 	const toolbarWordCountOverride = projectShelfMode
 		? (projectWordCount ?? 0)
 		: (bookDraftMode || bookCoverMode)
-			? (bookWordCount ?? 0)
+			? (bookWordCountData?.wordCount ?? 0)
 			: partDraftMode
-				? (partWordCount ?? 0)
+				? (partWordCountData?.wordCount ?? 0)
 				: null;
+
+	// Paragraph-count counterpart to toolbarWordCountOverride, feeding the
+	// estimated page count. Project-shelf mode has no counterpart — the
+	// estimate isn't shown there (see toolbarPageConfig below).
+	const toolbarParagraphCountOverride = (bookDraftMode || bookCoverMode)
+		? (bookWordCountData?.paragraphCount ?? 0)
+		: partDraftMode
+			? (partWordCountData?.paragraphCount ?? 0)
+			: null;
+
+	// Resolved page size feeding the editor status bar's estimated page count.
+	// Reuses the same book record and derivePageConfig()/DEFAULT_PAGE_CONFIG
+	// fallback that already drive the book cover / part page preview canvas
+	// above, so the estimate matches what the author sees there. Shown for
+	// book/part/chapter/scene editing only — not AI documents, templates, or
+	// the project shelf (which has no single book/page size to estimate
+	// against).
+	const { data: pageEstimateBook } = useBook(bookId);
+	const toolbarPageConfig = (!aiDocMode && !templateMode && !!bookId)
+		? (derivePageConfig(pageEstimateBook) ?? DEFAULT_PAGE_CONFIG)
+		: null;
 
 	const isLoading = aiDocMode
 		? aiDocLoading
@@ -982,8 +1016,8 @@ export default function EditorPanel({
 	const handleTogglePreview = useCallback(() => setPreviewActive(p => !p), []);
 
 	const previewValues = useMemo(
-		() => resolveValues({ scope: templateScope, book: previewBook, project: previewProject, wordCount: bookWordCount ?? null }),
-		[templateScope, previewBook, previewProject, bookWordCount]
+		() => resolveValues({ scope: templateScope, book: previewBook, project: previewProject, wordCount: bookWordCountData?.wordCount ?? null }),
+		[templateScope, previewBook, previewProject, bookWordCountData]
 	);
 	const previewHtml = useMemo(() => {
 		if (!showEditorPreview || !isEditorReady(editor)) return '';
@@ -1215,6 +1249,9 @@ export default function EditorPanel({
 				onTogglePreview={handleTogglePreview}
 				wordCountOverride={toolbarWordCountOverride}
 				headingWordCount={multiSceneMode ? chapterHeadingWords : 0}
+				paragraphCountOverride={toolbarParagraphCountOverride}
+				headingParagraphCount={multiSceneMode ? chapterHeadingParagraphs : 0}
+				pageConfig={toolbarPageConfig}
 				canReview={!aiDocMode && !!chapterId && !!bookId && !codexId}
 				isScene={!!sceneId}
 				aiDocMode={aiDocMode}

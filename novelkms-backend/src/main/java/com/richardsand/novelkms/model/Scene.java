@@ -41,6 +41,15 @@ public class Scene {
     private int wordCount;
 
     /**
+     * Paragraph count maintained by the application; updated on each save.
+     * Derived server-side from {@link #content} (see {@code SceneDao}), never
+     * supplied by the caller. Feeds the editor status bar's estimated page
+     * count alongside word count and page size.
+     */
+    @JsonProperty
+    private int paragraphCount;
+
+    /**
      * Meaningful only for codex entries (scenes whose parent chapter is a codex
      * category). When true, the entry is shared with the AI as reference context
      * for chapter/scene reviews — see {@code AiReviewService.assembleReferenceContext}.

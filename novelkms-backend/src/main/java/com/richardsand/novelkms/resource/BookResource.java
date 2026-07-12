@@ -179,19 +179,22 @@ public class BookResource {
     // -------------------------------------------------------------------------
 
     /**
-     * Returns the total word count for a book including scene content,
-     * chapter headings, and part headings. Used by the editor status bar
-     * when the book is selected and by the WORDS template token.
+     * Returns the total word and paragraph count for a book including scene
+     * content, chapter headings, and part headings. Used by the editor status
+     * bar when the book is selected (word count for the WORDS template token;
+     * both counts feed the estimated page count) and by the WORDS template
+     * token.
      *
-     * Returns { "wordCount": N }
+     * Returns { "wordCount": N, "paragraphCount": M }
      */
     @GET
     @Path("/books/{id}/word-count")
     public Response getWordCount(@PathParam("id") UUID id) {
         logger.debug("BookResource.getWordCount invoked: id={}", id);
         try {
-            int count = bookDao.getTotalWordCount(id);
-            return Response.ok(Map.of("wordCount", count)).build();
+            int wordCount = bookDao.getTotalWordCount(id);
+            int paragraphCount = bookDao.getTotalParagraphCount(id);
+            return Response.ok(Map.of("wordCount", wordCount, "paragraphCount", paragraphCount)).build();
         } catch (SQLException e) {
             return serverError(e);
         }
