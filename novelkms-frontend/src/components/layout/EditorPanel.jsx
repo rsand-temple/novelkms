@@ -87,10 +87,29 @@ const clampRail = (v) => Math.min(Math.max(v, MIN_RAIL_WIDTH), MAX_RAIL_WIDTH);
 // Fallback page dimensions used when the book record hasn't loaded yet, or
 // when the book has no page layout configured.  6" × 9" Trade Paperback at
 // 96 DPI is a neutral default that gives a recognisable page shape without
-// requiring the author to enable page layout first.
+// requiring the author to enable page layout first. Used only for the book
+// cover / part page PREVIEW CANVAS — see EXPORT_FALLBACK_PAGE_CONFIG below
+// for the estimated-page-count fallback, which must match export instead.
 const DEFAULT_PAGE_CONFIG = {
 	widthPx: 576,  // 6.0" × 96 dpi
 	heightPx: 864,  // 9.0" × 96 dpi
+	marginTopPx: 96,  // 1.0"
+	marginBottomPx: 96,  // 1.0"
+	marginInnerPx: 120,  // 1.25"
+	marginOuterPx: 96,  // 1.0"
+};
+
+// Fallback page dimensions for the estimated page count specifically, used
+// when the book has no page layout configured. Must mirror ExportService's
+// actual disabled-layout default (Letter, 1" top/bottom/outer margins, 1.25"
+// inner margin — see DEFAULT_WIDTH_IN etc. in ExportService.java), NOT
+// DEFAULT_PAGE_CONFIG above: that one is a 6"×9" Trade Paperback shape chosen
+// only to make the preview canvas look like a recognisable page before page
+// layout is configured, and using it here would understate the usable page
+// area and badly overstate the estimate against what DOCX export produces.
+const EXPORT_FALLBACK_PAGE_CONFIG = {
+	widthPx: 816,  // 8.5" × 96 dpi
+	heightPx: 1056, // 11.0" × 96 dpi
 	marginTopPx: 96,  // 1.0"
 	marginBottomPx: 96,  // 1.0"
 	marginInnerPx: 120,  // 1.25"
@@ -580,7 +599,7 @@ export default function EditorPanel({
 	// against).
 	const { data: pageEstimateBook } = useBook(bookId);
 	const toolbarPageConfig = (!aiDocMode && !templateMode && !!bookId)
-		? (derivePageConfig(pageEstimateBook) ?? DEFAULT_PAGE_CONFIG)
+		? (derivePageConfig(pageEstimateBook) ?? EXPORT_FALLBACK_PAGE_CONFIG)
 		: null;
 
 	const isLoading = aiDocMode

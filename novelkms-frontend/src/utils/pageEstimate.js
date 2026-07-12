@@ -28,7 +28,12 @@ const PT_PER_IN = 72
 const FONT_SIZE_PT = 12
 const AVG_CHAR_WIDTH_PT = FONT_SIZE_PT * 0.5   // ~0.5em average glyph width, Times New Roman
 const AVG_CHARS_PER_WORD = 6                    // ~5-letter average English word + 1 space
-const LINE_HEIGHT_PT = FONT_SIZE_PT * 2         // double-spaced, matches ExportService
+// Word's "double spacing" is 2x the font's own single-line height, not 2x the
+// raw point size — Times New Roman's single-line height already includes
+// leading beyond the glyph size, roughly 1.15x the font size. 12pt * 1.15 *
+// 2 ≈ 27.6pt/line, vs a naive 24pt/line that undercounts lines (and so
+// overcounts words-per-page) relative to actual Word rendering.
+const LINE_HEIGHT_PT = FONT_SIZE_PT * 1.15 * 2
 const HALF_LINE_PER_PARAGRAPH = 0.5
 
 /**

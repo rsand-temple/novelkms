@@ -14,6 +14,15 @@ import {
 	useUpsertProjectEditorSettings, useDeleteProjectEditorSettings,
 } from '../../hooks/useEditorSettings'
 import { usePageLayout, useSavePageLayout, useRemovePageLayout } from '../../hooks/usePageLayout'
+import {
+	useAiFormInstructions, useSaveAiFormInstructions, useRemoveAiFormInstructions,
+} from '../../hooks/useAiFormInstructions'
+import {
+	useMemoryTemplate, useSaveMemoryTemplate, useRemoveMemoryTemplate,
+} from '../../hooks/useMemoryTemplate'
+import {
+	useAiPromptTemplate, useSaveAiPromptTemplate, useRemoveAiPromptTemplate,
+} from '../../hooks/useAiPromptTemplate'
 import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor'
 import AiPromptTemplateEditor from '../ai/AiPromptTemplateEditor'
 import MemoryTemplateEditor from '../ai/MemoryTemplateEditor'
@@ -298,7 +307,100 @@ function PageLayoutBody({ data, isOwn, scopeWord, busy, inheritedFrom, upsert, r
 // ── AI tab ─────────────────────────────────────────────────────────────────────
 
 /**
- * The four AI prompt subtabs rendered inside the context-settings AI outer tab,
+ * AiTab — single "Use {scope}-specific AI prompts" switch wrapping all four AI
+ * prompt subtabs, mirroring the Document and Page Layout tabs' OverrideShell
+ * pattern. Unlike those tabs, the AI prompts aren't one row of settings — they
+ * are five independently-resolved artifacts (review instructions, memory
+ * template, chapter-summary prompt, book-summary prompt, editorial prompt),
+ * each on its own book → project → user → system cascade. So this tab fetches
+ * all five and drives the switch off their combined `hasOwnOverride` state
+ * rather than delegating to a single OverrideShell/onSave pair:
+ *
+ *   - Off (none of the five have an override at this scope): the tab shows an
+ *     "inheriting" message only. All four AI subtabs come from whatever this
+ *     scope currently resolves to (project/user/system) — nothing book- or
+ *     project-specific is shown or editable here.
+ *   - On: creates a copy-on-write override for every one of the five,
+ *     seeded from their current resolved (inherited) content, then shows the
+ *     normal editable AiPromptSubtabs — which still has its own per-artifact
+ *     Save/Remove, so individual prompts can be fine-tuned or reverted
+ *     without leaving override mode.
+ *
+ * Turning the switch back off removes the override for every one of the five
+ * that currently has one, reverting this tab fully back to inherited.
+ */
+function AiTab({ scope, id, scopeWord }) {
+	const reviewsQ = useAiFormInstructions(scope, id)
+	const memoryQ = useMemoryTemplate(scope, id)
+	const chapterSummaryQ = useAiPromptTemplate('chapterSummary', scope, id)
+	const bookSummaryQ = useAiPromptTemplate('bookSummary', scope, id)
+	const editorialQ = useAiPromptTemplate('editorial', scope, id)
+
+	const saveReviews = useSaveAiFormInstructions(scope, id)
+	const removeReviews = useRemoveAiFormInstructions(scope, id)
+	const saveMemory = useSaveMemoryTemplate(scope, id)
+	const removeMemory = useRemoveMemoryTemplate(scope, id)
+	const saveChapterSummary = useSaveAiPromptTemplate('chapterSummary', scope, id)
+	const removeChapterSummary = useRemoveAiPromptTemplate('chapterSummary', scope, id)
+	const saveBookSummary = useSaveAiPromptTemplate('bookSummary', scope, id)
+	const removeBookSummary = useRemoveAiPromptTemplate('bookSummary', scope, id)
+	const saveEditorial = useSaveAiPromptTemplate('editorial', scope, id)
+	const removeEditorial = useRemoveAiPromptTemplate('editorial', scope, id)
+
+	const queries = [reviewsQ, memoryQ, chapterSummaryQ, bookSummaryQ, editorialQ]
+	if (queries.some(q => q.isLoading || !q.data)) return <Loading />
+
+	const isOwn = queries.some(q => q.data.hasOwnOverride)
+	const busy = [
+		saveReviews, removeReviews, saveMemory, removeMemory,
+		saveChapterSummary, removeChapterSummary, saveBookSummary, removeBookSummary,
+		saveEditorial, removeEditorial,
+	].some(m => m.isPending)
+
+	// The five artifacts share the same cascade, so their resolved scopes
+	// normally agree; the review instructions' resolved scope is a
+	// representative choice for the "inheriting from" message.
+	const inheritedFrom = inheritedFromLabel(reviewsQ.data.scope)
+
+	const handleToggle = (on) => {
+		if (on) {
+			if (!reviewsQ.data.hasOwnOverride) saveReviews.mutate(reviewsQ.data.instructions ?? '')
+			if (!memoryQ.data.hasOwnOverride) saveMemory.mutate(memoryQ.data.content ?? '')
+			if (!chapterSummaryQ.data.hasOwnOverride) saveChapterSummary.mutate(chapterSummaryQ.data.content ?? '')
+			if (!bookSummaryQ.data.hasOwnOverride) saveBookSummary.mutate(bookSummaryQ.data.content ?? '')
+			if (!editorialQ.data.hasOwnOverride) saveEditorial.mutate(editorialQ.data.content ?? '')
+		} else {
+			if (reviewsQ.data.hasOwnOverride) removeReviews.mutate()
+			if (memoryQ.data.hasOwnOverride) removeMemory.mutate()
+			if (chapterSummaryQ.data.hasOwnOverride) removeChapterSummary.mutate()
+			if (bookSummaryQ.data.hasOwnOverride) removeBookSummary.mutate()
+			if (editorialQ.data.hasOwnOverride) removeEditorial.mutate()
+		}
+	}
+
+	return (
+		<Box>
+			<FormControlLabel
+				control={<Switch checked={isOwn} disabled={busy} onChange={(e) => handleToggle(e.target.checked)} />}
+				label={`Use ${scopeWord}-specific AI prompts`}
+			/>
+			{!isOwn && (
+				<Alert severity="info" icon={false} sx={{ my: 1, py: 0.5 }}>
+					Inheriting AI prompts (reviews, memory, summary, and editorial) from {inheritedFrom}.
+					Turn on to customize prompts for this {scopeWord}.
+				</Alert>
+			)}
+			{isOwn && (
+				<Box sx={{ mt: 2 }}>
+					<AiPromptSubtabs scope={scope} id={id} />
+				</Box>
+			)}
+		</Box>
+	)
+}
+
+/**
+ * The four AI prompt subtabs rendered once the AiTab switch above is on,
  * scoped to this book or project. Mirrors SettingsDialog's AiPromptSubtabs
  * (global scope) — same four subtabs, same underlying shared editor
  * components, just pointed at `scope`/`id` instead of `'global'`. Each subtab
@@ -401,7 +503,7 @@ function Content({ scope, projectId, bookId, scopeLabel, onEditGlobal, onTabChan
 			<Box sx={{ height: TAB_CONTENT_HEIGHT, overflowY: 'auto', pr: 0.5 }}>
 				{tab === 'document' && <DocumentTab scope={scope} id={id} ownScope={ownScope} scopeWord={scopeWord} />}
 				{tab === 'layout' && <PageLayoutTab scope={scope} id={id} ownScope={ownScope} scopeWord={scopeWord} />}
-				{tab === 'ai' && <AiPromptSubtabs scope={scope} id={id} />}
+				{tab === 'ai' && <AiTab scope={scope} id={id} scopeWord={scopeWord} />}
 			</Box>
 		</>
 	)
