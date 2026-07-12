@@ -108,6 +108,7 @@ import com.richardsand.novelkms.service.CodexExportService;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
+import com.richardsand.novelkms.service.PdfExportService;
 import com.richardsand.novelkms.service.RegistrationNotificationService;
 import com.richardsand.novelkms.service.StarterContentService;
 import com.richardsand.novelkms.service.TrashService;
@@ -255,6 +256,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
 
         EpubExportService               epubExportService               = new EpubExportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
         ExportService                   exportService                   = new ExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
+        PdfExportService                pdfExportService                = new PdfExportService(bookDao, partDao, chapterDao, sceneDao, projectDao, templateDao, pageLayoutDao);
         ImportService                   importService                   = new ImportService(bookDao, partDao, chapterDao, sceneDao, projectDao);
         OAuthService                    oauthService                    = new OAuthService(config.getAuth(), authDao);
         RegistrationNotificationService registrationNotificationService = new RegistrationNotificationService(config.getNotifications());
@@ -390,6 +392,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(oauthService).to(OAuthService.class);
                 bind(pageLayoutDao).to(PageLayoutDao.class);
                 bind(partDao).to(PartDao.class);
+                bind(pdfExportService).to(PdfExportService.class);
                 bind(projectDao).to(ProjectDao.class);
                 bind(registrationNotificationService).to(RegistrationNotificationService.class);
                 bind(sceneDao).to(SceneDao.class);

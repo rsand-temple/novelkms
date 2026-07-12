@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ExportService.ExportMeta;
+import com.richardsand.novelkms.service.PdfExportService;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -20,7 +21,7 @@ import jakarta.ws.rs.core.Response;
 /**
  * Download endpoints for exporting manuscript content.
  *
- * Word (.docx) supports book, part, chapter, and scene scopes.
+ * Word (.docx) and PDF support book, part, chapter, and scene scopes.
  * EPUB is intentionally book-only: it is a whole-book reading-copy export.
  */
 @Path("/")
@@ -32,14 +33,18 @@ public class ExportResource {
     private static final String DOCX_MIME =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private static final String EPUB_MIME = "application/epub+zip";
+    private static final String PDF_MIME  = "application/pdf";
 
     private final ExportService     exportService;
     private final EpubExportService epubExportService;
+    private final PdfExportService  pdfExportService;
 
     @Inject
-    public ExportResource(ExportService exportService, EpubExportService epubExportService) {
+    public ExportResource(ExportService exportService, EpubExportService epubExportService,
+            PdfExportService pdfExportService) {
         this.exportService = exportService;
         this.epubExportService = epubExportService;
+        this.pdfExportService = pdfExportService;
     }
 
     // -------------------------------------------------------------------------
@@ -58,6 +63,22 @@ public class ExportResource {
             return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         } catch (Exception e) {
             logger.error("Book DOCX export failed for bookId={}: {}", bookId, e.getMessage(), e);
+            return serverError(e);
+        }
+    }
+
+    @GET
+    @Path("/export/books/{bookId}/pdf")
+    @Produces(MediaType.WILDCARD)
+    public Response exportBookPdf(@PathParam("bookId") UUID bookId) {
+        logger.info("ExportResource.exportBookPdf invoked: bookId={}", bookId);
+        try {
+            PdfExportService.ExportMeta meta = pdfExportService.exportBook(bookId);
+            return download(meta.bytes(), meta.filename(), PDF_MIME);
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
+        } catch (Exception e) {
+            logger.error("Book PDF export failed for bookId={}: {}", bookId, e.getMessage(), e);
             return serverError(e);
         }
     }
@@ -98,6 +119,22 @@ public class ExportResource {
         }
     }
 
+    @GET
+    @Path("/export/parts/{partId}/pdf")
+    @Produces(MediaType.WILDCARD)
+    public Response exportPartPdf(@PathParam("partId") UUID partId) {
+        logger.info("ExportResource.exportPartPdf invoked: partId={}", partId);
+        try {
+            PdfExportService.ExportMeta meta = pdfExportService.exportPart(partId);
+            return download(meta.bytes(), meta.filename(), PDF_MIME);
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
+        } catch (Exception e) {
+            logger.error("Part PDF export failed for partId={}: {}", partId, e.getMessage(), e);
+            return serverError(e);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Chapter
     // -------------------------------------------------------------------------
@@ -118,6 +155,22 @@ public class ExportResource {
         }
     }
 
+    @GET
+    @Path("/export/chapters/{chapterId}/pdf")
+    @Produces(MediaType.WILDCARD)
+    public Response exportChapterPdf(@PathParam("chapterId") UUID chapterId) {
+        logger.info("ExportResource.exportChapterPdf invoked: chapterId={}", chapterId);
+        try {
+            PdfExportService.ExportMeta meta = pdfExportService.exportChapter(chapterId);
+            return download(meta.bytes(), meta.filename(), PDF_MIME);
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
+        } catch (Exception e) {
+            logger.error("Chapter PDF export failed for chapterId={}: {}", chapterId, e.getMessage(), e);
+            return serverError(e);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Scene
     // -------------------------------------------------------------------------
@@ -134,6 +187,22 @@ public class ExportResource {
             return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         } catch (Exception e) {
             logger.error("Scene export failed for sceneId={}: {}", sceneId, e.getMessage(), e);
+            return serverError(e);
+        }
+    }
+
+    @GET
+    @Path("/export/scenes/{sceneId}/pdf")
+    @Produces(MediaType.WILDCARD)
+    public Response exportScenePdf(@PathParam("sceneId") UUID sceneId) {
+        logger.info("ExportResource.exportScenePdf invoked: sceneId={}", sceneId);
+        try {
+            PdfExportService.ExportMeta meta = pdfExportService.exportScene(sceneId);
+            return download(meta.bytes(), meta.filename(), PDF_MIME);
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
+        } catch (Exception e) {
+            logger.error("Scene PDF export failed for sceneId={}: {}", sceneId, e.getMessage(), e);
             return serverError(e);
         }
     }

@@ -146,6 +146,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	// ── Add-dialog visibility ─────────────────────────────────────────────────
 	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 	const [exportDialogOpen, setExportDialogOpen] = useState(false)
+	const [exportPdfDialogOpen, setExportPdfDialogOpen] = useState(false)
 	const [bookDialogOpen, setBookDialogOpen] = useState(false)
 	const [chapterDialogOpen, setChapterDialogOpen] = useState(false)
 	const [partDialogOpen, setPartDialogOpen] = useState(false)
@@ -631,6 +632,18 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		}
 	})()
 
+	// Same scopes as exportUrl, PDF variant.
+	const exportPdfUrl = (() => {
+		if (!menuNode) return null
+		switch (menuNode.type) {
+			case 'book': return exportApi.bookPdfUrl(menuNode.id)
+			case 'part': return exportApi.partPdfUrl(menuNode.id)
+			case 'chapter': return exportApi.chapterPdfUrl(menuNode.id)
+			case 'scene': return exportApi.scenePdfUrl(menuNode.id)
+			default: return null
+		}
+	})()
+
 	// ePub export is book-scoped only (there is no part/chapter/scene ePub
 	// endpoint), so this is null for every other node type. It downloads
 	// directly — same pattern as the AppBar's Export menu — rather than going
@@ -794,6 +807,14 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
+				{/* Export as PDF — not available for project */}
+				{exportPdfUrl && (
+					<MenuItem dense onClick={() => { setExportPdfDialogOpen(true); closeMenu() }}>
+						<ListItemIcon><FileDownloadIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Export as PDF (.pdf)</ListItemText>
+					</MenuItem>
+				)}
+
 				{/* Export as ePub — book-only, direct download (no filename picker) */}
 				{epubUrl && (
 					<MenuItem dense onClick={() => { exportApi.download(epubUrl); closeMenu() }}>
@@ -942,6 +963,16 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				onClose={() => setExportDialogOpen(false)}
 				url={exportUrl}
 				suggestedName={menuNode?.title?.trim() || menuNode?.type || 'export'}
+			/>
+			<ExportDialog
+				open={exportPdfDialogOpen}
+				onClose={() => setExportPdfDialogOpen(false)}
+				url={exportPdfUrl}
+				suggestedName={menuNode?.title?.trim() || menuNode?.type || 'export'}
+				extension="pdf"
+				dialogTitle="Export as PDF (.pdf)"
+				fileDescription="PDF Document"
+				accept={{ 'application/pdf': ['.pdf'] }}
 			/>
 
 			{/* ── Add dialogs ────────────────────────────────────────────────── */}

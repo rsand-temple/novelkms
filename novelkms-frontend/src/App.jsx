@@ -192,7 +192,7 @@ export default function App() {
 	const [importAnchor, setImportAnchor] = useState(null)
 	const [exportAnchor, setExportAnchor] = useState(null)
 	const [helpAnchor, setHelpAnchor] = useState(null)
-	const [exportDialog, setExportDialog] = useState({ open: false, url: null, suggestedName: '' })
+	const [exportDialog, setExportDialog] = useState({ open: false, url: null, suggestedName: '', format: 'docx' })
 	const [projectExportConfirmOpen, setProjectExportConfirmOpen] = useState(false)
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
 	const [kmsImportDialogOpen, setKmsImportDialogOpen] = useState(false)
@@ -361,9 +361,9 @@ export default function App() {
 		selectTemplate({ type, scope: 'global' })
 	}
 
-	const doExport = (url, suggestedName) => {
+	const doExport = (url, suggestedName, format = 'docx') => {
 		setExportAnchor(null)
-		setExportDialog({ open: true, url, suggestedName })
+		setExportDialog({ open: true, url, suggestedName, format })
 	}
 
 	const doDirectExport = (url) => {
@@ -490,6 +490,9 @@ export default function App() {
 									<MenuItem key="book" onClick={() => doExport(exportApi.bookDocxUrl(selection.bookId), 'Book')}>
 										Book (.docx)
 									</MenuItem>,
+									<MenuItem key="book-pdf" onClick={() => doExport(exportApi.bookPdfUrl(selection.bookId), 'Book', 'pdf')}>
+										Book (.pdf)
+									</MenuItem>,
 									<MenuItem key="book-epub" onClick={() => doDirectExport(exportApi.bookEpubUrl(selection.bookId))}>
 										Book (.epub)
 									</MenuItem>,
@@ -498,14 +501,29 @@ export default function App() {
 											This Part (.docx)
 										</MenuItem>
 									),
+									selection.partId && (
+										<MenuItem key="part-pdf" onClick={() => doExport(exportApi.partPdfUrl(selection.partId), 'Part', 'pdf')}>
+											This Part (.pdf)
+										</MenuItem>
+									),
 									selection.chapterId && (
 										<MenuItem key="chapter" onClick={() => doExport(exportApi.chapterDocxUrl(selection.chapterId), 'Chapter')}>
 											This Chapter (.docx)
 										</MenuItem>
 									),
+									selection.chapterId && (
+										<MenuItem key="chapter-pdf" onClick={() => doExport(exportApi.chapterPdfUrl(selection.chapterId), 'Chapter', 'pdf')}>
+											This Chapter (.pdf)
+										</MenuItem>
+									),
 									selection.sceneId && (
 										<MenuItem key="scene" onClick={() => doExport(exportApi.sceneDocxUrl(selection.sceneId), 'Scene')}>
 											This Scene (.docx)
+										</MenuItem>
+									),
+									selection.sceneId && (
+										<MenuItem key="scene-pdf" onClick={() => doExport(exportApi.scenePdfUrl(selection.sceneId), 'Scene', 'pdf')}>
+											This Scene (.pdf)
 										</MenuItem>
 									),
 								] : (
@@ -968,6 +986,12 @@ export default function App() {
 						onClose={() => setExportDialog(d => ({ ...d, open: false }))}
 						url={exportDialog.url}
 						suggestedName={exportDialog.suggestedName}
+						extension={exportDialog.format === 'pdf' ? 'pdf' : 'docx'}
+						dialogTitle={exportDialog.format === 'pdf' ? 'Export as PDF (.pdf)' : 'Export as Word (.docx)'}
+						fileDescription={exportDialog.format === 'pdf' ? 'PDF Document' : 'Word Document'}
+						accept={exportDialog.format === 'pdf'
+							? { 'application/pdf': ['.pdf'] }
+							: { 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] }}
 					/>
 
 					<Dialog
