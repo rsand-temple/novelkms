@@ -85,7 +85,7 @@ TipTap rich text editor. Paragraph styles, headings, lists, block quotes, scene 
 
 ### Import/export
 
-DOCX import and export (book/part/chapter/scene). Markdown and ePub planned; ePub menu wiring needs verification.
+DOCX import and export (book/part/chapter/scene). PDF export (book/part/chapter/scene) via OpenHTMLtoPDF, mirroring DOCX's standard-manuscript formatting rather than the live Style cascade. Uses PDFBox standard fonts (WinAnsi-only; no embedded font file). Markdown and ePub planned; ePub menu wiring needs verification.
 
 ### AI workflow
 

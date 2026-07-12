@@ -183,6 +183,19 @@ Phase 1 (V36) backend gave each AI doc family a provider dimension. Phase 2 surf
 
 **Frontend.** Action row at top of `CodexEntryFields`: Export to Word, Import from Word, Generate with AI. Generate expands inline guidance field. Overwrite confirmation dialog when AI would replace non-empty fields. `EditorPanel` passes `entryTitle` and `onBodyGenerated={(html) => editor?.commands.setContent(html, false)}` so AI body lands in the editor. New `api/codexEntry.js` + `hooks/useCodexEntry.js`.
 
+### PDF export
+
+New `PdfExportService`, peer to `ExportService` (DOCX). Same four scopes, same `PageLayout`/`Template`
+resolution. Unlike DOCX, renders via OpenHTMLtoPDF (CSS renderer over PDFBox 3): TipTap scene HTML is
+embedded directly into a styled XHTML document rather than walked into low-level formatting calls, so
+images/lists/inline marks need no special-case code. CSS mirrors DOCX's fixed manuscript-format constants
+(double-spaced body, 0.5in first-line indent, 12pt Times). Named `@page cover` (no running header) vs
+default `@page` (running header "LastName / ShortTitle / page#" via CSS counter) replicates DOCX's
+section-break header suppression on cover/title pages. Text rendered with PDFBox standard Times fonts
+(no embedded TTF) — zero container font risk, but WinAnsi-only; non-Latin scripts unsupported until a
+Unicode font is bundled. `hr` → "* * *" scene-break substitution duplicated from `ExportService` (small,
+intentional duplication — no shared base class between export services in this codebase).
+
 ### Static marketing site and `/app` application split
 
 NovelKMS now separates the public marketing/documentation surface from the authenticated React application while preserving the single-container/single-JAR deployment model.

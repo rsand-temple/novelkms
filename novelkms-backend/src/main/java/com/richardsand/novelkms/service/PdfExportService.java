@@ -423,11 +423,20 @@ public class PdfExportService {
                         + "font-family: '" + FONT_FAMILY + "', serif; font-size: 10pt; }"
                 : "";
 
+        // The @page cover block below explicitly overrides @top-right rather
+        // than omitting it. CSS Paged Media margin-box rules cascade
+        // per-property across every applicable @page rule (confirmed against
+        // openhtmltopdf's Matcher.getPageCascadedStyle, which merges margin
+        // boxes from all matching page rules via Map.putAll keyed by margin-
+        // box name) — so leaving @top-right undeclared on the cover page does
+        // NOT suppress it; the unnamed @page rule's @top-right would still
+        // apply there too, since nothing overrides it for that specific box.
         return """
                 @page cover {
                   size: %1$sin %2$sin;
                   margin-top: %3$sin; margin-bottom: %4$sin;
                   margin-left: %5$sin; margin-right: %6$sin;
+                  @top-right { content: normal; }
                 }
                 @page {
                   size: %1$sin %2$sin;
@@ -509,7 +518,6 @@ public class PdfExportService {
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
-            builder.useFastMode();
             builder.withW3cDocument(w3cDoc, "");
 
             builder.useFont(

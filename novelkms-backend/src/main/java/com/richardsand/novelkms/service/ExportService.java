@@ -156,7 +156,7 @@ public class ExportService {
         // cover image page or title page). The default "nextPage" section type means
         // the first main-content paragraph begins at the top of a fresh page without
         // needing an additional pageBreakBefore on the heading.
-        addCoverSectionBreak(doc);
+        addCoverSectionBreak(doc, layout);
         pbNeeded = false;
 
         // Parts (each with their chapters) then any direct-book chapters.
@@ -355,8 +355,17 @@ public class ExportService {
      * type is set, which means the first paragraph of the following section
      * (the first part or chapter heading) begins on a fresh page automatically —
      * no separate {@code pageBreakBefore} attribute is needed on that heading.
+     *
+     * <p>
+     * The embedded sectPr also needs its own {@code pgSz}/{@code pgMar} set
+     * explicitly. Word does not have the cover section inherit dimensions
+     * from the document-level sectPr the main content uses — an unset
+     * {@code pgSz} here would silently fall back to Word's application
+     * default (Letter), so a custom page size would apply to the manuscript
+     * but not to the cover image/title pages. {@code layout} is the same
+     * resolved value {@link #applyPageLayout} used for the main section.
      */
-    private void addCoverSectionBreak(XWPFDocument doc) {
+    private void addCoverSectionBreak(XWPFDocument doc, PageLayout layout) {
         XWPFParagraph para = doc.createParagraph();
         CTPPr         pPr  = ppr(para);
         // Minimise the visual footprint of this paragraph on the title page.
@@ -364,7 +373,8 @@ public class ExportService {
         sp.setBefore(BigInteger.ZERO);
         sp.setAfter(BigInteger.ZERO);
         // The embedded sectPr with no headerReference = no header in the cover section.
-        pPr.addNewSectPr();
+        CTSectPr coverSectPr = pPr.addNewSectPr();
+        applySectPrPageLayout(coverSectPr, layout);
     }
 
     // =========================================================================
@@ -381,7 +391,16 @@ public class ExportService {
         CTDocument1 ctDoc  = doc.getDocument();
         CTBody      body   = ctDoc.getBody();
         CTSectPr    sectPr = body.isSetSectPr() ? body.getSectPr() : body.addNewSectPr();
+        applySectPrPageLayout(sectPr, book);
+    }
 
+    /**
+     * Sets page size and margins on a given {@code sectPr}. Shared by the
+     * document-level section (main manuscript content) and the embedded
+     * cover-section {@code sectPr} ({@link #addCoverSectionBreak}), so both
+     * sections always agree on dimensions.
+     */
+    private void applySectPrPageLayout(CTSectPr sectPr, PageLayout book) {
         double wIn     = pageWidthIn(book);
         double hIn     = pageHeightIn(book);
         double topIn   = marginTop(book);
