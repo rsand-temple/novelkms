@@ -805,8 +805,31 @@ export default function EditorToolbar({
 					{isSaving && <CircularProgress size={12} />}
 					<Typography variant="caption" color="text.secondary">
 						{displayWordCount.toLocaleString('en-US')} words
-						{estimatedPages != null && ` \u00b7 ~${estimatedPages.toLocaleString('en-US')} pages`}
+						{estimatedPages != null && ` \u00b7 ${estimatedPages.toLocaleString('en-US')} pages`}
 					</Typography>
+					{estimatedPages != null && (
+						<Tooltip title="The number of pages is an approximate. The exact number will be known when the book is rendered into an export format.">
+							<IconButton
+								size="small"
+								aria-label="About the page estimate"
+								onClick={(event) => event.stopPropagation()}
+								sx={{
+									p: 0,
+									width: 16,
+									height: 16,
+									color: 'text.secondary',
+									border: '1.5px solid',
+									borderColor: 'currentColor',
+									fontSize: '0.65rem',
+									fontWeight: 700,
+									lineHeight: 1,
+									'&:hover': { color: 'primary.main', bgcolor: 'transparent' },
+								}}
+							>
+								?
+							</IconButton>
+						</Tooltip>
+					)}
 				</Box>
 			</Toolbar>
 
