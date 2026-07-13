@@ -122,6 +122,15 @@ Help Center modal, Markdown topics auto-discovered at build time, cross-linking 
 
 Per-project file/folder tree for non-manuscript material. External blob store on host volume. Case-preserving/case-insensitive names. Streaming upload with SHA-256, 50 MB cap, per-user quota (1 GB default). Integrated Trash. Nav tree folders + center-pane Explorer. Isolated dnd-kit DndContext. Image preview modal.
 
+### Human Review Network — Phase 1A (profiles)
+
+Opt-in public identity for the review network (`review_profile`). Handle is the gate for all
+participation. Case-preserving handle + case-insensitive unique `handle_lower`; reserved-handle
+list; live availability check sharing one rule set with the write path. Genres packed as one
+comma-separated column, exposed as a list. PUBLIC/HIDDEN visibility; ACTIVE/SUSPENDED moderation
+status (not user-settable). Cross-user reads return 404, never 403. Full Phase 1 schema (8 tables)
+landed in V38. Surface at `/app/community` with the five Phase 1 tabs; only My Profile is built.
+
 ## Known issues / watchlist
 
 - Billing: extend trial, revoke-family semantics, plan mapping, webhook diagnostics, Stripe reconciliation.
@@ -137,6 +146,11 @@ Per-project file/folder tree for non-manuscript material. External blob store on
 - Help topics are seed content; expand as product matures.
 - Artifacts: blob dir must be in backup set; restore de-dup appends "(n)" to whole name; nav-pane folder drag deferred.
 
+- Review network: only slice 1A (profiles) shipped; requests/snapshots/queue/reviews/metrics/moderation
+  tables exist but are unused. `review_context_item` is unpopulated until Phase 2.
+- `UserPreferenceResource` uses `@Context` field injection — works only because it is registered by
+  class; would fail any resource test. Convert to method-parameter form if it ever gets one.
+
 ## Near-term next actions
 
 1. Admin billing: extend trial, revoke-family semantics, plan mapping, webhook diagnostics.
@@ -145,6 +159,7 @@ Per-project file/folder tree for non-manuscript material. External blob store on
 4. Deferred AI findings view.
 5. Style-editor UI.
 6. Provider-variants Phase 3: provider-aware coverage/staleness, review-history grouping, fallback note.
+7. Review network slice 1B: publish chapter → request + snapshot; My Requests.
 
 ## Documentation maintenance rule
 

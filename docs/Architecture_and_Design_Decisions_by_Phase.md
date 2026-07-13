@@ -130,6 +130,8 @@ Security-first: role-aware authorization → audit logging → read-only support
 - Async AI execution for part/book-level reviews.
 - Profile full-book editor performance.
 - Book-summary staleness may be too eager (any newer chapter summary triggers rebuild).
+- Review network: reviewer-side copy/download restrictions (spec §22, open questions 3–4) undecided.
+- `review_snapshot` has no source version marker (spec §8.2 calls for one).
 
 ### V19 — Scene-level AI review
 
@@ -291,3 +293,43 @@ src={`${import.meta.env.BASE_URL}brand/novelkms-logo.png`}
 Hugo-owned public assets live in `novelkms-static/static` and are served from root paths such as `/brand/...`.
 
 Small branding assets may be duplicated between `novelkms-static/static/brand` and `novelkms-frontend/public/brand` when both the public site and the React app need them. Generated output directories such as `novelkms-static/public/` and `novelkms-frontend/dist/` remain uncommitted.
+
+### V38 — Human Review Network (Phase 1 schema, slice 1A: profiles)
+
+Whole Phase 1 schema in one migration (8 tables) so slices never chase schema. Both dialect files
+are byte-identical — every type used is common to H2 and PostgreSQL.
+
+**First legitimate cross-user read path.** `TenantAuthorizationFilter.authorizePathIds` switches on
+the segment preceding a UUID and returns `default -> true`, so `/api/review/...` passes through
+untouched. Authorization for these tables is therefore enforced explicitly in the resource/service
+layer, never by the tenant filter. `SubscriptionAuthorizationFilter` still applies: participating in
+the review network requires an active subscription.
+
+**Mutability is the organizing rule.** `review_request` mutable and lifecycle-bearing;
+`review_snapshot` and `review_context_item` immutable, frozen at publish; `human_review` mutable
+while DRAFT, immutable once SUBMITTED. `review_snapshot.request_id` carries UNIQUE for Phase 1 (one
+snapshot per request); dropping that single constraint yields Phase 2's snapshot-lineage model.
+
+`source_entity_id` is a bare UUID with no FK — provenance only. A snapshot must survive deletion of
+its source chapter; an FK would either block the delete or cascade away review history.
+
+Contribution metrics are derived, never counted into columns: SUM of snapshot word counts over a
+user's SUBMITTED reviews. The definition is self-deduping, so no read-tracking is needed and
+withdrawing a review removes it from the metric automatically.
+
+Handles follow the artifact case rule (`handle` preserved, `handle_lower` unique) — but unlike
+artifact names this CAN be a DB unique index, because there is no trash/soft-delete requiring a
+filtered one.
+
+**`@Context ContainerRequestContext` must be a method parameter, never a field.** Jersey does not
+proxy it into the fields of a singleton resource. Production registers resources by class, so they
+are instantiated per request and a field binds fine — but `ResourceExtension` registers an
+*instance*, i.e. a singleton, where the field silently stays unbound and every endpoint NPEs into a
+500. The method-parameter form works identically in both. This is why the resource worked in the
+running app while all 35 of its tests failed.
+
+Security tests must not conflate the DTO contract with the invariant. A forged `id` in an update
+payload is rejected with 400 (strict mapper, unknown property) rather than ignored — but that is a
+mapper-config fact, not a security property. The security property (the DAO's `WHERE user_id = ?`)
+is tested separately with a legitimate payload, so relaxing `FAIL_ON_UNKNOWN_PROPERTIES` cannot
+raise a false alarm on a security test.

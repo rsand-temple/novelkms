@@ -1031,3 +1031,24 @@ The recommended path is:
 The central product proposition should remain straightforward:
 
 > NovelKMS helps authors organize, understand, revise, and improve their novels—with assistance from both AI and other human writers.
+
+## 32. Implementation Status
+
+Phase 1 ships in six slices. V38 (whole Phase 1 schema) landed with 1A.
+
+| Slice | Scope                                                | Status                                             |
+| ----- | ---------------------------------------------------- | -------------------------------------------------- |
+| 1A    | Profiles & handles                                   | **Done** — V38, `review_profile`, `/app/community` |
+| 1B    | Publish chapter → request + snapshot; My Requests    | Next                                               |
+| 1C    | Queue, package view, snapshot reader                 |                                                    |
+| 1D    | Write/submit review; Reviews Received; notifications |                                                    |
+| 1E    | Contribution metrics                                 |                                                    |
+| 1F    | Blocking, reporting, admin removal                   |                                                    |
+
+Resolved open questions (§30.2): **1** chapter-only initially; **2** anonymity deferred to Phase 2;
+**5** closed requests stay readable to participants indefinitely, drop out of the queue; **6** no;
+withdraw-and-rewrite instead; **7** yes; **9** yes, visibility is a disclosure setting not a
+contribution setting; **13** any authenticated user who can see the package; **15/16** terms-level
+prohibition plus a self-disclosure flag (`human_review.ai_assisted`).
+
+Still open: **3, 4** (reviewer copy/download), **8, 10, 11, 12, 14**.
