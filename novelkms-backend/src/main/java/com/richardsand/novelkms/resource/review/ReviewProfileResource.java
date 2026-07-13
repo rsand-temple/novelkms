@@ -31,42 +31,44 @@ import jakarta.ws.rs.core.Response;
  * Public identity for the human-review network ({@code review_profile}).
  *
  * <ul>
- * <li>{@code GET  /review/profile/me} — the caller's profile, or 204 if they have none</li>
- * <li>{@code POST /review/profile} — claim a handle and create it</li>
- * <li>{@code PUT  /review/profile} — update the caller's own profile</li>
- * <li>{@code GET /review/handles/{handle}/available} — live availability check for the claim form</li>
- * <li>{@code GET /review/profiles/{handle}} — another user's public profile</li>
+ *   <li>{@code GET  /review/profile/me}                  — the caller's profile, or 204 if they have none</li>
+ *   <li>{@code POST /review/profile}                     — claim a handle and create it</li>
+ *   <li>{@code PUT  /review/profile}                     — update the caller's own profile</li>
+ *   <li>{@code GET  /review/handles/{handle}/available}  — live availability check for the claim form</li>
+ *   <li>{@code GET  /review/profiles/{handle}}           — another user's public profile</li>
  * </ul>
  *
- * <p>
- * <b>Authorization.</b> These paths carry no manuscript UUID, so
+ * <p><b>Authorization.</b> These paths carry no manuscript UUID, so
  * {@code TenantAuthorizationFilter} — whose segment switch falls through to
  * {@code default -> true} for unknown collections — does not and cannot guard
  * them. Ownership is enforced here instead: every mutating call is scoped to
  * {@link CurrentUser#id}, and the DAO's update statements carry a
- * {@code WHERE user_id = ?} of their own, so a forged {@code id} in the payload
- * is inert. {@code SubscriptionAuthorizationFilter} still applies, which is the
- * intended Phase 1 policy: participating in the review network requires an
- * active subscription.
+ * {@code WHERE user_id = ?} of their own, so a forged {@code id} in the payload is
+ * inert. {@code SubscriptionAuthorizationFilter} still applies, which is the
+ * intended Phase 1 policy: participating in the review network requires an active
+ * subscription.
  *
- * <p>
- * <b>The request context is a method parameter, never a field.</b> Jersey does
+ * <p><b>The request context is a method parameter, never a field.</b> Jersey does
  * not proxy {@code ContainerRequestContext} into the fields of a <em>singleton</em>
- * resource. In production that is invisible, because the resource is registered
- * by class and instantiated per request, so a field would bind fine. But
+ * resource. In production that is invisible, because the resource is registered by
+ * class and instantiated per request, so a field would bind fine. But
  * {@code ResourceExtension} registers a resource <em>instance</em> — a singleton —
  * and there the field silently stays unbound, so every endpoint NPEs and returns
  * 500. Taking the context as a parameter works identically in both, which is why
  * every resource here that has tests does it this way.
  *
- * <p>
- * <b>Disclosure.</b> {@code /review/profiles/{handle}} is the network's first
- * legitimate cross-user read. It returns 404 — never 403 — for a handle that
- * does not exist, is HIDDEN, or has been SUSPENDED, so profile existence is not
- * disclosed, matching the convention the tenant filter already sets for
- * manuscript entities. The caller always gets to read their own profile through
- * this path regardless of visibility, so a hidden profile can still be previewed
- * by its owner.
+ * <p><b>Status codes.</b> A malformed handle is a client mistake (400); a
+ * well-formed handle that cannot be had is a conflict with the state of the world
+ * (409). "You have no profile yet" is 400, per the house convention that 404 is
+ * reserved for config/routing errors.
+ *
+ * <p>The one deliberate exception is {@code /review/profiles/{handle}}, the
+ * network's first legitimate cross-user read: it returns <b>404</b> — never 403 —
+ * for a handle that does not exist, is HIDDEN, or has been SUSPENDED, so profile
+ * existence is not disclosed. That matches what {@code TenantAuthorizationFilter}
+ * already does for manuscript entities. The caller always gets to read their own
+ * profile through this path regardless of visibility, so a hidden profile can still
+ * be previewed by its owner.
  */
 @Path("/review")
 @Produces(MediaType.APPLICATION_JSON)
@@ -75,15 +77,15 @@ public class ReviewProfileResource {
 
     /**
      * Must start with a letter, then letters/digits/underscore, 3–24 characters.
-     * Leading digits are excluded so a handle can never be confused with an id,
-     * and the character class is kept narrow enough to be unambiguous in a URL
-     * and to leave no room for homoglyph games in a first release.
+     * Leading digits are excluded so a handle can never be confused with an id, and
+     * the character class is kept narrow enough to be unambiguous in a URL and to
+     * leave no room for homoglyph games in a first release.
      */
     private static final Pattern HANDLE_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9_]{2,23}$");
 
     /**
-     * Handles that would collide with a route, impersonate the operator, or
-     * imply authority. Compared against the normalized (lowercase) handle.
+     * Handles that would collide with a route, impersonate the operator, or imply
+     * authority. Compared against the normalized (lowercase) handle.
      */
     private static final Set<String> RESERVED_HANDLES = Set.of(
             "admin", "administrator", "moderator", "mod", "staff", "support", "help",
@@ -178,8 +180,7 @@ public class ReviewProfileResource {
             UUID userId = CurrentUser.id(request);
 
             if (dao.findByUserId(userId).isEmpty()) {
-                return error(Response.Status.NOT_FOUND, "no_profile",
-                        "You do not have a reviewer profile yet.");
+                return noProfile();
             }
 
             Response invalid = validate(body);
@@ -195,8 +196,7 @@ public class ReviewProfileResource {
             try {
                 return dao.update(userId, toModel(body))
                         .map(p -> Response.ok(p).build())
-                        .orElseGet(() -> error(Response.Status.NOT_FOUND, "no_profile",
-                                "You do not have a reviewer profile yet."));
+                        .orElseGet(ReviewProfileResource::noProfile);
             } catch (SQLException e) {
                 if (dao.handleTaken(body.handle, userId)) {
                     return error(Response.Status.CONFLICT, "handle_taken", handleMessage("handle_taken"));
@@ -214,11 +214,16 @@ public class ReviewProfileResource {
      * Drives the live check in the claim form. Excludes the caller's own current
      * handle, so re-saving an unchanged profile never reports a conflict against
      * itself.
+     *
+     * <p>A malformed handle is reported here as unavailable-with-a-reason, NOT as a
+     * 400. This endpoint is a question, not a claim — the form asks it on every
+     * keystroke, and a stream of 400s would be noise.
      */
     @GET
     @Path("/handles/{handle}/available")
     public Response available(@PathParam("handle") String handle,
             @Context ContainerRequestContext request) {
+
         return run(() -> {
             String reason = handleUnavailableReason(handle, CurrentUser.id(request));
             return Response.ok(Map.of(
@@ -237,6 +242,7 @@ public class ReviewProfileResource {
     @Path("/profiles/{handle}")
     public Response byHandle(@PathParam("handle") String handle,
             @Context ContainerRequestContext request) {
+
         return run(() -> {
             Optional<ReviewProfile> found = dao.findByHandle(handle);
             if (found.isEmpty()) {
@@ -333,27 +339,26 @@ public class ReviewProfileResource {
     }
 
     /**
-     * A malformed handle is a client mistake (400); a handle that is well-formed
-     * but cannot be had is a conflict with the current state of the world (409).
+     * A malformed handle is a client mistake (400); a handle that is well-formed but
+     * cannot be had is a conflict with the current state of the world (409).
      * Collapsing both into 409 — as the first cut of this class did — tells the
-     * caller "try a different handle" when the real answer is "that isn't a
-     * handle."
+     * caller "try a different handle" when the real answer is "that isn't a handle."
      */
     private static Response.Status statusFor(String reason) {
         return switch (reason) {
         case "handle_required", "handle_invalid" -> Response.Status.BAD_REQUEST;
-        default -> Response.Status.CONFLICT;
+        default                                  -> Response.Status.CONFLICT;
         };
     }
 
     private static String handleMessage(String reason) {
         return switch (reason) {
         case "handle_required" -> "Choose a handle.";
-        case "handle_invalid" -> "Handles are 3–24 characters, start with a letter, "
+        case "handle_invalid"  -> "Handles are 3–24 characters, start with a letter, "
                 + "and use only letters, numbers, and underscores.";
         case "handle_reserved" -> "That handle is reserved.";
-        case "handle_taken" -> "That handle is already taken.";
-        default -> "That handle cannot be used.";
+        case "handle_taken"    -> "That handle is already taken.";
+        default                -> "That handle cannot be used.";
         };
     }
 
@@ -371,6 +376,16 @@ public class ReviewProfileResource {
     // =========================================================================
     // Response helpers
     // =========================================================================
+
+    /**
+     * Not a 404. House convention reserves 404 for config/routing errors, and
+     * AccountResource already answers 400 for a missing entity. The only 404s in
+     * this class are the deliberate non-disclosure ones in {@link #byHandle}.
+     */
+    private static Response noProfile() {
+        return error(Response.Status.BAD_REQUEST, "no_profile",
+                "You do not have a reviewer profile yet.");
+    }
 
     private static Response notFound() {
         return error(Response.Status.NOT_FOUND, "not_found", "No such profile.");

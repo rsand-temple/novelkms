@@ -14,6 +14,7 @@ import java.util.UUID;
 import org.apache.commons.dbcp2.BasicDataSource;
 
 import com.richardsand.novelkms.model.Scene;
+import com.richardsand.novelkms.utils.WordCount;
 
 public class SceneDao {
 
@@ -454,31 +455,14 @@ public class SceneDao {
      * Strips HTML tags and counts non-whitespace tokens (/\S+/ matching),
      * consistent with TipTap's CharacterCount.words() and the frontend's
      * countWords() helper in EditorPanel.jsx.
+     *
+     * <p>Delegates to {@link WordCount#fromHtml(String)}. The review-network
+     * publish path counts the words of an assembled chapter snapshot and must
+     * arrive at the same number the editor shows, so the algorithm lives in
+     * exactly one place.
      */
     private int countWordsFromHtml(String html) {
-        if (html == null || html.isBlank()) {
-            return 0;
-        }
-        // Replace every HTML tag with a space so adjacent words across tag
-        // boundaries are not merged (e.g. "end</p><p>start" → "end start").
-        String text = html.replaceAll("<[^>]+>", " ").trim();
-        if (text.isBlank()) {
-            return 0;
-        }
-        // Count non-whitespace runs — same as /\S+/g in JavaScript
-        int     count  = 0;
-        boolean inWord = false;
-        for (int i = 0; i < text.length(); i++) {
-            if (!Character.isWhitespace(text.charAt(i))) {
-                if (!inWord) {
-                    count++;
-                    inWord = true;
-                }
-            } else {
-                inWord = false;
-            }
-        }
-        return count;
+        return WordCount.fromHtml(html);
     }
 
     /**

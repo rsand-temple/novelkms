@@ -1,0 +1,25 @@
+-- ===========================================================================
+-- V39 — Snapshot source version marker
+--
+-- Spec §8.2 requires a snapshot to record "source entity identifier and version
+-- marker at capture time". V38 shipped the identifier (review_snapshot.
+-- source_entity_id) but not the marker, so there was no way to answer the one
+-- question the My Requests view exists to answer: has the chapter I published
+-- moved on since I published it?
+--
+-- source_updated_at is the source chapter's updated_at AT CAPTURE TIME. Compared
+-- against the live chapter it yields the source state shown to the author:
+--
+--   live chapter is gone            -> DELETED
+--   live updated_at is newer        -> CHANGED
+--   otherwise                       -> CURRENT
+--
+-- Nullable rather than NOT NULL: this is an additive column on an existing
+-- table, and a null marker means honestly "unknown", which the comparison treats
+-- as CURRENT rather than inventing a false CHANGED. Every row written from V39
+-- onward carries it.
+--
+-- Identical in both dialects. One ALTER TABLE, one column, per the H2 rule.
+-- ===========================================================================
+
+ALTER TABLE review_snapshot ADD COLUMN source_updated_at TIMESTAMP;
