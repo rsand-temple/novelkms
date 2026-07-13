@@ -59,6 +59,13 @@ public abstract class NovelKmsTestBase {
 
     protected static final UUID OTHER_USER_ID = UUID.fromString("20000000-0000-0000-0000-000000000002");
 
+    /**
+     * A third stable identity. Review-network handles are globally unique, so
+     * collision and disclosure tests need a bystander who is neither the profile
+     * owner nor the single "other tenant" the older isolation tests share.
+     */
+    protected static final UUID THIRD_USER_ID = UUID.fromString("30000000-0000-0000-0000-000000000003");
+
     protected static final BasicDataSource ds;
     protected static final ProjectDao      projectDao;
     protected static final BookDao         bookDao;
@@ -172,6 +179,15 @@ public abstract class NovelKmsTestBase {
             s.execute("DELETE FROM book");
             s.execute("DELETE FROM project");
 
+            s.execute("DELETE FROM content_report");
+            s.execute("DELETE FROM user_block");
+            s.execute("DELETE FROM human_review");
+            s.execute("DELETE FROM review_assignment");
+            s.execute("DELETE FROM review_context_item");
+            s.execute("DELETE FROM review_snapshot");
+            s.execute("DELETE FROM review_request");
+            s.execute("DELETE FROM review_profile");
+
             s.execute("DELETE FROM user_session");
             s.execute("DELETE FROM user_identity");
             s.execute("DELETE FROM pending_registration");
@@ -199,6 +215,11 @@ public abstract class NovelKmsTestBase {
                 OTHER_USER_ID,
                 "other.user@example.com",
                 "Other User");
+
+        insertTestUser(
+                THIRD_USER_ID,
+                "third.user@example.com",
+                "Third User");
     }
 
     private static void insertTestUser(UUID id, String email, String displayName)

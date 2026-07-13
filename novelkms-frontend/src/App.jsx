@@ -15,6 +15,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined'
 import NavPanel from './components/layout/NavPanel'
 import EditorPanel from './components/layout/EditorPanel'
 import ArtifactsPanel from './components/artifacts/ArtifactsPanel'
@@ -36,6 +37,7 @@ import { useHelp } from './help'
 import { usePreferences } from './hooks/usePreferences'
 import { hydrateSkipDeleteConfirm } from './utils/deleteConfirmPrefs'
 import AdminSupportConsole from './components/admin/AdminSupportConsole'
+import CommunityPage from './components/community/CommunityPage'
 import ToolsMenu from './components/tools/ToolsMenu'
 
 /* eslint-disable no-undef */
@@ -216,7 +218,6 @@ export default function App() {
 	const resizeRef = useRef(null)
 	const location = useLocation()
 	const path = location.pathname
-	console.error('Path: ' + path)
 
 	const { data: preferences } = usePreferences()
 	useEffect(() => {
@@ -433,6 +434,10 @@ export default function App() {
 		return <AdminSupportConsole />
 	}
 
+	if (path === '/community' || path.startsWith('/community/')) {
+		return <CommunityPage />
+	}
+
 	return (
 		<SearchProvider selection={selection}>
 			<ReviewProvider>
@@ -564,6 +569,16 @@ export default function App() {
 							</Menu>
 
 							<ToolsMenu buttonSx={topBarButtonSx} />
+
+							<Button
+								color="inherit"
+								size="small"
+								startIcon={<RateReviewOutlinedIcon fontSize="small" />}
+								onClick={() => { window.location.href = '/app/community' }}
+								sx={topBarButtonSx}
+							>
+								Community
+							</Button>
 
 							<Button
 								color="inherit"
