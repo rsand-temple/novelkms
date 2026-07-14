@@ -167,7 +167,14 @@ public class TrashService {
                 ? chapterDao.findByPartId(parents.partId())
                 : chapterDao.findByBookId(bookId);
         String title = dedupe(batch.getRootTitle(), titles(siblings, Chapter::getTitle));
-        int order = nextOrder(orders(siblings, Chapter::getDisplayOrder));
+        // A restored chapter appends to the end of its container. Inside a part
+        // that is just max(sibling order) + 1. At book level it is the end of the
+        // OUTLINE — past the parts as well as the direct chapters, which since V40
+        // share one display_order sequence. Using the direct chapters alone here
+        // would drop the restored chapter straight on top of a part.
+        int order = (parents.partId() != null)
+                ? nextOrder(orders(siblings, Chapter::getDisplayOrder))
+                : chapterDao.nextOutlinePosition(bookId);
         trashDao.restoreChapter(batch.getRootId(), title, order);
     }
 

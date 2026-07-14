@@ -7,6 +7,7 @@ import java.math.BigInteger;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -159,24 +160,19 @@ public class ExportService {
         addCoverSectionBreak(doc, layout);
         pbNeeded = false;
 
-        // Parts (each with their chapters) then any direct-book chapters.
-        List<Part>    parts          = partDao.findByBookId(bookId);
-        List<Chapter> directChapters = chapterDao.findByBookId(bookId);
-
-        if (!parts.isEmpty()) {
-            for (Part part : parts) {
+        // Walk the book outline: parts and direct-book chapters interleaved in one
+        // display_order sequence (V40), each part immediately followed by its own
+        // chapters. Exporting the parts first and the direct chapters afterwards —
+        // as this did before V40 — would print a prologue at the end of the book.
+        for (Object node : bookOutline(bookId)) {
+            if (node instanceof Part part) {
                 appendPartHeading(doc, part, pbNeeded);
                 pbNeeded = true;
                 for (Chapter ch : chapterDao.findByPartId(part.getId())) {
                     appendChapterContent(doc, ch, true, contentW);
                 }
-            }
-            for (Chapter ch : directChapters) {
-                appendChapterContent(doc, ch, true, contentW);
-            }
-        } else {
-            for (Chapter ch : directChapters) {
-                appendChapterContent(doc, ch, pbNeeded, contentW);
+            } else {
+                appendChapterContent(doc, (Chapter) node, pbNeeded, contentW);
                 pbNeeded = true;
             }
         }
@@ -188,6 +184,38 @@ public class ExportService {
 
         String filename = docxFilename(book, null);
         return new ExportMeta(toBytes(doc), filename);
+    }
+
+
+    /**
+     * The book's top-level nodes in linear order: {@link Part}s and direct-book
+     * {@link Chapter}s merged on the shared outline {@code display_order}
+     * sequence introduced in V40.
+     *
+     * <p>Both lists already come back sorted, so this is a straight merge — no
+     * extra query. Every export surface (DOCX, PDF, ePub) needs exactly this
+     * walk, but the three services share no base class, so each keeps its own
+     * copy in the same style as the existing scene-break duplication.
+     */
+    private List<Object> bookOutline(UUID bookId) throws Exception {
+        List<Part>    parts          = partDao.findByBookId(bookId);
+        List<Chapter> directChapters = chapterDao.findByBookId(bookId);
+
+        List<Object> nodes = new ArrayList<>(parts.size() + directChapters.size());
+        int p = 0;
+        int c = 0;
+        while (p < parts.size() || c < directChapters.size()) {
+            boolean takePart;
+            if (p >= parts.size()) {
+                takePart = false;
+            } else if (c >= directChapters.size()) {
+                takePart = true;
+            } else {
+                takePart = parts.get(p).getDisplayOrder() <= directChapters.get(c).getDisplayOrder();
+            }
+            nodes.add(takePart ? parts.get(p++) : directChapters.get(c++));
+        }
+        return nodes;
     }
 
     /**

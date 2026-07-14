@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 
+import com.richardsand.novelkms.dao.book.BookOutline;
 import com.richardsand.novelkms.model.Part;
 
 public class PartDao {
@@ -92,32 +93,76 @@ public class PartDao {
     // Mutations
     // -------------------------------------------------------------------------
 
+    /**
+     * Creates a part at the end of the book outline — past every existing part
+     * <em>and</em> every direct-book chapter, since V40 gave them one shared
+     * display_order sequence.
+     */
     public Part create(UUID bookId, String title, String subtitle, String notes) throws SQLException {
-        UUID    id           = UUID.randomUUID();
-        Instant now          = Instant.now();
-        int     displayOrder = nextDisplayOrder(bookId);
-        String  sql          = """
+        return insert(bookId, title, subtitle, notes, null, false);
+    }
+
+    /**
+     * Creates a part immediately before or after an existing outline item. The
+     * anchor may be another part or a direct-book chapter — a part can now be
+     * inserted after a prologue just as readily as after another part.
+     *
+     * <p>An unresolvable anchor appends rather than failing, matching
+     * {@code ChapterDao}.
+     */
+    public Part createRelativeTo(UUID bookId, String title, String subtitle, String notes,
+            UUID anchorId, boolean before) throws SQLException {
+        return insert(bookId, title, subtitle, notes, anchorId, before);
+    }
+
+    private Part insert(UUID bookId, String title, String subtitle, String notes,
+            UUID anchorId, boolean before) throws SQLException {
+        UUID    id  = UUID.randomUUID();
+        Instant now = Instant.now();
+        String  sql = """
                 INSERT INTO part (id, book_id, title, subtitle, display_order, notes, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-        try (Connection c = ds.getConnection();
-                PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setObject(1, id);
-            ps.setObject(2, bookId);
-            ps.setString(3, title);
-            ps.setString(4, subtitle);
-            ps.setInt(5, displayOrder);
-            ps.setString(6, notes);
-            ps.setTimestamp(7, Timestamp.from(now));
-            ps.setTimestamp(8, Timestamp.from(now));
-            ps.executeUpdate();
+
+        int displayOrder;
+        try (Connection c = ds.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                // Opening a slot shifts existing outline items in BOTH tables, so
+                // the shift and the insert have to land together or not at all.
+                displayOrder = anchorId != null
+                        ? BookOutline.openSlot(c, bookId, anchorId, before)
+                        : BookOutline.nextPosition(c, bookId);
+
+                try (PreparedStatement ps = c.prepareStatement(sql)) {
+                    ps.setObject(1, id);
+                    ps.setObject(2, bookId);
+                    ps.setString(3, title);
+                    ps.setString(4, subtitle);
+                    ps.setInt(5, displayOrder);
+                    ps.setString(6, notes);
+                    ps.setTimestamp(7, Timestamp.from(now));
+                    ps.setTimestamp(8, Timestamp.from(now));
+                    ps.executeUpdate();
+                }
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
         }
-        return Part.builder()
+
+        // part_number is the part's rank among parts (Part I, II, III...), which is
+        // NOT its outline position now that chapters share the sequence — a part at
+        // outline position 4 may well be Part I. Re-read so the caller gets the
+        // computed number rather than an arithmetic guess.
+        return findById(id).orElseGet(() -> Part.builder()
                 .id(id).bookId(bookId).title(title).subtitle(subtitle)
                 .displayOrder(displayOrder).notes(notes)
-                .partNumber(displayOrder + 1)
                 .createdAt(now).updatedAt(now)
-                .build();
+                .build());
     }
 
     public Optional<Part> update(UUID id, String title, String subtitle, String notes) throws SQLException {
@@ -151,35 +196,12 @@ public class PartDao {
 
     // -------------------------------------------------------------------------
     // Ordering
+    //
+    // Parts have no ordering method of their own. They share one display_order
+    // sequence with the book's direct chapters (V40), so reordering them in
+    // isolation would collide with the chapters interleaved among them. All
+    // book-level ordering goes through BookOutline / BookOutlineDao.
     // -------------------------------------------------------------------------
-
-    public void reorderInBook(UUID bookId, List<UUID> ids) throws SQLException {
-        String sql = """
-                UPDATE part SET display_order = ?, updated_at = ?
-                WHERE id = ? AND book_id = ?
-                """;
-        try (Connection c = ds.getConnection();
-                PreparedStatement ps = c.prepareStatement(sql)) {
-            c.setAutoCommit(false);
-            try {
-                Instant now = Instant.now();
-                for (int i = 0; i < ids.size(); i++) {
-                    ps.setInt(1, i);
-                    ps.setTimestamp(2, Timestamp.from(now));
-                    ps.setObject(3, ids.get(i));
-                    ps.setObject(4, bookId);
-                    ps.addBatch();
-                }
-                ps.executeBatch();
-                c.commit();
-            } catch (SQLException e) {
-                c.rollback();
-                throw e;
-            } finally {
-                c.setAutoCommit(true);
-            }
-        }
-    }
 
     // -------------------------------------------------------------------------
     // Word count
@@ -307,16 +329,6 @@ public class PartDao {
     // Private helpers
     // -------------------------------------------------------------------------
 
-    private int nextDisplayOrder(UUID bookId) throws SQLException {
-        String sql = "SELECT COALESCE(MAX(display_order), -1) + 1 FROM part WHERE book_id = ?";
-        try (Connection c = ds.getConnection();
-                PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setObject(1, bookId);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? rs.getInt(1) : 0;
-            }
-        }
-    }
 
     private static int countPlainTextWords(String text) {
         if (text == null || text.isBlank()) return 0;

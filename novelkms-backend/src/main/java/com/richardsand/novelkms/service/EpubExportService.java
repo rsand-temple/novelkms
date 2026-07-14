@@ -97,8 +97,12 @@ public class EpubExportService {
         int chapterSeq = 1;
         int partSeq = 1;
 
-        if (!parts.isEmpty()) {
-            for (Part part : parts) {
+        // Walk the book outline: parts and direct-book chapters interleaved in one
+        // display_order sequence (V40). Emitting every part first and the direct
+        // chapters afterwards — as this did before V40 — would put a prologue at
+        // the very end of the spine.
+        for (Object node : mergeOutline(parts, directChapters)) {
+            if (node instanceof Part part) {
                 String partHref = String.format("part-%03d.xhtml", partSeq);
                 String partTitle = partLabel(part);
                 spine.add(new SpineItem("part-" + partSeq, partHref, partTitle, partPage(part)));
@@ -107,15 +111,37 @@ public class EpubExportService {
                     chapterSeq = appendChapter(spine, assets, chapter, chapterSeq);
                 }
                 partSeq++;
+            } else {
+                chapterSeq = appendChapter(spine, assets, (Chapter) node, chapterSeq);
             }
-        }
-
-        for (Chapter chapter : directChapters) {
-            chapterSeq = appendChapter(spine, assets, chapter, chapterSeq);
         }
 
         byte[] bytes = buildZip(book, project, spine, assets, coverImage != null);
         return new ExportMeta(bytes, epubFilename(book));
+    }
+
+
+    /**
+     * Merges the book's parts and direct-book chapters into one linear list on
+     * the shared outline display_order sequence (V40). Both inputs already come
+     * back sorted, so this is a straight merge.
+     */
+    private static List<Object> mergeOutline(List<Part> parts, List<Chapter> directChapters) {
+        List<Object> nodes = new ArrayList<>(parts.size() + directChapters.size());
+        int p = 0;
+        int c = 0;
+        while (p < parts.size() || c < directChapters.size()) {
+            boolean takePart;
+            if (p >= parts.size()) {
+                takePart = false;
+            } else if (c >= directChapters.size()) {
+                takePart = true;
+            } else {
+                takePart = parts.get(p).getDisplayOrder() <= directChapters.get(c).getDisplayOrder();
+            }
+            nodes.add(takePart ? parts.get(p++) : directChapters.get(c++));
+        }
+        return nodes;
     }
 
     private int appendChapter(List<SpineItem> spine, List<EpubAsset> assets,

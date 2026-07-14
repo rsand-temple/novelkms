@@ -47,11 +47,20 @@ public class PartResource {
 
     public static class CreatePartRequest {
         @JsonProperty
-        public String title;
+        public String  title;
         @JsonProperty
-        public String subtitle;
+        public String  subtitle;
         @JsonProperty
-        public String notes;
+        public String  notes;
+        /**
+         * Optional insert anchor — an outline item of this book, which may be
+         * another part OR a direct-book chapter. Omit to append.
+         */
+        @JsonProperty
+        public UUID    anchorId;
+        /** true = insert before the anchor, false/omitted = after it. */
+        @JsonProperty
+        public Boolean before;
     }
 
     public static class UpdatePartRequest {
@@ -65,9 +74,15 @@ public class PartResource {
 
     public static class CreateChapterRequest {
         @JsonProperty
-        public String title;
+        public String  title;
         @JsonProperty
-        public String notes;
+        public String  notes;
+        /** Optional insert anchor — a sibling chapter in this part. Omit to append. */
+        @JsonProperty
+        public UUID    anchorId;
+        /** true = insert before the anchor, false/omitted = after it. */
+        @JsonProperty
+        public Boolean before;
     }
 
     public static class ReorderRequest {
@@ -100,7 +115,10 @@ public class PartResource {
                     .entity("title is required").build();
         }
         try {
-            Part part = partDao.create(bookId, req.title, req.subtitle, req.notes);
+            boolean before = Boolean.TRUE.equals(req.before);
+            Part    part   = (req.anchorId != null)
+                    ? partDao.createRelativeTo(bookId, req.title, req.subtitle, req.notes, req.anchorId, before)
+                    : partDao.create(bookId, req.title, req.subtitle, req.notes);
             return Response.status(Response.Status.CREATED).entity(part).build();
         } catch (SQLException e) {
             return serverError(e);
@@ -154,21 +172,11 @@ public class PartResource {
         }
     }
 
-    @PUT
-    @Path("/books/{bookId}/parts/reorder")
-    public Response reorderParts(@PathParam("bookId") UUID bookId, ReorderRequest req) {
-        logger.info("PartResource.reorderParts invoked: bookId={}, count={}", bookId, req == null || req.ids == null ? 0 : req.ids.size());
-        if (req == null || req.ids == null || req.ids.isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("ids is required").build();
-        }
-        try {
-            partDao.reorderInBook(bookId, req.ids);
-            return Response.noContent().build();
-        } catch (SQLException e) {
-            return serverError(e);
-        }
-    }
+    // Part reordering used to live here as PUT /books/{bookId}/parts/reorder. It
+    // was removed in V40: parts now share one display_order sequence with the
+    // book's direct chapters, so renumbering the parts 0..n-1 in isolation would
+    // collide with the chapters interleaved among them. Book-level ordering is a
+    // single operation over both — see BookOutlineResource.
 
     // -------------------------------------------------------------------------
     // Word count
@@ -225,7 +233,12 @@ public class PartResource {
                 return Response.status(Response.Status.BAD_REQUEST)
                         .entity("Part not found").build();
             }
-            Chapter chapter = chapterDao.create(part.get().getBookId(), partId, req.title, null, req.notes);
+            UUID    bookId  = part.get().getBookId();
+            boolean before  = Boolean.TRUE.equals(req.before);
+            Chapter chapter = (req.anchorId != null)
+                    ? chapterDao.createRelativeTo(bookId, partId, req.title, null, req.notes,
+                            req.anchorId, before)
+                    : chapterDao.create(bookId, partId, req.title, null, req.notes);
             return Response.status(Response.Status.CREATED).entity(chapter).build();
         } catch (SQLException e) {
             return serverError(e);

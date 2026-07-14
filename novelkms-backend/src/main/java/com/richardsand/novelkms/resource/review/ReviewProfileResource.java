@@ -382,8 +382,15 @@ public class ReviewProfileResource {
      * AccountResource already answers 400 for a missing entity. The only 404s in
      * this class are the deliberate non-disclosure ones in {@link #byHandle}.
      */
+    /**
+     * The caller has no reviewer profile yet.
+     *
+     * <p>404, not 400: the request is perfectly well formed, the resource simply
+     * does not exist. This also keeps the review network's one status convention
+     * intact — a profile you cannot see reads as absent, never as refused.
+     */
     private static Response noProfile() {
-        return error(Response.Status.BAD_REQUEST, "no_profile",
+        return error(Response.Status.NOT_FOUND, "no_profile",
                 "You do not have a reviewer profile yet.");
     }
 

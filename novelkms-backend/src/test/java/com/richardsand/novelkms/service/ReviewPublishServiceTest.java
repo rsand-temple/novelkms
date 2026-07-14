@@ -17,10 +17,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.richardsand.novelkms.NovelKmsTestBase;
+import com.richardsand.novelkms.dao.codex.CodexDao;
 import com.richardsand.novelkms.dao.review.ReviewProfileDao;
 import com.richardsand.novelkms.dao.review.ReviewRequestDao;
 import com.richardsand.novelkms.dao.review.ReviewSnapshotDao;
 import com.richardsand.novelkms.model.Project;
+import com.richardsand.novelkms.model.codex.Codex;
 import com.richardsand.novelkms.model.book.Book;
 import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.model.review.ReviewProfile;
@@ -48,6 +50,7 @@ import com.richardsand.novelkms.model.review.ReviewSnapshot;
  */
 class ReviewPublishServiceTest extends NovelKmsTestBase {
 
+    private static final CodexDao          CODEXES   = new CodexDao(ds);
     private static final ReviewProfileDao  PROFILES  = new ReviewProfileDao(ds);
     private static final ReviewRequestDao  REQUESTS  = new ReviewRequestDao(ds);
     private static final ReviewSnapshotDao SNAPSHOTS = new ReviewSnapshotDao(ds);
@@ -253,7 +256,11 @@ class ReviewPublishServiceTest extends NovelKmsTestBase {
      */
     @Test
     void publish_codexChapter_isRejected() throws SQLException {
-        Chapter codexCategory = chapterDao.createCodexChapter(UUID.randomUUID(), "CANON", "Canon");
+        // chapter.codex_id carries an FK to codex(id) (V13), so the category has to
+        // hang off a real codex — a random UUID here fails at INSERT and never
+        // reaches the assertion.
+        Codex   codex         = CODEXES.createForBook(book.getId(), "Codex");
+        Chapter codexCategory = chapterDao.createCodexChapter(codex.getId(), "CANON", "Canon");
 
         ReviewException e = expect(
                 () -> SERVICE.publishChapter(TEST_USER_ID, codexCategory.getId(), form()));
@@ -294,7 +301,10 @@ class ReviewPublishServiceTest extends NovelKmsTestBase {
 
     @Test
     void publish_untitledChapter_fallsBackToChapterNumber() throws SQLException {
-        Chapter untitled = chapterDao.create(book.getId(), null, null, null, null);
+        // chapter.title is NOT NULL. An untitled chapter is stored as "" (ChapterResource
+        // coerces null -> ""), and sourceTitle() runs it through trimToNull, so a blank
+        // title is what actually exercises the "Chapter N" fallback.
+        Chapter untitled = chapterDao.create(book.getId(), null, "", null, null);
         UUID    sceneId  = sceneDao.create(untitled.getId(), "One", null).getId();
         sceneDao.saveContent(sceneId, "<p>Words.</p>", 0);
 
@@ -417,7 +427,7 @@ class ReviewPublishServiceTest extends NovelKmsTestBase {
 
         // The package itself is unharmed — it still knows what it was.
         assertEquals("The Crossing", summary.getSourceTitle());
-        assertEquals(3, summary.getWordCount());
+        assertEquals(2, summary.getWordCount()); // "<p>Text here.</p>" is two words
     }
 
     private static void sleep() {

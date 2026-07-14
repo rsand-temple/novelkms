@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 
+import com.richardsand.novelkms.dao.book.BookOrder;
 import com.richardsand.novelkms.model.chapter.ChapterSummary;
 
 /**
@@ -236,17 +237,15 @@ public class ChapterSummaryDao {
     public List<Row> bookChapterSummaries(UUID bookId, String preferredProvider) throws SQLException {
         String sql = "WITH ordered AS ( "
                 + "  SELECT c.id, c.resets_numbering, "
-                + "    CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END AS sort_bucket, "
-                + "    p.display_order AS part_order, "
-                + "    c.display_order AS chapter_order "
+                + BookOrder.KEY_COLUMNS
                 + "  FROM chapter c "
                 + "  LEFT JOIN part p ON c.part_id = p.id "
                 + "  WHERE c.book_id = ? AND c.codex_id IS NULL AND c.deleted_at IS NULL "
                 + "), "
                 + "grouped AS ( "
-                + "  SELECT id, sort_bucket, part_order, chapter_order, "
+                + "  SELECT id, " + BookOrder.KEY_CARRY + ", "
                 + "    SUM(CASE WHEN resets_numbering THEN 1 ELSE 0 END) OVER ( "
-                + "      ORDER BY sort_bucket, part_order, chapter_order "
+                + "      ORDER BY " + BookOrder.ORDER_BY + " "
                 + "      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW "
                 + "    ) AS numbering_group "
                 + "  FROM ordered "
@@ -254,11 +253,11 @@ public class ChapterSummaryDao {
                 + "numbered AS ( "
                 + "  SELECT id, "
                 + "    ROW_NUMBER() OVER ( "
-                + "      ORDER BY sort_bucket, part_order, chapter_order "
+                + "      ORDER BY " + BookOrder.ORDER_BY + " "
                 + "    ) AS seq, "
                 + "    ROW_NUMBER() OVER ( "
                 + "      PARTITION BY numbering_group "
-                + "      ORDER BY sort_bucket, part_order, chapter_order "
+                + "      ORDER BY " + BookOrder.ORDER_BY + " "
                 + "    ) AS chapter_number "
                 + "  FROM grouped "
                 + ") "

@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -132,27 +133,19 @@ public class PdfExportService {
 
         body.append("<div class=\"main\">");
 
-        List<Part>    parts          = partDao.findByBookId(bookId);
-        List<Chapter> directChapters = chapterDao.findByBookId(bookId);
-
-        if (!parts.isEmpty()) {
-            boolean firstPart = true;
-            for (Part part : parts) {
-                appendPartHeading(body, part, !firstPart);
-                firstPart = false;
+        // Walk the book outline: parts and direct-book chapters interleaved in one
+        // display_order sequence (V40). See ExportService.bookOutline.
+        boolean first = true;
+        for (Object node : bookOutline(bookId)) {
+            if (node instanceof Part part) {
+                appendPartHeading(body, part, !first);
                 for (Chapter ch : chapterDao.findByPartId(part.getId())) {
                     appendChapterContent(body, ch, true);
                 }
+            } else {
+                appendChapterContent(body, (Chapter) node, !first);
             }
-            for (Chapter ch : directChapters) {
-                appendChapterContent(body, ch, true);
-            }
-        } else {
-            boolean firstChapter = true;
-            for (Chapter ch : directChapters) {
-                appendChapterContent(body, ch, !firstChapter);
-                firstChapter = false;
-            }
+            first = false;
         }
 
         body.append("</div>");
@@ -161,6 +154,33 @@ public class PdfExportService {
         byte[] bytes     = renderPdf(html);
         String filename  = pdfFilename(book, null);
         return new ExportMeta(bytes, filename);
+    }
+
+
+    /**
+     * The book's top-level nodes in linear order: parts and direct-book chapters
+     * merged on the shared outline display_order sequence (V40). Mirrors
+     * {@code ExportService.bookOutline}; the export services share no base class.
+     */
+    private List<Object> bookOutline(UUID bookId) throws Exception {
+        List<Part>    parts          = partDao.findByBookId(bookId);
+        List<Chapter> directChapters = chapterDao.findByBookId(bookId);
+
+        List<Object> nodes = new ArrayList<>(parts.size() + directChapters.size());
+        int p = 0;
+        int c = 0;
+        while (p < parts.size() || c < directChapters.size()) {
+            boolean takePart;
+            if (p >= parts.size()) {
+                takePart = false;
+            } else if (c >= directChapters.size()) {
+                takePart = true;
+            } else {
+                takePart = parts.get(p).getDisplayOrder() <= directChapters.get(c).getDisplayOrder();
+            }
+            nodes.add(takePart ? parts.get(p++) : directChapters.get(c++));
+        }
+        return nodes;
     }
 
     /** Exports a single part: part heading, then its chapters in order. */

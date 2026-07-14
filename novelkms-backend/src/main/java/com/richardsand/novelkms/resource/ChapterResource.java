@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.chapter.ChapterDao;
+import com.richardsand.novelkms.model.book.OutlineRef;
 import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.service.TrashService;
 
@@ -51,14 +52,26 @@ public class ChapterResource {
 
     public static class CreateRequest {
         @JsonProperty
-        public String title;
+        public String  title;
         @JsonProperty
-        public String subtitle;
+        public String  subtitle;
         @JsonProperty
-        public String notes;
+        public String  notes;
         /** Optional — omit to place chapter directly under the book. */
         @JsonProperty
-        public UUID   partId;
+        public UUID    partId;
+        /**
+         * Optional insert anchor. Omit to append.
+         *
+         * <p>For a direct-book chapter this is an outline item and may be a PART
+         * or a CHAPTER — inserting before Part I is exactly how a prologue gets
+         * made. For a part-contained chapter it is a sibling chapter.
+         */
+        @JsonProperty
+        public UUID    anchorId;
+        /** true = insert before the anchor, false/omitted = after it. */
+        @JsonProperty
+        public Boolean before;
     }
 
     public static class UpdateRequest {
@@ -73,7 +86,8 @@ public class ChapterResource {
     }
 
     /**
-     * Shared by both reorder endpoints.
+     * Scene reordering within a chapter — a single-table list, so bare IDs are
+     * enough here (unlike the book outline, which spans two tables).
      * Body: { "ids": ["uuid1", "uuid2", ...] } in the desired display order.
      */
     public static class ReorderRequest {
@@ -81,13 +95,30 @@ public class ChapterResource {
         public List<UUID> ids;
     }
 
+    /**
+     * A chapter move names BOTH containers, and carries typed items rather than
+     * bare UUIDs.
+     *
+     * <p>Since V40 the book-level container is the outline — parts and
+     * direct-book chapters interleaved in one display_order sequence — so a list
+     * of bare IDs is no longer sufficient to renumber it: the writer cannot tell
+     * a part row from a chapter row, and the two live in different tables. A
+     * part's chapter list is still a plain chapter list, but the payload is
+     * uniform for both so one code path serves either direction.
+     */
     public static class MoveChapterRequest {
+        /** Target container: a part, or null for the book outline. */
         @JsonProperty("partId")
-        public UUID       partId;
-        @JsonProperty("sourceIds")
-        public List<UUID> sourceIds = List.of();
-        @JsonProperty("targetIds")
-        public List<UUID> targetIds = List.of();
+        public UUID             partId;
+        /** Source container: the part it came from, or null for the book outline. */
+        @JsonProperty("sourcePartId")
+        public UUID             sourcePartId;
+        /** Source container contents AFTER removal. */
+        @JsonProperty("sourceItems")
+        public List<OutlineRef> sourceItems = List.of();
+        /** Target container contents AFTER insertion (includes the moved chapter). */
+        @JsonProperty("targetItems")
+        public List<OutlineRef> targetItems = List.of();
     }
 
     public static class MoveSceneRequest {
@@ -137,7 +168,11 @@ public class ChapterResource {
                     .entity("title is required").build();
         }
         try {
-            Chapter chapter = chapterDao.create(bookId, req.partId, req.title, req.subtitle, req.notes);
+            boolean before  = Boolean.TRUE.equals(req.before);
+            Chapter chapter = (req.anchorId != null)
+                    ? chapterDao.createRelativeTo(bookId, req.partId, req.title, req.subtitle, req.notes,
+                            req.anchorId, before)
+                    : chapterDao.create(bookId, req.partId, req.title, req.subtitle, req.notes);
             return Response.status(Response.Status.CREATED).entity(chapter).build();
         } catch (SQLException e) {
             return serverError(e);
@@ -173,9 +208,16 @@ public class ChapterResource {
     @Path("/chapters/{id}/move")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response moveChapter(@PathParam("id") UUID id, MoveChapterRequest req) {
-        logger.info("ChapterResource.moveChapter invoked: id={}, partId={}", id, req == null ? null : req.partId);
+        logger.info("ChapterResource.moveChapter invoked: id={}, sourcePartId={}, partId={}",
+                id, req == null ? null : req.sourcePartId, req == null ? null : req.partId);
+        if (req == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("request body is required").build();
+        }
         try {
-            chapterDao.moveChapter(id, req.partId, req.sourceIds, req.targetIds);
+            chapterDao.moveChapter(id,
+                    req.sourcePartId, req.sourceItems,
+                    req.partId, req.targetItems);
             return Response.ok().build();
         } catch (SQLException e) {
             return serverError(e);
@@ -208,29 +250,12 @@ public class ChapterResource {
         }
     }
 
-    /**
-     * PUT /api/books/{bookId}/chapters/reorder
-     *
-     * Reorders all chapters within a book. The request body must contain the
-     * complete ordered list of chapter IDs for this book. Chapters not present
-     * in the list are unaffected (their display_order is not touched), which
-     * means the caller should always send the full sibling list.
-     */
-    @PUT
-    @Path("/books/{bookId}/chapters/reorder")
-    public Response reorderChapters(@PathParam("bookId") UUID bookId, ReorderRequest req) {
-        logger.info("ChapterResource.reorderChapters invoked: bookId={}, count={}", bookId, req == null || req.ids == null ? 0 : req.ids.size());
-        if (req == null || req.ids == null || req.ids.isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("ids is required").build();
-        }
-        try {
-            chapterDao.reorderInBook(bookId, req.ids);
-            return Response.noContent().build();
-        } catch (SQLException e) {
-            return serverError(e);
-        }
-    }
+    // Book-level chapter reordering used to live here as
+    // PUT /books/{bookId}/chapters/reorder. It was removed in V40: parts and
+    // direct-book chapters now share one display_order sequence, so renumbering
+    // the chapters 0..n-1 on their own would land them straight on top of the
+    // parts interleaved among them. Book-level ordering is now a single
+    // operation over both — see BookOutlineResource.
 
     // -------------------------------------------------------------------------
     // Endpoints — scene ordering (lives here because the path is

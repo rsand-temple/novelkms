@@ -3,6 +3,7 @@ package com.richardsand.novelkms.model.review;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import lombok.AllArgsConstructor;
@@ -42,7 +43,17 @@ public class ReviewSnapshot {
     @JsonProperty
     private String sourceScope;
 
-    /** Provenance only. Not serialized — a reviewer has no use for a manuscript UUID. */
+    /**
+     * Provenance only. Never serialized — a reviewer has no use for a manuscript UUID,
+     * and leaking it hands them a live handle into the author's private tree.
+     *
+     * <p>{@code @JsonIgnore} is load-bearing here. Simply omitting {@code @JsonProperty}
+     * does NOT hide a property: the class is Lombok {@code @Getter}, and Jackson's
+     * default visibility auto-detects the public getter, so {@code getSourceEntityId()}
+     * would serialize regardless. {@code @JsonProperty} is opt-in <em>naming</em>, not
+     * an opt-in gate.
+     */
+    @JsonIgnore
     private UUID sourceEntityId;
 
     /** The chapter's title as it read at publication, or "Chapter N" if it had none. */
@@ -63,10 +74,14 @@ public class ReviewSnapshot {
     private int wordCount;
 
     /**
-     * The source chapter's updated_at at capture time. Not serialized: it is an
+     * The source chapter's updated_at at capture time. Never serialized: it is an
      * internal comparison input, and {@link ReviewRequestSummary#getSourceState()}
      * is the answer the frontend actually wants.
+     *
+     * <p>See {@link #sourceEntityId} — {@code @JsonIgnore}, not the absence of
+     * {@code @JsonProperty}, is what keeps it off the wire.
      */
+    @JsonIgnore
     private Instant sourceUpdatedAt;
 
     @JsonProperty

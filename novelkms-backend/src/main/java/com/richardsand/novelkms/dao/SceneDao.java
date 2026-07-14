@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 
+import com.richardsand.novelkms.dao.book.BookOrder;
 import com.richardsand.novelkms.model.Scene;
 import com.richardsand.novelkms.utils.WordCount;
 
@@ -110,9 +111,7 @@ public class SceneDao {
                 "LEFT JOIN part p ON c.part_id = p.id " +
                 "WHERE c.book_id = ? AND s.deleted_at IS NULL AND c.deleted_at IS NULL " +
                 "ORDER BY " +
-                "  CASE WHEN c.part_id IS NULL THEN 1 ELSE 0 END, " +
-                "  p.display_order, " +
-                "  c.display_order, " +
+                BookOrder.INLINE_ORDER_BY + ", " +
                 "  s.display_order, " +
                 "  s.title";
 
