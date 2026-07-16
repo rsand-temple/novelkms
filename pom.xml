@@ -1,61 +1,79 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-  <groupId>com.richardsand.novelkms</groupId>
-  <artifactId>novelkms-parent</artifactId>
-  <version>1.0</version>
-  <name>Novel Authoring Knowledge Management System</name>
-  <packaging>pom</packaging>
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>com.richardsand.novelkms</groupId>
+	<artifactId>novelkms-parent</artifactId>
+	<version>1.0</version>
+	<name>Novel Authoring Knowledge Management System</name>
+	<packaging>pom</packaging>
 
-  <properties>
-    <maven.compiler.source>17</maven.compiler.source>
-    <maven.compiler.target>17</maven.compiler.target>
+	<properties>
+		<maven.compiler.source>17</maven.compiler.source>
+		<maven.compiler.target>17</maven.compiler.target>
 
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <file.encoding>UTF-8</file.encoding>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<file.encoding>UTF-8</file.encoding>
 
-    <!-- Shared plugin versions for the packaging modules -->
-    <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
-    <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
-    <frontend-maven-plugin.version>2.0.1</frontend-maven-plugin.version>
-  </properties>
+		<!-- Shared plugin versions for the packaging modules -->
+		<maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+		<maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
+		<frontend-maven-plugin.version>2.0.1</frontend-maven-plugin.version>
+		<maven-deploy-plugin.version>3.1.1</maven-deploy-plugin.version>
+	</properties>
 
-  <modules>
-    <module>novelkms-backend</module>
-    <module>novelkms-frontend</module>
-    <module>novelkms-static</module>
-    <module>novelkms-distro</module>
-  </modules>
+	<modules>
+		<module>novelkms-backend</module>
+		<module>novelkms-frontend</module>
+		<module>novelkms-static</module>
+		<module>novelkms-distro</module>
+	</modules>
 
-  <build>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.13.0</version>
-          <configuration>
-            <release>17</release>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-shade-plugin</artifactId>
-          <version>${maven-shade-plugin.version}</version>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-resources-plugin</artifactId>
-          <version>${maven-resources-plugin.version}</version>
-        </plugin>
-        <plugin>
-          <groupId>com.github.eirslett</groupId>
-          <artifactId>frontend-maven-plugin</artifactId>
-          <version>${frontend-maven-plugin.version}</version>
-        </plugin>
-      </plugins>
-    </pluginManagement>
-  </build>
+	<build>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<version>3.13.0</version>
+					<configuration>
+						<release>17</release>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-shade-plugin</artifactId>
+					<version>${maven-shade-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-resources-plugin</artifactId>
+					<version>${maven-resources-plugin.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>com.github.eirslett</groupId>
+					<artifactId>frontend-maven-plugin</artifactId>
+					<version>${frontend-maven-plugin.version}</version>
+				</plugin>
+				<!-- NovelKMS never publishes to a Maven repository. "deploy" is
+             hijacked in novelkms-distro to push the shaded jar to the
+             production host via wagon-ssh and trigger the redeploy webhook.
+             Skipping the real deploy:deploy goal here (in pluginManagement)
+             applies it to every module by default, including this parent
+             aggregator pom itself and novelkms-backend/-frontend/-static,
+             none of which declare distributionManagement. Without this,
+             `mvn deploy` from the reactor root fails on novelkms-parent
+             before it ever reaches novelkms-distro. -->
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-deploy-plugin</artifactId>
+					<version>${maven-deploy-plugin.version}</version>
+					<configuration>
+						<skip>true</skip>
+					</configuration>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
 </project>

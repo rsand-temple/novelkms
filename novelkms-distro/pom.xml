@@ -11,9 +11,9 @@
 	</parent>
 
 	<!-- Thin packaging module. Has no source of its own; it exists only to 
-		fuse the backend application, the frontend webapp/, and all runtime dependencies 
-		into one runnable uber jar: target/novelkms.jar Run it with: java -jar novelkms.jar 
-		server config.yaml -->
+		fuse the backend application, the frontend webapp/, and all runtime	dependencies 
+		into one runnable uber jar: target/novelkms.jar Run it with: 
+		java -jar novelkms.jar server config.yaml -->
 	<packaging>jar</packaging>
 
 	<dependencies>
@@ -57,7 +57,8 @@
 							<createDependencyReducedPom>false</createDependencyReducedPom>
 							<finalName>novelkms</finalName>
 							<filters>
-								<!-- Strip JAR signature files to avoid "Invalid signature file digest" 
+								<!-- Strip JAR signature files to avoid "Invalid
+								signature file digest" 
 									errors -->
 								<filter>
 									<artifact>*:*</artifact>
@@ -68,11 +69,13 @@
 										<exclude>module-info.class</exclude>
 									</excludes>
 								</filter>
-								<!-- The backend carries a dev placeholder webapp/index.html so AssetsBundle 
+								<!-- The backend carries a dev placeholder
+								webapp/index.html so AssetsBundle 
 									can start in Eclipse. Exclude it from the uber jar so the real frontend build 
 									from novelkms-frontend is the only webapp/ on the classpath. -->
 								<filter>
-									<artifact>com.richardsand.novelkms:novelkms-backend</artifact>
+									<artifact>
+										com.richardsand.novelkms:novelkms-backend</artifact>
 									<excludes>
 										<exclude>webapp/**</exclude>
 										<exclude>site/**</exclude>
@@ -80,13 +83,15 @@
 								</filter>
 							</filters>
 							<transformers>
-								<!-- Merge META-INF/services so Jersey/HK2 SPI works -->
+								<!-- Merge META-INF/services so Jersey/HK2 SPI
+								works -->
 								<transformer
 									implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
 								<!-- Set the runnable Main-Class -->
 								<transformer
 									implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-									<mainClass>com.richardsand.novelkms.NovelKmsServer</mainClass>
+									<mainClass>
+										com.richardsand.novelkms.NovelKmsServer</mainClass>
 								</transformer>
 							</transformers>
 						</configuration>
@@ -108,7 +113,8 @@
 						<configuration>
 							<serverId>media</serverId>
 							<fromFile>${project.build.directory}/novelkms.jar</fromFile>
-							<url>scp://media.sand.idfconnect.lan/home/rsand/novelkms-container</url>
+							<url>
+								scp://media.sand.idfconnect.lan/home/rsand/novelkms-container</url>
 						</configuration>
 					</execution>
 				</executions>
@@ -130,21 +136,14 @@
 							<arguments>
 								<argument>-X</argument>
 								<argument>POST</argument>
-								<argument>http://media.sand.idfconnect.lan:9000/hooks/novelkms-redeploy-webhook</argument>
+								<argument>
+									http://media.sand.idfconnect.lan:9000/hooks/novelkms-redeploy-webhook</argument>
 							</arguments>
 						</configuration>
 					</execution>
 				</executions>
 			</plugin>
 
-			<plugin>
-				<artifactId>maven-deploy-plugin</artifactId>
-				<version>3.1.1</version>
-				<configuration>
-					<skip>true</skip>
-				</configuration>
-			</plugin>
-			
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-assembly-plugin</artifactId>
