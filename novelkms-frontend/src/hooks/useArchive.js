@@ -4,7 +4,7 @@ import { PROJECT_KEYS } from './useProjects'
 
 export const useValidateKmsArchive = () => {
 	return useMutation({
-		mutationFn: (file) => kmsArchiveApi.validate(file),
+		mutationFn: (file) => archiveApi.validate(file),
 	})
 }
 

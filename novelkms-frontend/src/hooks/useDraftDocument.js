@@ -28,16 +28,36 @@ async function loadBook(bookId) {
 
   const partGroups = await Promise.all((parts || []).map(async (part) => {
     const chapters = await partsApi.getChapters(part.id)
-    return { part, chapters: await Promise.all((chapters || []).map(withScenes)) }
+    return {
+      displayOrder: part.displayOrder,
+      part,
+      chapters: await Promise.all((chapters || []).map(withScenes)),
+    }
   }))
 
   const direct = await Promise.all((directChapters || []).map(withScenes))
+  // Each direct-book chapter is its own group so it can slot in at its own
+  // position — a prologue's group has to be able to land before every part
+  // group, an epilogue's after every part group, and (once mid-book direct
+  // chapters are supported) anything else between two of them.
+  const directGroups = direct.map(chapter => ({
+    displayOrder: chapter.displayOrder,
+    part: null,
+    chapters: [chapter],
+  }))
+
+  // Parts and direct-book chapters share one display_order sequence (V40) —
+  // merging them here mirrors ExportService.bookOutline / EpubExportService's
+  // mergeOutline. Before this merge, every part group was emitted first and
+  // every direct chapter afterwards, which is why a prologue dragged above
+  // Part I still rendered after Part I's last chapter in the full-book draft:
+  // this function never read the shared ordering, only "which array it came
+  // from."
+  const groups = [...partGroups, ...directGroups].sort((a, b) => a.displayOrder - b.displayOrder)
+
   return {
     scope: 'book',
-    groups: [
-      ...partGroups,
-      ...(direct.length ? [{ part: null, chapters: direct }] : []),
-    ],
+    groups,
   }
 }
 

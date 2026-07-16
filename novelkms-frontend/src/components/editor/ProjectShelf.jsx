@@ -95,20 +95,31 @@ function BookThumb({ book, authorName, onSelectBook }) {
 
 	const label = book.title || 'Untitled'
 
-	// Navigate into the book: Part 1 if the book has parts, Chapter 1 if it
-	// has direct chapters, or the book cover if neither exists yet.
+	// Navigate into the book: whichever outline item is first — a part or a
+	// direct-book chapter, whichever has the lower display_order — or the book
+	// cover if the book is still empty.
+	//
+	// Before V40, "parts first, direct chapters second" was correct because a
+	// direct chapter could never sit ahead of a part. Since parts and direct
+	// chapters now share one display_order sequence, a prologue can be first,
+	// and picking parts[0] unconditionally would skip straight past it.
 	const handleClick = async () => {
 		if (isNavigating) return
 		setIsNavigating(true)
 		try {
-			const parts = await partsApi.getByBook(book.id)
-			if (parts?.length) {
-				onSelectBook(book.id, parts[0].id, null)
+			const [parts, chapters] = await Promise.all([
+				partsApi.getByBook(book.id),
+				chaptersApi.getByBook(book.id),
+			])
+			const firstPart = parts?.[0] ?? null
+			const firstChapter = chapters?.[0] ?? null
+
+			if (firstPart && (!firstChapter || firstPart.displayOrder <= firstChapter.displayOrder)) {
+				onSelectBook(book.id, firstPart.id, null)
 				return
 			}
-			const chapters = await chaptersApi.getByBook(book.id)
-			if (chapters?.length) {
-				onSelectBook(book.id, null, chapters[0].id)
+			if (firstChapter) {
+				onSelectBook(book.id, null, firstChapter.id)
 				return
 			}
 		} catch (err) {
