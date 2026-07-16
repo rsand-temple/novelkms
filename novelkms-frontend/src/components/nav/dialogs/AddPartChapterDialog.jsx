@@ -5,14 +5,27 @@ import {
 } from '@mui/material'
 import { useCreatePartChapter } from '../../../hooks/useParts'
 
-export default function AddPartChapterDialog({ open, onClose, partId }) {
+/**
+ * `anchor` — { id, before } | null.
+ *
+ * null appends. Otherwise the new chapter (the anchor is a sibling chapter in the same part) is inserted immediately before/after the
+ * anchor item, which the backend does by opening a slot at that position rather
+ * than at the end of the sequence.
+ */
+export default function AddPartChapterDialog({ open, onClose, partId, anchor = null }) {
 	const [title, setTitle] = useState('')
 	const { mutate: createChapter, isPending } = useCreatePartChapter()
 
 	const handleCreate = () => {
 		if (!title.trim()) return
 		createChapter(
-			{ partId, data: { title: title.trim() } },
+			{
+				partId,
+				data: {
+					title: title.trim(),
+					...(anchor && { anchorId: anchor.id, before: anchor.before }),
+				},
+			},
 			{
 				onSuccess: () => {
 					setTitle('')
@@ -29,7 +42,7 @@ export default function AddPartChapterDialog({ open, onClose, partId }) {
 
 	return (
 		<Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
-			<DialogTitle>New Chapter</DialogTitle>
+			<DialogTitle>{anchor ? (anchor.before ? 'Insert Chapter Before' : 'Insert Chapter After') : 'New Chapter'}</DialogTitle>
 			<DialogContent>
 				<TextField
 					autoFocus

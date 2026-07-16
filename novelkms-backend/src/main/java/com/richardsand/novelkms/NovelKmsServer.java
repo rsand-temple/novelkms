@@ -1,6 +1,6 @@
 package com.richardsand.novelkms;
 
-import java.sql.SQLException;
+import java.sql.Connection;
 import java.time.Duration;
 import java.util.EnumSet;
 
@@ -47,8 +47,8 @@ import com.richardsand.novelkms.dao.ai.AiReviewDao;
 import com.richardsand.novelkms.dao.artifact.ArtifactBlobDao;
 import com.richardsand.novelkms.dao.artifact.ArtifactNodeDao;
 import com.richardsand.novelkms.dao.book.BookDao;
-import com.richardsand.novelkms.dao.book.BookSummaryDao;
 import com.richardsand.novelkms.dao.book.BookOutlineDao;
+import com.richardsand.novelkms.dao.book.BookSummaryDao;
 import com.richardsand.novelkms.dao.chapter.ChapterDao;
 import com.richardsand.novelkms.dao.chapter.ChapterEditorialDao;
 import com.richardsand.novelkms.dao.chapter.ChapterMemoryDao;
@@ -69,9 +69,9 @@ import com.richardsand.novelkms.resource.ArchiveResource;
 import com.richardsand.novelkms.resource.ArtifactResource;
 import com.richardsand.novelkms.resource.AuthResource;
 import com.richardsand.novelkms.resource.BillingResource;
+import com.richardsand.novelkms.resource.BookOutlineResource;
 import com.richardsand.novelkms.resource.BookResource;
 import com.richardsand.novelkms.resource.ChapterMemoryResource;
-import com.richardsand.novelkms.resource.BookOutlineResource;
 import com.richardsand.novelkms.resource.ChapterResource;
 import com.richardsand.novelkms.resource.EditorSettingsResource;
 import com.richardsand.novelkms.resource.EditorialResource;
@@ -183,14 +183,11 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         ds.setMaxWait(Duration.ofMillis(10000));
         ds.setFastFailValidation(true);
         ds.setRemoveAbandonedOnBorrow(true);
-        ds.setRemoveAbandonedTimeout(Duration.ofSeconds(30));
+        ds.setRemoveAbandonedTimeout(Duration.ofSeconds(120));
         ds.setLogAbandoned(true);
 
-        try {
-            isPostgres = ds.getConnection().getMetaData().getDatabaseProductName()
-                    .toLowerCase().contains("postgres");
-        } catch (SQLException e) {
-            isPostgres = false;
+        try (Connection c = ds.getConnection()) {
+            isPostgres = ds.getConnection().getMetaData().getDatabaseProductName().toLowerCase().contains("postgres");
         }
 
         Flyway.configure()

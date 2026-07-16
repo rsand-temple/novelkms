@@ -16,9 +16,10 @@ import { useSearch } from '../../search/SearchContext'
 /**
  * ChapterItem — nav tree node for a Chapter.
  *
- * Sortable within its parent container (book-direct or part); can be dragged
- * across containers to reparent. DnD listeners are disabled while the inline
- * rename InputBase is active.
+ * Sortable within its parent container — the book outline (where it interleaves
+ * with the parts) or a part's own chapter list. Can be dragged across containers
+ * to reparent. DnD listeners are disabled while the inline rename InputBase is
+ * active.
  *
  * ListItemText falls back to "Chapter N" when the stored title is blank,
  * matching the editor-heading behaviour (fixes a pre-existing display gap).
@@ -84,9 +85,12 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 		data: {
 			type:        'chapter',
 			title:       displayTitle,
+			// A direct-book chapter lives in the book OUTLINE, alongside the parts —
+			// they share one display_order sequence. A part-contained chapter lives
+			// in its part's own separate sequence.
 			containerId: partId
 				? containerIds.chaptersPart(String(partId))
-				: containerIds.chaptersBook(String(bookId)),
+				: containerIds.outline(String(bookId)),
 			bookId: String(bookId),
 			partId: partId ? String(partId) : null,
 		},

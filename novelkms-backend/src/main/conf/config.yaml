@@ -28,8 +28,8 @@ server:
 #{% if LOGTOFILE == "true" %}
       - type: file
         timeZone: America/New_York
-        currentLogFilename: "{{ LOGPATH | d('/logs', true)}}/novelkms-access.log"
-        archivedLogFilenamePattern: "{{ LOGPATH | d('/logs', true)}}/novelkms-access-%d.log.gz"
+        currentLogFilename: "{{ LOGPATH | d('~/logs', true)}}/novelkms-access.log"
+        archivedLogFilenamePattern: "{{ LOGPATH | d('~/logs', true)}}/novelkms-access-%d.log.gz"
         archivedFileCount: 14
 #{% endif %}
 
@@ -46,8 +46,8 @@ logging:
 #{% if LOGTOFILE == "true" %}
     - type: file
       timeZone: America/New_York
-      currentLogFilename: "{{ LOGPATH | d('/logs', true)}}/novelkms.log"
-      archivedLogFilenamePattern: "{{ LOGPATH | d('/logs', true)}}/novelkms-%d.log.gz"
+      currentLogFilename: "{{ LOGPATH | d('~/logs', true)}}/novelkms.log"
+      archivedLogFilenamePattern: "{{ LOGPATH | d('~/logs', true)}}/novelkms-%d.log.gz"
       archivedFileCount: 14
 #{% endif %}
   
@@ -60,7 +60,7 @@ security:
   encryptionKey: {{NOVELKMS_ENCRYPTION_KEY | d('')}}
 
 database:
-  url: {{DB_URL | d('jdbc:h2:C:/dev/temp/novelkmsdb;MODE=PostgreSQL;AUTO_SERVER=TRUE')}}
+  url: {{DB_URL | d('jdbc:h2:~/tmp/novelkmsdb;MODE=PostgreSQL')}}
   adminUser: {{DB_USER | d('admin')}}
   adminPwd: {{DB_PASSWORD | d('admin123')}}
 

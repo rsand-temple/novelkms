@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Box, Collapse, Divider, InputBase, ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
+import { Box, Collapse, InputBase, ListItemButton, ListItemText, ListItemIcon } from '@mui/material'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
@@ -115,14 +115,24 @@ export default function BookItem({ book, selection, setSelection }) {
 		})
 	}
 
-	// ── DnD container IDs ─────────────────────────────────────────────────────
-	const partsContainerId = containerIds.parts(String(book.id))
-	const chapBookContainerId = containerIds.chaptersBook(String(book.id))
-	const partIds = (parts ?? []).map(p => String(p.id))
-	const chapterIds = (chapters ?? []).map(c => String(c.id))
+	// ── The book outline ──────────────────────────────────────────────────────
+	// Parts and direct-book chapters share one display_order sequence on the
+	// backend, so the nav tree renders them as one interleaved list inside ONE
+	// SortableContext. The old layout — every part, then a divider, then every
+	// direct chapter — was the visible face of the bug: it made a prologue
+	// structurally unable to sit above Part I.
+	//
+	// Both queries already return their rows sorted; merging on displayOrder is
+	// all that's needed, and no part and no direct chapter of the same book can
+	// share a position.
+	const outlineContainerId = containerIds.outline(String(book.id))
 
-	const hasParts = parts?.length > 0
-	const hasChapters = chapters?.length > 0
+	const outline = [
+		...(parts ?? []).map(p => ({ kind: 'part', id: p.id, displayOrder: p.displayOrder, part: p })),
+		...(chapters ?? []).map(c => ({ kind: 'chapter', id: c.id, displayOrder: c.displayOrder, chapter: c })),
+	].sort((a, b) => a.displayOrder - b.displayOrder)
+
+	const outlineIds = outline.map(i => String(i.id))
 
 	return (
 		<Box>
@@ -170,41 +180,32 @@ export default function BookItem({ book, selection, setSelection }) {
 
 			<Collapse in={open} unmountOnExit>
 				<Box>
-					{/* ── Parts ────────────────────────────────────────────────── */}
+					{/* ── Book outline: parts and direct chapters, interleaved ──── */}
 					<SortableContext
-						id={partsContainerId}
-						items={partIds}
+						id={outlineContainerId}
+						items={outlineIds}
 						strategy={verticalListSortingStrategy}
 					>
-						{(parts ?? []).map((part) => (
-							<PartItem
-								key={part.id}
-								part={part}
-								bookId={book.id}
-								selection={selection}
-								setSelection={setSelection}
-							/>
-						))}
-					</SortableContext>
-
-					{hasParts && hasChapters && <Divider sx={{ mx: 2, my: 0.25 }} />}
-
-					{/* ── Direct-book chapters (part_id IS NULL) ───────────────── */}
-					<SortableContext
-						id={chapBookContainerId}
-						items={chapterIds}
-						strategy={verticalListSortingStrategy}
-					>
-						<ChapterListZone containerId={chapBookContainerId}>
-							{(chapters ?? []).map((chapter) => (
-								<ChapterItem
-									key={chapter.id}
-									chapter={chapter}
-									bookId={book.id}
-									partId={null}
-									selection={selection}
-									setSelection={setSelection}
-								/>
+						<ChapterListZone containerId={outlineContainerId}>
+							{outline.map((item) => (
+								item.kind === 'part' ? (
+									<PartItem
+										key={item.id}
+										part={item.part}
+										bookId={book.id}
+										selection={selection}
+										setSelection={setSelection}
+									/>
+								) : (
+									<ChapterItem
+										key={item.id}
+										chapter={item.chapter}
+										bookId={book.id}
+										partId={null}
+										selection={selection}
+										setSelection={setSelection}
+									/>
+								)
 							))}
 						</ChapterListZone>
 					</SortableContext>

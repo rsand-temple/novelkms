@@ -16,11 +16,18 @@ import ArticleIcon from '@mui/icons-material/Article'
 import NavToolbar from '../nav/NavToolbar'
 import NavTree from '../nav/NavTree'
 import TrashFooter from '../nav/TrashFooter'
-import { useReorderParts, useReorderPartChapters } from '../../hooks/useParts'
-import { useReorderChapters, useMoveChapter } from '../../hooks/useChapters'
+import { useReorderPartChapters } from '../../hooks/useParts'
+import { useMoveChapter } from '../../hooks/useChapters'
+import { useReorderOutline } from '../../hooks/useOutline'
 import { useReorderScenes, useMoveScene } from '../../hooks/useScenes'
 import { DndStateContext } from '../../dnd/DndStateContext'
-import { containerIds, parseContainerId, getQueryKey, isContainerId } from '../../dnd/dndUtils'
+import {
+	containerIds,
+	parseContainerId,
+	isContainerId,
+	readContainerItems,
+	toOutlineRefs,
+} from '../../dnd/dndUtils'
 import { NavContextMenuProvider } from '../nav/NavContextMenu'
 
 export default function NavPanel({ selection, setSelection }) {
@@ -37,8 +44,7 @@ export default function NavPanel({ selection, setSelection }) {
 		useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
 	)
 
-	const { mutate: reorderParts } = useReorderParts()
-	const { mutate: reorderChapters } = useReorderChapters()
+	const { mutate: reorderOutline } = useReorderOutline()
 	const { mutate: reorderPartChapters } = useReorderPartChapters()
 	const { mutate: reorderScenes } = useReorderScenes()
 	const { mutate: moveChapter } = useMoveChapter()
@@ -50,9 +56,31 @@ export default function NavPanel({ selection, setSelection }) {
 		setActiveItem({ type: d?.type, title: d?.title ?? '…' })
 	}
 
-	// ── Drag over: track before/after for cross-chapter scene indicator ──
+	// ── Drag over ────────────────────────────────────────────────────────
+	// Two jobs:
+	//   - scenes:   before/after indicator for a cross-chapter move
+	//   - chapters: which part header is being hovered, so PartItem can spring
+	//               open and its chapter zone can arm itself. The header itself
+	//               is a positional target now (the outline is one sortable list),
+	//               so the zone inside is the only way to nest — it has to be
+	//               reachable without dropping first.
 	function handleDragOver({ active, over }) {
-		if (!over || active.data.current?.type !== 'scene') {
+		const activeType = active.data.current?.type
+
+		if (!over) {
+			setDragState(null)
+			return
+		}
+
+		if (activeType === 'chapter') {
+			const hoverPartId = over.data.current?.type === 'part' ? String(over.id) : null
+			setDragState({ activeType: 'chapter', overId: String(over.id), insertBefore: true, hoverPartId })
+			return
+		}
+
+		if (activeType !== 'scene') {
+			// A part drag needs no live state, but the zones still want to know a
+			// chapter ISN'T being dragged, so clear rather than leave it stale.
 			setDragState(null)
 			return
 		}
@@ -74,7 +102,7 @@ export default function NavPanel({ selection, setSelection }) {
 			insertBefore = activeMidY < overMidY
 		}
 
-		setDragState({ activeType: 'scene', overId: String(over.id), insertBefore })
+		setDragState({ activeType: 'scene', overId: String(over.id), insertBefore, hoverPartId: null })
 	}
 
 	// ── Drag cancel ──────────────────────────────────────────────────────
@@ -105,15 +133,13 @@ export default function NavPanel({ selection, setSelection }) {
 		if (!fromContainer || !toContainer) return
 
 		if (fromContainer === toContainer) {
+			// Includes a chapter dropped on a PART header: both now live in the book
+			// outline, so that is a plain reposition — the prologue-above-Part-I case.
+			// Nesting into a part happens by dropping into the part's chapter zone,
+			// which is a different container and falls through below.
 			handleSameContainerReorder(active, over, fromContainer)
 		} else if (activeType === 'chapter') {
-			let effectiveToContainer = toContainer
-			if (over.data.current?.type === 'part') {
-				effectiveToContainer = containerIds.chaptersPart(String(over.id))
-			}
-			if (effectiveToContainer !== fromContainer) {
-				handleChapterReparent(active, over, fromContainer, effectiveToContainer)
-			}
+			handleChapterReparent(active, over, fromContainer, toContainer)
 		} else if (activeType === 'scene') {
 			let effectiveToContainer = toContainer
 			if (over.data.current?.type === 'chapter') {
@@ -127,39 +153,43 @@ export default function NavPanel({ selection, setSelection }) {
 
 	// ── Same-container reorder ───────────────────────────────────────────
 	function handleSameContainerReorder(active, over, containerId) {
-		const qk = getQueryKey(containerId)
-		if (!qk) return
+		const items = readContainerItems(queryClient, containerId)
+		if (items.length === 0) return
 
-		const items = queryClient.getQueryData(qk) ?? []
 		const oldIdx = items.findIndex(i => String(i.id) === String(active.id))
 		const newIdx = items.findIndex(i => String(i.id) === String(over.id))
 		if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return
 
-		const ids = arrayMove(items, oldIdx, newIdx).map(i => i.id)
+		const moved = arrayMove(items, oldIdx, newIdx)
 		const p = parseContainerId(containerId)
 
-		if (p.type === 'parts') reorderParts({ bookId: p.bookId, ids })
-		else if (p.type === 'chapters-book') reorderChapters({ bookId: p.bookId, ids })
-		else if (p.type === 'chapters-part') reorderPartChapters({ partId: p.partId, ids })
-		else if (p.type === 'scenes') reorderScenes({ chapterId: p.chapterId, ids })
+		if (p.type === 'outline') {
+			// One list, two tables. The typed refs tell the server which row each
+			// entry is, so it knows whether to renumber a part or a chapter.
+			reorderOutline({ bookId: p.bookId, items: toOutlineRefs(moved) })
+		} else if (p.type === 'chapters-part') {
+			reorderPartChapters({ partId: p.partId, ids: moved.map(i => i.id) })
+		} else if (p.type === 'scenes') {
+			reorderScenes({ chapterId: p.chapterId, ids: moved.map(i => i.id) })
+		}
 	}
 
 	// ── Chapter reparent (cross-container) ───────────────────────────────
+	// Either end may be the book outline (parts + direct chapters, two tables) or
+	// a part's own chapter list (one table). Both ends are therefore named and
+	// sent as TYPED refs — a bare UUID cannot tell the server which table a row
+	// lives in, and it has to know which one to renumber.
 	function handleChapterReparent(active, over, fromContainer, toContainer) {
-		const fromQk = getQueryKey(fromContainer)
-		const toQk = getQueryKey(toContainer)
-		if (!fromQk || !toQk) return
+		const sourceItems = readContainerItems(queryClient, fromContainer)
+		const targetItems = readContainerItems(queryClient, toContainer)
 
-		const sourceItems = queryClient.getQueryData(fromQk) ?? []
-		const targetItems = queryClient.getQueryData(toQk) ?? []
 		const movedChapter = sourceItems.find(i => String(i.id) === String(active.id))
 		if (!movedChapter) return
 
 		const newSource = sourceItems.filter(i => String(i.id) !== String(active.id))
 
-		const overIsPartOrContainer =
-			over.data.current?.type === 'part' || isContainerId(String(over.id))
-		const overIdx = overIsPartOrContainer
+		// Dropping on the zone itself (rather than on a row) means "append".
+		const overIdx = isContainerId(String(over.id))
 			? targetItems.length
 			: targetItems.findIndex(i => String(i.id) === String(over.id))
 		const insertIdx = overIdx === -1 ? targetItems.length : overIdx
@@ -167,25 +197,22 @@ export default function NavPanel({ selection, setSelection }) {
 		const newTarget = [...targetItems]
 		newTarget.splice(insertIdx, 0, movedChapter)
 
+		const fromParsed = parseContainerId(fromContainer)
 		const toParsed = parseContainerId(toContainer)
-		const newPartId = toParsed.type === 'chapters-part' ? toParsed.partId : null
 
 		moveChapter({
 			id: active.id,
-			partId: newPartId,
-			sourceIds: newSource.map(i => i.id),
-			targetIds: newTarget.map(i => i.id),
+			partId:       toParsed.type   === 'chapters-part' ? toParsed.partId   : null,
+			sourcePartId: fromParsed.type === 'chapters-part' ? fromParsed.partId : null,
+			sourceItems:  toOutlineRefs(newSource),
+			targetItems:  toOutlineRefs(newTarget),
 		})
 	}
 
 	// ── Scene reparent (cross-chapter) ───────────────────────────────────
 	function handleSceneReparent(active, over, fromContainer, toContainer, savedDragState) {
-		const fromQk = getQueryKey(fromContainer)
-		const toQk = getQueryKey(toContainer)
-		if (!fromQk || !toQk) return
-
-		const sourceItems = queryClient.getQueryData(fromQk) ?? []
-		const targetItems = queryClient.getQueryData(toQk) ?? []
+		const sourceItems = readContainerItems(queryClient, fromContainer)
+		const targetItems = readContainerItems(queryClient, toContainer)
 		const movedScene = sourceItems.find(i => String(i.id) === String(active.id))
 		if (!movedScene) return
 

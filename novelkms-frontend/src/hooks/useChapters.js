@@ -24,6 +24,11 @@ export const useChapter = (id) => {
 	})
 }
 
+/**
+ * Creates a direct-book chapter. `data` may carry { anchorId, before } to insert
+ * it relative to an existing OUTLINE item — a part or another chapter — rather
+ * than appending. Inserting before Part I is how a prologue gets made.
+ */
 export const useCreateChapter = () => {
 	const queryClient = useQueryClient()
 	return useMutation({
@@ -38,6 +43,11 @@ export const useCreateChapter = () => {
 				console.error('[useCreateChapter] Failed to create initial scene:', err)
 			}
 			queryClient.invalidateQueries({ queryKey: CHAPTER_KEYS.byBook(bookId) })
+			// Inserting a chapter into the shared outline sequence pushes the parts
+			// after it down one, so their display_orders are stale too. The key is
+			// inlined rather than imported from useParts: useParts already imports
+			// CHAPTER_KEYS from here, and importing back would close the cycle.
+			queryClient.invalidateQueries({ queryKey: ['parts', 'byBook', bookId] })
 		},
 	})
 }
@@ -69,28 +79,30 @@ export const useDeleteChapter = () => {
 	})
 }
 
-/**
- * Reorders chapters within a book.
- * Call with: reorderChapters({ bookId, ids: [uuid, uuid, ...] })
- * ids must be the complete ordered list of chapter IDs for the book.
- */
-export const useReorderChapters = () => {
-	const queryClient = useQueryClient()
-	return useMutation({
-		mutationFn: ({ bookId, ids }) => chaptersApi.reorderInBook(bookId, ids),
-		onSuccess: (_, { bookId }) => {
-			queryClient.invalidateQueries({ queryKey: CHAPTER_KEYS.byBook(bookId) })
-		},
-	})
-}
+// useReorderChapters is gone. A book's direct chapters share one display_order
+// sequence with its parts and can only be reordered together — see
+// useReorderOutline (hooks/useOutline.js). Chapters INSIDE a part still have
+// their own sequence: useReorderPartChapters.
 
+/**
+ * Moves a chapter between containers.
+ *
+ * Call with: moveChapter({ id, partId, sourcePartId, sourceItems, targetItems })
+ *
+ * Both containers are named explicitly, and the item lists are typed refs
+ * ([{ type: 'PART'|'CHAPTER', id }]) rather than bare UUIDs — either end may be
+ * the book outline, which spans two tables, and the server has to know which one
+ * each entry lives in. partId / sourcePartId are null when that end is the
+ * outline rather than a part.
+ */
 export function useMoveChapter() {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: ({ id, partId, sourceIds, targetIds }) =>
-			chaptersApi.moveChapter(id, { partId, sourceIds, targetIds }),
+		mutationFn: ({ id, partId, sourcePartId, sourceItems, targetItems }) =>
+			chaptersApi.moveChapter(id, { partId, sourcePartId, sourceItems, targetItems }),
 		onSuccess: () => {
-			// Broad invalidation — chapter moved across unknown containers
+			// Broad invalidation — a move can renumber the outline (both tables) and
+			// a part's chapter list at once.
 			queryClient.invalidateQueries({ queryKey: ['chapters'] });
 			queryClient.invalidateQueries({ queryKey: ['parts'] });
 		},

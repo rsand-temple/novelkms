@@ -14,14 +14,16 @@ import AddCodexEntryDialog from './dialogs/AddCodexEntryDialog'
 import DeleteConfirmDialog from './dialogs/DeleteConfirmDialog'
 import { shouldSkipDeleteConfirm } from '../../utils/deleteConfirmPrefs'
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
-import { useChapters, useReorderChapters, useDeleteChapter } from '../../hooks/useChapters'
+import { useChapters, useDeleteChapter } from '../../hooks/useChapters'
 import { useDeleteBook } from '../../hooks/useBooks'
 import { useDeleteCodex, useProjectCodex, useBookCodex, useCreateProjectCodex, useCreateBookCodex } from '../../hooks/useCodex'
 import {
 	useParts, usePartChapters,
-	useReorderParts, useReorderPartChapters,
+	useReorderPartChapters,
 	useDeletePart,
 } from '../../hooks/useParts'
+import { useReorderOutline } from '../../hooks/useOutline'
+import { toOutlineRefs } from '../../dnd/dndUtils'
 
 // ── Add-button label ──────────────────────────────────────────────────────────
 
@@ -129,10 +131,24 @@ export default function NavToolbar({ selection, setSelection }) {
 	// ── sibling lists (for reordering) ───────────────────────────────────────
 	// Each query is enabled only for the context that needs it to avoid over-fetching.
 	// These also hit the TanStack Query cache populated by the nav tree.
+	// A part and a direct-book chapter are both OUTLINE items — they share one
+	// display_order sequence, so they are each other's siblings. Both contexts
+	// therefore need both lists.
+	const isOutlineContext = isDirectChapterContext || isPartContext
+
 	const { data: scenes } = useScenes(isSceneContext ? selection.chapterId : null)
-	const { data: chapters } = useChapters(isDirectChapterContext ? selection.bookId : null)
 	const { data: partChapters } = usePartChapters(isChapterInPartContext ? selection.partId : null)
-	const { data: parts } = useParts(isPartContext ? selection.bookId : null)
+	const { data: outlineChapters } = useChapters(isOutlineContext ? selection.bookId : null)
+	const { data: outlineParts } = useParts(isOutlineContext ? selection.bookId : null)
+
+	// Merged on displayOrder, exactly as BookItem renders it — the toolbar, the
+	// context menu, and the tree must all agree on what "the next one down" is.
+	const outlineSiblings = isOutlineContext
+		? [
+			...(outlineParts ?? []).map(x => ({ id: x.id, type: 'part', displayOrder: x.displayOrder })),
+			...(outlineChapters ?? []).map(x => ({ id: x.id, type: 'chapter', displayOrder: x.displayOrder })),
+		].sort((a, b) => a.displayOrder - b.displayOrder)
+		: null
 
 	// ── Codex existence (for conditional "Add Codex" in the Add menu) ─────
 	const { data: projectCodex } = useProjectCodex(isProjectContext ? selection.projectId : null)
@@ -141,16 +157,14 @@ export default function NavToolbar({ selection, setSelection }) {
 	const { mutate: createBookCodex } = useCreateBookCodex()
 
 	const { mutate: reorderScenes } = useReorderScenes()
-	const { mutate: reorderChapters } = useReorderChapters()
 	const { mutate: reorderPartChapters } = useReorderPartChapters()
-	const { mutate: reorderParts } = useReorderParts()
+	const { mutate: reorderOutline } = useReorderOutline()
 
 	// Resolve active sibling list and the selected item's index within it
 	const siblings = isSceneContext ? scenes
-		: isDirectChapterContext ? chapters
-			: isChapterInPartContext ? partChapters
-				: isPartContext ? parts
-					: null
+		: isChapterInPartContext ? partChapters
+			: isOutlineContext ? outlineSiblings
+				: null
 
 	const selectedId = isSceneContext ? selection.sceneId
 		: isChapterContext ? selection.chapterId
@@ -177,24 +191,32 @@ export default function NavToolbar({ selection, setSelection }) {
 
 	// ── reorder handlers ──────────────────────────────────────────────────────
 
+	// `ordered` stays as objects: the outline path needs each entry's type to tell
+	// the server which table to renumber.
+	const dispatchReorder = (ordered) => {
+		if (isSceneContext) {
+			reorderScenes({ chapterId: selection.chapterId, ids: ordered.map(o => o.id) })
+		} else if (isChapterInPartContext) {
+			reorderPartChapters({ partId: selection.partId, ids: ordered.map(o => o.id) })
+		} else if (isOutlineContext) {
+			reorderOutline({ bookId: selection.bookId, items: toOutlineRefs(ordered) })
+		}
+	}
+
+	const swapSiblings = (i, j) => {
+		const next = [...siblings]
+		;[next[i], next[j]] = [next[j], next[i]]
+		return next
+	}
+
 	const handleMoveUp = () => {
 		if (isFirst || !siblings) return
-		const ids = siblings.map(s => s.id)
-			;[ids[index - 1], ids[index]] = [ids[index], ids[index - 1]]
-		if (isSceneContext) reorderScenes({ chapterId: selection.chapterId, ids })
-		else if (isDirectChapterContext) reorderChapters({ bookId: selection.bookId, ids })
-		else if (isChapterInPartContext) reorderPartChapters({ partId: selection.partId, ids })
-		else if (isPartContext) reorderParts({ bookId: selection.bookId, ids })
+		dispatchReorder(swapSiblings(index - 1, index))
 	}
 
 	const handleMoveDown = () => {
 		if (isLast || !siblings) return
-		const ids = siblings.map(s => s.id)
-			;[ids[index], ids[index + 1]] = [ids[index + 1], ids[index]]
-		if (isSceneContext) reorderScenes({ chapterId: selection.chapterId, ids })
-		else if (isDirectChapterContext) reorderChapters({ bookId: selection.bookId, ids })
-		else if (isChapterInPartContext) reorderPartChapters({ partId: selection.partId, ids })
-		else if (isPartContext) reorderParts({ bookId: selection.bookId, ids })
+		dispatchReorder(swapSiblings(index, index + 1))
 	}
 
 	// ── delete handler ────────────────────────────────────────────────────────

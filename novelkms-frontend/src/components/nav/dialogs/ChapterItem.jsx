@@ -86,7 +86,7 @@ export default function ChapterItem({ chapter, bookId, partId, selection, setSel
 			title:       displayTitle,
 			containerId: partId
 				? containerIds.chaptersPart(String(partId))
-				: containerIds.chaptersBook(String(bookId)),
+				: containerIds.outline(String(bookId)),
 			bookId: String(bookId),
 			partId: partId ? String(partId) : null,
 		},

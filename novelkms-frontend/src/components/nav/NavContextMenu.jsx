@@ -42,14 +42,16 @@ import ManageAiContextDialog from '../ai/ManageAiContextDialog'
 import ChapterReviewHistoryDialog from '../ai/ChapterReviewHistoryDialog'
 
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
-import { useChapters, useReorderChapters, useDeleteChapter } from '../../hooks/useChapters'
+import { useChapters, useDeleteChapter } from '../../hooks/useChapters'
 import { useDeleteBook } from '../../hooks/useBooks'
 import { useDeleteCodex, useProjectCodex, useBookCodex, useCreateProjectCodex, useCreateBookCodex } from '../../hooks/useCodex'
 import {
 	useParts, usePartChapters,
-	useReorderParts, useReorderPartChapters,
+	useReorderPartChapters,
 	useDeletePart,
 } from '../../hooks/useParts'
+import { useReorderOutline } from '../../hooks/useOutline'
+import { toOutlineRefs } from '../../dnd/dndUtils'
 import { useRunChapterReview, useRunSceneReview } from '../../hooks/useAiReviews'
 import { useGenerateChapterMemory, useChapterMemoryStatus, useDeleteChapterMemory } from '../../hooks/useChapterMemory'
 import { useGenerateChapterSummary, useBookChapterSummaries, useDeleteChapterSummary } from '../../hooks/useSummary'
@@ -151,6 +153,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const [chapterDialogOpen, setChapterDialogOpen] = useState(false)
 	const [partDialogOpen, setPartDialogOpen] = useState(false)
 	const [partChapterDialogOpen, setPartChapterDialogOpen] = useState(false)
+	const [insertAnchor, setInsertAnchor] = useState(null)   // { id, before } | null — insert relative to this node
 	const [sceneDialogOpen, setSceneDialogOpen] = useState(false)
 	const [entryDialogOpen, setEntryDialogOpen] = useState(false)
 	const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
@@ -161,25 +164,36 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	// These queries hit the TanStack Query cache already populated by the nav
 	// tree, so they produce no extra network requests in the happy path.
 	// Each is conditionally enabled based on the right-clicked node type.
+	// An OUTLINE node is a part, or a chapter that sits directly under the book.
+	// Those two types share one display_order sequence, so they are each other's
+	// siblings: "Move Up" on a prologue steps it above Part I.
+	const isOutlineNode =
+		menuNode?.type === 'part' ||
+		(menuNode?.type === 'chapter' && !menuNode.partId)
+
 	const { data: sceneSiblings } = useScenes(
 		menuNode?.type === 'scene' ? menuNode.chapterId : null
-	)
-	const { data: directChapSiblings } = useChapters(
-		menuNode?.type === 'chapter' && !menuNode.partId ? menuNode.bookId : null
 	)
 	const { data: partChapSiblings } = usePartChapters(
 		menuNode?.type === 'chapter' && menuNode.partId ? menuNode.partId : null
 	)
-	const { data: partSiblings } = useParts(
-		menuNode?.type === 'part' ? menuNode.bookId : null
-	)
+	const { data: outlineParts } = useParts(isOutlineNode ? menuNode.bookId : null)
+	const { data: outlineChapters } = useChapters(isOutlineNode ? menuNode.bookId : null)
+
+	// Merged on displayOrder, exactly as BookItem renders it — the menu and the
+	// tree must agree about what "the next one down" is.
+	const outlineSiblings = isOutlineNode
+		? [
+			...(outlineParts ?? []).map(x => ({ id: x.id, type: 'part', displayOrder: x.displayOrder })),
+			...(outlineChapters ?? []).map(x => ({ id: x.id, type: 'chapter', displayOrder: x.displayOrder })),
+		].sort((a, b) => a.displayOrder - b.displayOrder)
+		: null
 
 	const siblings =
 		menuNode?.type === 'scene' ? sceneSiblings
-			: menuNode?.type === 'chapter' && !menuNode.partId ? directChapSiblings
-				: menuNode?.type === 'chapter' && menuNode.partId ? partChapSiblings
-					: menuNode?.type === 'part' ? partSiblings
-						: null
+			: menuNode?.type === 'chapter' && menuNode.partId ? partChapSiblings
+				: isOutlineNode ? outlineSiblings
+					: null
 
 	const siblingIndex = siblings?.findIndex(s => String(s.id) === String(menuNode?.id)) ?? -1
 	const isFirst = siblingIndex <= 0
@@ -188,9 +202,8 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 
 	// ── Mutations ─────────────────────────────────────────────────────────────
 	const { mutate: reorderScenes } = useReorderScenes()
-	const { mutate: reorderChapters } = useReorderChapters()
 	const { mutate: reorderPartChapters } = useReorderPartChapters()
-	const { mutate: reorderParts } = useReorderParts()
+	const { mutate: reorderOutline } = useReorderOutline()
 	const { mutate: deleteScene, isPending: deletingScene } = useDeleteScene()
 	const { mutate: deleteChapter, isPending: deletingChapter } = useDeleteChapter()
 	const { mutate: deletePart, isPending: deletingPart } = useDeletePart()
@@ -521,30 +534,49 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 
 	// ── Move up / down ────────────────────────────────────────────────────────
 
-	const dispatchReorder = (ids) => {
+	// `ordered` is the sibling list AFTER the swap, still as objects — the outline
+	// path needs each entry's type to know which table the server should renumber.
+	const dispatchReorder = (ordered) => {
 		if (!menuNode) return
 		const { type, chapterId, partId, bookId } = menuNode
-		if (type === 'scene') reorderScenes({ chapterId, ids })
-		else if (type === 'chapter' && !partId) reorderChapters({ bookId, ids })
-		else if (type === 'chapter' && partId) reorderPartChapters({ partId, ids })
-		else if (type === 'part') reorderParts({ bookId, ids })
+		if (type === 'scene') {
+			reorderScenes({ chapterId, ids: ordered.map(o => o.id) })
+		} else if (type === 'chapter' && partId) {
+			reorderPartChapters({ partId, ids: ordered.map(o => o.id) })
+		} else if (isOutlineNode) {
+			reorderOutline({ bookId, items: toOutlineRefs(ordered) })
+		}
+	}
+
+	const swapSiblings = (i, j) => {
+		const next = [...siblings]
+		;[next[i], next[j]] = [next[j], next[i]]
+		return next
 	}
 
 	const handleMoveUp = () => {
 		if (isFirst || !siblings) return
-		const ids = siblings.map(s => s.id)
-			;[ids[siblingIndex - 1], ids[siblingIndex]] = [ids[siblingIndex], ids[siblingIndex - 1]]
-		dispatchReorder(ids)
+		dispatchReorder(swapSiblings(siblingIndex - 1, siblingIndex))
 		closeMenu()
 	}
 
 	const handleMoveDown = () => {
 		if (isLast || !siblings) return
-		const ids = siblings.map(s => s.id)
-			;[ids[siblingIndex], ids[siblingIndex + 1]] = [ids[siblingIndex + 1], ids[siblingIndex]]
-		dispatchReorder(ids)
+		dispatchReorder(swapSiblings(siblingIndex, siblingIndex + 1))
 		closeMenu()
 	}
+
+	// ── Insert before / after ─────────────────────────────────────────────────
+	// The anchor is handed to the create endpoint, which opens a slot at that
+	// position instead of appending. For an outline node the anchor may be a part
+	// OR a chapter — "Insert Chapter Before" on Part I is how a prologue is made.
+	const openInsertDialog = (setOpen, before) => {
+		setInsertAnchor({ id: menuNode.id, before })
+		closeMenu()
+		setOpen(true)
+	}
+
+	const clearInsertAnchor = () => setInsertAnchor(null)
 
 	// ── Delete ────────────────────────────────────────────────────────────────
 
@@ -693,6 +725,52 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					<MenuItem dense onClick={handleMoveDown} disabled={isLast || siblingIndex < 0}>
 						<ListItemIcon><ArrowDownwardIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Move Down</ListItemText>
+					</MenuItem>
+				)}
+
+				{/* Insert relative to this node.
+				    On an outline node (a part, or a chapter directly under the book) the
+				    anchor may be either type — which is what makes "Insert Chapter Before"
+				    on Part I produce a prologue. Each item is a direct child of Menu:
+				    MUI's MenuList does not accept Fragments. */}
+				{isOutlineNode && <Divider />}
+				{isOutlineNode && (
+					<MenuItem dense onClick={() => openInsertDialog(setChapterDialogOpen, true)}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Insert Chapter Before</ListItemText>
+					</MenuItem>
+				)}
+				{isOutlineNode && (
+					<MenuItem dense onClick={() => openInsertDialog(setChapterDialogOpen, false)}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Insert Chapter After</ListItemText>
+					</MenuItem>
+				)}
+				{isOutlineNode && (
+					<MenuItem dense onClick={() => openInsertDialog(setPartDialogOpen, true)}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Insert Part Before</ListItemText>
+					</MenuItem>
+				)}
+				{isOutlineNode && (
+					<MenuItem dense onClick={() => openInsertDialog(setPartDialogOpen, false)}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Insert Part After</ListItemText>
+					</MenuItem>
+				)}
+
+				{/* A chapter inside a part: its siblings are that part's chapters. */}
+				{menuNode?.type === 'chapter' && menuNode.partId && <Divider />}
+				{menuNode?.type === 'chapter' && menuNode.partId && (
+					<MenuItem dense onClick={() => openInsertDialog(setPartChapterDialogOpen, true)}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Insert Chapter Before</ListItemText>
+					</MenuItem>
+				)}
+				{menuNode?.type === 'chapter' && menuNode.partId && (
+					<MenuItem dense onClick={() => openInsertDialog(setPartChapterDialogOpen, false)}>
+						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Insert Chapter After</ListItemText>
 					</MenuItem>
 				)}
 
@@ -981,20 +1059,26 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				onClose={() => setBookDialogOpen(false)}
 				projectId={menuNode?.type === 'project' ? menuNode.id : menuNode?.projectId}
 			/>
+			{/* anchor is null when reached via "Add …" (append) and set when reached
+			    via "Insert … Before/After". It is cleared on close so the next plain
+			    Add does not inherit the last insert position. */}
 			<AddPartDialog
 				open={partDialogOpen}
-				onClose={() => setPartDialogOpen(false)}
+				onClose={() => { setPartDialogOpen(false); clearInsertAnchor() }}
 				bookId={menuNode?.type === 'book' ? menuNode.id : menuNode?.bookId}
+				anchor={insertAnchor}
 			/>
 			<AddChapterDialog
 				open={chapterDialogOpen}
-				onClose={() => setChapterDialogOpen(false)}
+				onClose={() => { setChapterDialogOpen(false); clearInsertAnchor() }}
 				bookId={menuNode?.type === 'book' ? menuNode.id : menuNode?.bookId}
+				anchor={insertAnchor}
 			/>
 			<AddPartChapterDialog
 				open={partChapterDialogOpen}
-				onClose={() => setPartChapterDialogOpen(false)}
+				onClose={() => { setPartChapterDialogOpen(false); clearInsertAnchor() }}
 				partId={menuNode?.type === 'part' ? menuNode.id : menuNode?.partId}
+				anchor={insertAnchor}
 			/>
 			<AddSceneDialog
 				open={sceneDialogOpen}

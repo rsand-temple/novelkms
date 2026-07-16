@@ -9,6 +9,7 @@ import { usePartChapters, useUpdatePart } from '../../hooks/useParts'
 import ChapterItem from './ChapterItem'
 import ChapterListZone from './ChapterListZone'
 import { containerIds } from '../../dnd/dndUtils'
+import { useDndState } from '../../dnd/DndStateContext'
 import { useNavContextMenu } from './NavContextMenuContext'
 import { useSearch } from '../../search/SearchContext'
 
@@ -34,14 +35,33 @@ const toRoman = (n) => {
  * in PropertiesPanel remains empty in that case, letting the author give the
  * part a real name later without the auto-label getting in the way.
  *
- * The part row is sortable (drag to reorder parts within the book).
+ * The part row is sortable within the BOOK OUTLINE — the single sequence it
+ * shares with the book's direct chapters — so dragging a part past a prologue,
+ * or a prologue past a part, is one ordinary reorder.
+ *
+ * That makes the part header a POSITIONAL target, not a nesting target: dropping
+ * a chapter on it places the chapter before/after the part. To nest a chapter
+ * INSIDE the part you drop it into the part's own chapter zone, which is a
+ * separate container. So that stays reachable mid-drag, the part springs open
+ * while a chapter hovers over it (see hoverPartId in NavPanel's drag state).
+ *
  * DnD listeners are disabled while the inline rename InputBase is active.
  */
 export default function PartItem({ part, bookId, selection, setSelection }) {
 	const [open, setOpen] = useState(false)
 	const search = useSearch()
 	const matchCount = search.counts.part[part.id] ?? 0
-	const { data: chapters } = usePartChapters(open ? part.id : null)
+
+	// Spring-loaded open: while a chapter is dragged over this part's header, the
+	// part opens so its chapter zone — the only way to nest into it now that the
+	// header is a positional target — comes within reach without dropping first.
+	const dragState = useDndState()
+	const springOpen = dragState?.hoverPartId === String(part.id)
+	const expanded = open || springOpen
+
+	// Still lazy: a collapsed part fetches nothing. Springing open enables the
+	// query, so the zone fills in as it expands.
+	const { data: chapters } = usePartChapters(expanded ? part.id : null)
 
 	const isSelected = selection.partId === part.id && !selection.chapterId
 
@@ -93,7 +113,7 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 		data: {
 			type: 'part',
 			title: displayTitle,
-			containerId: containerIds.parts(String(bookId)),
+			containerId: containerIds.outline(String(bookId)),
 			bookId: String(bookId),
 		},
 	})
@@ -158,7 +178,7 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 					sx={{ minWidth: 28, cursor: 'pointer' }}
 					onClick={handleExpandToggle}
 				>
-					{open ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
+					{expanded ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
 				</ListItemIcon>
 				<ListItemIcon sx={{ minWidth: 28 }}>
 					<BookmarksIcon fontSize="small" />
@@ -190,7 +210,7 @@ export default function PartItem({ part, bookId, selection, setSelection }) {
 				)}
 			</ListItemButton>
 
-			<Collapse in={open} unmountOnExit>
+			<Collapse in={expanded} unmountOnExit>
 				<SortableContext
 					id={chapterContainerId}
 					items={chapterIds}

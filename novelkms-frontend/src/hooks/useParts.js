@@ -39,12 +39,22 @@ export function usePartChapters(partId) {
 
 // ── Mutations ─────────────────────────────────────────────────────────────────
 
+/**
+ * Creates a part. `data` may carry { anchorId, before } to insert it relative to
+ * an existing outline item rather than appending.
+ *
+ * Both book-level lists are invalidated, not just the parts: inserting a part
+ * into the shared outline sequence pushes the direct-book chapters after it down
+ * one, so the chapter list's display_orders are stale too.
+ */
 export function useCreatePart() {
     const qc = useQueryClient()
     return useMutation({
         mutationFn: ({ bookId, data }) => partsApi.create(bookId, data),
-        onSuccess:  (_, { bookId }) =>
-            qc.invalidateQueries({ queryKey: PART_KEYS.byBook(bookId) }),
+        onSuccess:  (_, { bookId }) => {
+            qc.invalidateQueries({ queryKey: PART_KEYS.byBook(bookId) })
+            qc.invalidateQueries({ queryKey: CHAPTER_KEYS.byBook(bookId) })
+        },
     })
 }
 
@@ -72,15 +82,14 @@ export function useDeletePart() {
     })
 }
 
-export function useReorderParts() {
-    const qc = useQueryClient()
-    return useMutation({
-        mutationFn: ({ bookId, ids }) => partsApi.reorderInBook(bookId, ids),
-        onSuccess:  (_, { bookId }) =>
-            qc.invalidateQueries({ queryKey: PART_KEYS.byBook(bookId) }),
-    })
-}
+// useReorderParts is gone. Parts no longer have an order of their own — they
+// share one display_order sequence with the book's direct chapters, so the two
+// can only be reordered together. Use useReorderOutline (hooks/useOutline.js).
 
+/**
+ * Creates a chapter inside a part. `data` may carry { anchorId, before } to
+ * insert it relative to a sibling chapter in the same part rather than appending.
+ */
 export function useCreatePartChapter() {
     const qc = useQueryClient()
     return useMutation({
