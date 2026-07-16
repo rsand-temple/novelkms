@@ -1,7 +1,5 @@
 package com.richardsand.novelkms;
 
-import java.sql.Connection;
-import java.time.Duration;
 import java.util.EnumSet;
 
 import org.apache.commons.dbcp2.BasicDataSource;
@@ -160,38 +158,35 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
     @Override
     public void run(NovelKmsConfig config, Environment env) throws Exception {
         String jdbcUrl   = config.getDatabase().url;
-        String adminUser = config.getDatabase().adminUser;
-        String adminPwd  = config.getDatabase().adminPwd;
 
+        logger.info("Database URL: {}", jdbcUrl);
         if (jdbcUrl != null && jdbcUrl.startsWith("jdbc:postgresql:")) {
             logger.info("Loading POSTGRESQL driver");
             ds.setDriverClassName("org.postgresql.Driver");
+            isPostgres = true; 
         } else if (jdbcUrl != null && jdbcUrl.startsWith("jdbc:h2:")) {
             logger.info("Loading H2 driver");
             ds.setDriverClassName("org.h2.Driver");
+        } else {
+        	throw new RuntimeException("Unsupported database type: " + jdbcUrl);
         }
 
-        logger.info("Database URL: {}", jdbcUrl);
         ds.setUrl(jdbcUrl);
-        ds.setUsername(adminUser);
-        ds.setPassword(adminPwd);
-        ds.setMinIdle(1);
-        ds.setMaxIdle(5);
-        ds.setMaxOpenPreparedStatements(100);
+        ds.setUsername(config.getDatabase().getAdminUser());
+        ds.setPassword(config.getDatabase().getAdminPwd());
+        ds.setMinIdle(config.getDatabase().getMinIdle());
+        ds.setMaxIdle(config.getDatabase().getMaxIdle());
+        ds.setMaxOpenPreparedStatements(config.getDatabase().getMaxOpenPreparedStatements());
+        ds.setMaxTotal(config.getDatabase().getMaxTotal());
+        ds.setMaxWait(config.getDatabase().getMaxWait());
+        ds.setRemoveAbandonedTimeout(config.getDatabase().getRemoveAbandonedTimeout());
         ds.setDefaultAutoCommit(true);
-        ds.setMaxTotal(15);
-        ds.setMaxWait(Duration.ofMillis(10000));
         ds.setFastFailValidation(true);
-        ds.setRemoveAbandonedOnBorrow(true);
-        ds.setRemoveAbandonedTimeout(Duration.ofSeconds(120));
         ds.setLogAbandoned(true);
-
-        try (Connection c = ds.getConnection()) {
-            isPostgres = ds.getConnection().getMetaData().getDatabaseProductName().toLowerCase().contains("postgres");
-        }
+        ds.setRemoveAbandonedOnBorrow(true);
 
         Flyway.configure()
-                .dataSource(jdbcUrl, adminUser, adminPwd)
+                .dataSource(jdbcUrl, config.getDatabase().getAdminUser(), config.getDatabase().getAdminPwd())
                 .locations("classpath:db/migration/" + (isPostgres ? "postgresql" : "h2"))
                 .load()
                 .migrate();

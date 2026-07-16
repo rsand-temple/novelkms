@@ -1,5 +1,7 @@
 package com.richardsand.novelkms;
 
+import java.time.Duration;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.dropwizard.core.Configuration;
@@ -12,6 +14,13 @@ public class NovelKmsConfig extends Configuration {
         public String url;
         public String adminUser;
         public String adminPwd;
+        int           minIdle                   = 1;
+        int           maxIdle                   = 5;
+        int           maxOpenPreparedStatements = 100;
+        int           maxTotal                  = 15;
+        Duration      maxWait                   = Duration.ofMillis(10000);
+        Duration      removeAbandonedTimeout    = Duration.ofSeconds(120);
+        boolean       logAbandoned              = true;
     }
 
     @Getter
@@ -47,11 +56,9 @@ public class NovelKmsConfig extends Configuration {
     @Getter
     public static class Security {
         /**
-         * Master key for encrypting secrets at rest (BYOK AI provider API keys).
-         * Normally injected from the NOVELKMS_ENCRYPTION_KEY environment variable.
-         * A Base64 16/24/32-byte key is used directly; any other non-blank value
-         * is treated as a passphrase (SHA-256 derived). Blank uses an INSECURE
-         * development key — override before storing real secrets.
+         * Master key for encrypting secrets at rest (BYOK AI provider API keys). Normally injected from the NOVELKMS_ENCRYPTION_KEY environment variable. A
+         * Base64 16/24/32-byte key is used directly; any other non-blank value is treated as a passphrase (SHA-256 derived). Blank uses an INSECURE development
+         * key — override before storing real secrets.
          */
         public String encryptionKey;
     }
@@ -78,10 +85,8 @@ public class NovelKmsConfig extends Configuration {
     }
 
     /**
-     * Artifacts (non-manuscript project file store). {@code storageDir} is the
-     * host-mounted directory the blob bytes live in; blank falls back to a temp
-     * directory with a startup warning (local dev only). Quotas are per-user:
-     * {@code defaultUserQuotaBytes} applies unless a user has an
+     * Artifacts (non-manuscript project file store). {@code storageDir} is the host-mounted directory the blob bytes live in; blank falls back to a temp
+     * directory with a startup warning (local dev only). Quotas are per-user: {@code defaultUserQuotaBytes} applies unless a user has an
      * {@code artifact_quota_bytes} override.
      */
     @Getter
@@ -114,20 +119,20 @@ public class NovelKmsConfig extends Configuration {
     Notifications notifications = new Notifications();
 
     @JsonProperty
-    Database database;
+    Database      database;
 
     @JsonProperty
-    Auth auth;
+    Auth          auth;
 
     @JsonProperty
-    Security security;
+    Security      security;
 
     @JsonProperty
-    Billing billing;
+    Billing       billing;
 
     @JsonProperty
-    Tools tools = new Tools();
+    Tools         tools         = new Tools();
 
     @JsonProperty
-    Artifacts artifacts = new Artifacts();
+    Artifacts     artifacts     = new Artifacts();
 }
