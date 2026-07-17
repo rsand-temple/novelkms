@@ -33,6 +33,7 @@ import AddPartDialog from './dialogs/AddPartDialog'
 import AddPartChapterDialog from './dialogs/AddPartChapterDialog'
 import AddCodexEntryDialog from './dialogs/AddCodexEntryDialog'
 import DeleteConfirmDialog from './dialogs/DeleteConfirmDialog'
+import DeleteProjectDialog from './dialogs/DeleteProjectDialog'
 import { shouldSkipDeleteConfirm } from '../../utils/deleteConfirmPrefs'
 import ExportDialog from './dialogs/ExportDialog'
 import PreReviewMemoryDialog from '../ai/PreReviewMemoryDialog'
@@ -43,7 +44,8 @@ import ChapterReviewHistoryDialog from '../ai/ChapterReviewHistoryDialog'
 
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
 import { useChapters, useDeleteChapter } from '../../hooks/useChapters'
-import { useDeleteBook } from '../../hooks/useBooks'
+import { useBooks, useDeleteBook } from '../../hooks/useBooks'
+import { useDeleteProject } from '../../hooks/useProjects'
 import { useDeleteCodex, useProjectCodex, useBookCodex, useCreateProjectCodex, useCreateBookCodex } from '../../hooks/useCodex'
 import {
 	useParts, usePartChapters,
@@ -114,6 +116,11 @@ function getDeleteContext(type, title, codexCategory) {
 			level: 'codex',
 			label: 'Delete Codex',
 			itemType: 'Codex',
+		}
+		case 'project': return {
+			level: 'project',
+			label: 'Delete Project',
+			itemType: 'Project',
 		}
 		default: return null
 	}
@@ -209,7 +216,14 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const { mutate: deletePart, isPending: deletingPart } = useDeletePart()
 	const { mutate: deleteBook, isPending: deletingBook } = useDeleteBook()
 	const { mutate: deleteCodex, isPending: deletingCodex } = useDeleteCodex()
+	const { mutate: deleteProject, isPending: deletingProject } = useDeleteProject()
 	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook || deletingCodex
+
+	// ── Project delete confirmation ──────────────────────────────────────────
+	const [deleteProjectDialogOpen, setDeleteProjectDialogOpen] = useState(false)
+	const { data: menuProjectBooks } = useBooks(
+		menuNode?.type === 'project' ? menuNode.id : null,
+	)
 
 	// ── Codex existence (for conditional "Add Codex" in project/book context menus)
 	const { data: ctxProjectCodex } = useProjectCodex(menuNode?.type === 'project' ? menuNode.id : null)
@@ -639,6 +653,26 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		}
 	}
 
+	// Project deletion uses its own stern, dedicated dialog (DeleteProjectDialog)
+	// rather than the generic DeleteConfirmDialog / handleConfirmDelete flow above,
+	// so it is never eligible for the "don't show this again" skip shortcut.
+	const handleConfirmDeleteProject = () => {
+		if (!menuNode || menuNode.type !== 'project') return
+		deleteProject(
+			menuNode.id,
+			{
+				onSuccess: () => {
+					setSelection(s => ({
+						...s,
+						projectId: null, bookId: null, partId: null, chapterId: null, sceneId: null,
+						codexId: null, codexCategory: null,
+					}))
+					setDeleteProjectDialogOpen(false)
+				},
+			},
+		)
+	}
+
 	// ── Add sub-item ──────────────────────────────────────────────────────────
 
 	const handleAddScene = () => {
@@ -649,7 +683,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	// ── Derived menu flags ────────────────────────────────────────────────────
 
 	const isBookNode = menuNode?.type === 'book'
-	const canDelete = deleteCtx != null  // project delete not supported
+	const canDelete = deleteCtx != null
 
 	// Export URL — derived from the right-clicked node type and id.
 	// null for project nodes (no export scope for the whole project).
@@ -1009,15 +1043,22 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
-				{/* Delete — not available for project */}
+				{/* Delete */}
 				{canDelete && <Divider />}
 				{canDelete && (
 					<MenuItem
 						dense
 						onClick={() => {
 							closeMenu()
-							if (shouldSkipDeleteConfirm()) handleConfirmDelete()
-							else setDeleteDialogOpen(true)
+							if (deleteCtx.level === 'project') {
+								// Whole-project delete always shows its own stern dialog —
+								// the "don't show this again" skip shortcut never applies here.
+								setDeleteProjectDialogOpen(true)
+							} else if (shouldSkipDeleteConfirm()) {
+								handleConfirmDelete()
+							} else {
+								setDeleteDialogOpen(true)
+							}
 						}}>
 						<ListItemIcon><DeleteIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>{deleteCtx.label}</ListItemText>
@@ -1033,6 +1074,17 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				itemType={deleteCtx?.itemType ?? 'item'}
 				detail={deleteCtx?.detail ?? null}
 				isPending={isDeleting}
+			/>
+
+			{/* ── Delete Project confirmation (stern, dedicated — see design notes
+			    above handleConfirmDeleteProject) ──────────────────────────────── */}
+			<DeleteProjectDialog
+				open={deleteProjectDialogOpen}
+				onClose={() => setDeleteProjectDialogOpen(false)}
+				onConfirm={handleConfirmDeleteProject}
+				projectTitle={menuNode?.type === 'project' ? menuNode.title : ''}
+				bookCount={menuProjectBooks?.length ?? 0}
+				isPending={deletingProject}
 			/>
 
 			{/* ── Export dialog ───────────────────────────────────────────────── */}
