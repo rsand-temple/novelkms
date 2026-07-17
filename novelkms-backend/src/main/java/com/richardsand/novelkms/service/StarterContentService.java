@@ -32,6 +32,15 @@ public class StarterContentService {
     private static final String STARTER_CONTENT    = "<p>Begin your scene here.</p>";
     private static final int    STARTER_WORD_COUNT = 4;
 
+    // part.title, chapter.title, and scene.title are all VARCHAR NOT NULL.
+    // Every other creation path (e.g. ChapterResource) coerces a blank title
+    // to "" before it reaches the DAO layer; the DAOs themselves pass the
+    // title straight through to a PreparedStatement with no null-guard. Using
+    // "" here (rather than null) lets these rows render with their normal
+    // blank-title auto-numbering ("Part I", "Chapter 1") instead of throwing
+    // a NOT NULL violation on insert.
+    private static final String BLANK_TITLE = "";
+
     private final ProjectDao projectDao;
     private final BookDao    bookDao;
     private final PartDao    partDao;
@@ -90,13 +99,13 @@ public class StarterContentService {
         Book book = bookDao.create(project.getId(), "My Book", null, null, null);
 
         // 4. Create a part. Blank title renders as "Part I" via the auto-numbering CTE.
-        Part part = partDao.create(book.getId(), null, null, null);
+        Part part = partDao.create(book.getId(), BLANK_TITLE, null, null);
 
         // 5. Create a chapter under the part. Blank title renders as "Chapter 1".
-        Chapter chapter = chapterDao.create(book.getId(), part.getId(), null, null, null);
+        Chapter chapter = chapterDao.create(book.getId(), part.getId(), BLANK_TITLE, null, null);
 
         // 6. Create the first scene and set welcoming placeholder content.
-        Scene scene = sceneDao.create(chapter.getId(), null, null);
+        Scene scene = sceneDao.create(chapter.getId(), BLANK_TITLE, null);
         sceneDao.saveContent(scene.getId(), STARTER_CONTENT, STARTER_WORD_COUNT);
 
         logger.info(
