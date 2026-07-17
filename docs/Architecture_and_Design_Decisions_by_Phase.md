@@ -333,3 +333,31 @@ payload is rejected with 400 (strict mapper, unknown property) rather than ignor
 mapper-config fact, not a security property. The security property (the DAO's `WHERE user_id = ?`)
 is tested separately with a legitimate payload, so relaxing `FAIL_ON_UNKNOWN_PROPERTIES` cannot
 raise a false alarm on a security test.
+
+### V39 — Human Review Network slice 1B (publish + My Requests)
+
+**Publish is one atomic step straight to OPEN.** DRAFT exists in the column but is unused: a package
+with no manuscript is not a recoverable state, so request and snapshot are both written or neither.
+
+**Snapshot assembly.** Scenes in display order, joined by a bare `<hr>` — *not* the editor's
+`<hr data-scene-after="{uuid}">`, which would hand a stranger the internal UUIDs of the author's
+scenes. `SceneBreak.js` already parses a bare `<hr>` for backward compatibility. Word count is
+recomputed from the assembled HTML via the new canonical `utils/WordCount.fromHtml`, never summed from
+`scene.word_count` (historically zeroed by the pre-V37 autosave path).
+
+**`source_updated_at` (V39)** is the source chapter's `updated_at` at capture time. Compared against
+the live chapter it yields `sourceState` ∈ CURRENT / CHANGED / DELETED — a string, not a pair of
+booleans, because the states are mutually exclusive and two booleans admit a nonsense fourth
+combination (and the Lombok is-prefix rule makes boolean fields a hazard regardless). A null marker
+(pre-V39 row) resolves to CURRENT rather than inventing a CHANGED the author cannot act on.
+
+**Codex categories are chapter rows** (`codex_id` set, `book_id` null). Publish rejects them with 400
+`not_manuscript`, and the nav menu item is gated on `isManuscriptNode` so it never appears — otherwise
+private worldbuilding would land in a public queue.
+
+**Frontend.** `ReviewRequestDialog` serves publish and edit from one field set. Edit mode fetches the
+whole request rather than seeding from `ReviewRequestSummary`: the summary omits `authorQuestions`,
+`contentWarnings`, and `maxReviews`, while PUT rewrites every column — seeding from the list row would
+blank three fields silently. Feedback types are stored as stable UPPER_SNAKE keys with a UI-side label
+map, so relabeling is never a data migration. Visibility is not exposed: the backend defaults to
+PUBLIC, and INVITE would produce a package no reviewer can reach until invitations exist.

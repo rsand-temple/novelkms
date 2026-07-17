@@ -131,6 +131,21 @@ comma-separated column, exposed as a list. PUBLIC/HIDDEN visibility; ACTIVE/SUSP
 status (not user-settable). Cross-user reads return 404, never 403. Full Phase 1 schema (8 tables)
 landed in V38. Surface at `/app/community` with the five Phase 1 tabs; only My Profile is built.
 
+### Human Review Network — Phase 1B (publish + My Requests)
+
+Author publishes a chapter for human review: `POST /chapters/{chapterId}/review-requests` freezes an
+immutable `review_snapshot` (scenes joined by a bare `<hr>`, word count recomputed from the assembled
+HTML) and opens a `review_request` over it, in one transaction. Publish hangs off the *chapter* path
+because `TenantAuthorizationFilter` only authorizes UUIDs following known manuscript segments — a
+body-carried `chapterId` would be unauthorized. Lifecycle via explicit action endpoints
+(pause/resume/close/withdraw); metadata editable while not WITHDRAWN/REMOVED. Republish = new request
++ new snapshot. V39 adds `review_snapshot.source_updated_at`, the spec §8.2 version marker that powers
+the CURRENT/CHANGED/DELETED source state.
+
+Frontend: "Publish for Human Review…" on the chapter nav context menu (manuscript chapters only);
+`ReviewRequestDialog` (publish + edit, profile-gated); **My Requests** tab at `/app/community?tab=requests`
+with status/source-state chips, snapshot viewer, and lifecycle actions.
+
 ## Known issues / watchlist
 
 - Billing: extend trial, revoke-family semantics, plan mapping, webhook diagnostics, Stripe reconciliation.
@@ -145,12 +160,12 @@ landed in V38. Surface at `/app/community` with the five Phase 1 tabs; only My P
 - Delete confirmation dialog wording ("cannot be undone" → "move to trash"; codex entries called "scenes").
 - Help topics are seed content; expand as product matures.
 - Artifacts: blob dir must be in backup set; restore de-dup appends "(n)" to whole name; nav-pane folder drag deferred.
-
-- Review network: only slice 1A (profiles) shipped; requests/snapshots/queue/reviews/metrics/moderation
-  tables exist but are unused. `review_context_item` is unpopulated until Phase 2.
-- `UserPreferenceResource` uses `@Context` field injection — works only because it is registered by
-  class; would fail any resource test. Convert to method-parameter form if it ever gets one.
-
+- Review network: slices 1A (profiles) and 1B (publish + My Requests) shipped; queue/reviews/metrics/
+  moderation tables exist but are unused. `review_context_item` unpopulated until Phase 2.
+  `ReviewRequestSummary` carries no `sourceEntityId`, so Republish cannot be offered from a My Requests
+  card — publishing runs from the chapter in the workspace. `max_reviews` is stored but unenforced
+  until 1C. `closes_at` is advisory; nothing sweeps it.
+  
 ## Near-term next actions
 
 1. Admin billing: extend trial, revoke-family semantics, plan mapping, webhook diagnostics.
@@ -159,7 +174,7 @@ landed in V38. Surface at `/app/community` with the five Phase 1 tabs; only My P
 4. Deferred AI findings view.
 5. Style-editor UI.
 6. Provider-variants Phase 3: provider-aware coverage/staleness, review-history grouping, fallback note.
-7. Review network slice 1B: publish chapter → request + snapshot; My Requests.
+7. Review network slice 1C: queue, package view, snapshot reader.
 
 ## Documentation maintenance rule
 

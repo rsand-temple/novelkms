@@ -784,7 +784,7 @@ export default function AdminSupportConsole() {
 						color="inherit"
 						size="small"
 						startIcon={<ArrowBackIcon />}
-						onClick={() => { window.location.href = '/' }}
+						onClick={() => { window.location.href = '..' }}
 					>
 						Workspace
 					</Button>

@@ -1039,8 +1039,8 @@ Phase 1 ships in six slices. V38 (whole Phase 1 schema) landed with 1A.
 | Slice | Scope                                                | Status                                             |
 | ----- | ---------------------------------------------------- | -------------------------------------------------- |
 | 1A    | Profiles & handles                                   | **Done** — V38, `review_profile`, `/app/community` |
-| 1B    | Publish chapter → request + snapshot; My Requests    | Next                                               |
-| 1C    | Queue, package view, snapshot reader                 |                                                    |
+| 1B    | Publish chapter → request + snapshot; My Requests    | **Done** — V39, `review_request`/`review_snapshot`, `/app/community?tab=requests` |
+| 1C    | Queue, package view, snapshot reader                 | Next                                               |
 | 1D    | Write/submit review; Reviews Received; notifications |                                                    |
 | 1E    | Contribution metrics                                 |                                                    |
 | 1F    | Blocking, reporting, admin removal                   |                                                    |
