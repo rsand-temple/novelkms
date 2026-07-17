@@ -13,6 +13,7 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined'
 import ReviewProfilePanel from './ReviewProfilePanel'
+import MyRequestsPanel from './MyRequestsPanel'
 import { LogoMark } from '../branding/Logo'
 
 /**
@@ -29,10 +30,18 @@ import { LogoMark } from '../branding/Logo'
 const TABS = [
 	{ key: 'profile',  label: 'My Profile' },
 	{ key: 'queue',    label: 'Review Queue',        soon: 'Browse open review requests from other writers.' },
-	{ key: 'requests', label: 'My Requests',         soon: 'Publish a chapter for review and track its status.' },
+	{ key: 'requests', label: 'My Requests' },
 	{ key: 'writing',  label: "Reviews I'm Writing", soon: 'Drafts of reviews you have started.' },
 	{ key: 'received', label: 'Reviews Received',    soon: 'Feedback other writers have sent you.' },
 ]
+
+// The active tab is deep-linkable: /app/community?tab=requests lands directly on
+// My Requests. An unknown or absent value falls back to My Profile.
+function initialTab() {
+	if (typeof window === 'undefined') return 'profile'
+	const requested = new URLSearchParams(window.location.search).get('tab')
+	return TABS.some(t => t.key === requested) ? requested : 'profile'
+}
 
 function ComingSoon({ label, description }) {
 	return (
@@ -63,8 +72,20 @@ function ComingSoon({ label, description }) {
 }
 
 export default function CommunityPage() {
-	const [tab, setTab] = useState('profile')
+	const [tab, setTab] = useState(initialTab)
 	const active = TABS.find(t => t.key === tab) ?? TABS[0]
+
+	// Keep the tab in the URL (without a history entry) so a refresh or a shared
+	// link stays on the same tab.
+	const handleTab = (_e, next) => {
+		setTab(next)
+		if (typeof window !== 'undefined') {
+			const url = new URL(window.location.href)
+			if (next === 'profile') url.searchParams.delete('tab')
+			else url.searchParams.set('tab', next)
+			window.history.replaceState(null, '', url)
+		}
+	}
 
 	return (
 		<Box sx={{
@@ -107,7 +128,7 @@ export default function CommunityPage() {
 			<Box sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
 				<Tabs
 					value={tab}
-					onChange={(_e, next) => setTab(next)}
+					onChange={handleTab}
 					variant="scrollable"
 					scrollButtons="auto"
 					sx={{ px: 2 }}
@@ -121,6 +142,8 @@ export default function CommunityPage() {
 			<Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 3 }}>
 				{active.key === 'profile' ? (
 					<ReviewProfilePanel />
+				) : active.key === 'requests' ? (
+					<MyRequestsPanel />
 				) : (
 					<Stack sx={{ alignItems: 'center', pt: 4 }}>
 						<ComingSoon label={active.label} description={active.soon} />

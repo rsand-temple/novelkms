@@ -25,6 +25,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import CloseIcon from '@mui/icons-material/Close'
 import ScheduleIcon from '@mui/icons-material/Schedule'
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined'
 
 import AddBookDialog from './dialogs/AddBookDialog'
 import AddChapterDialog from './dialogs/AddChapterDialog'
@@ -41,6 +42,7 @@ import { flaggedPreceding } from '../ai/memoryStatus'
 import BookSummaryDialog from '../ai/BookSummaryDialog'
 import ManageAiContextDialog from '../ai/ManageAiContextDialog'
 import ChapterReviewHistoryDialog from '../ai/ChapterReviewHistoryDialog'
+import ReviewRequestDialog from '../community/ReviewRequestDialog'
 
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
 import { useChapters, useDeleteChapter } from '../../hooks/useChapters'
@@ -166,6 +168,13 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
 	const [reviewError, setReviewError] = useState(null)
 	const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
+
+	// Publish for Human Review. The target is captured when the item is clicked so
+	// it survives menuNode changing; the dialog self-gates on the user having
+	// claimed a review handle.
+	const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+	const [publishTarget, setPublishTarget] = useState(null)   // { chapterId, title } | null
+	const [publishSnack, setPublishSnack] = useState(null)     // { severity, message } | null
 
 	// ── Sibling lists for Move Up / Down ──────────────────────────────────────
 	// These queries hit the TanStack Query cache already populated by the nav
@@ -975,6 +984,23 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
+				{/* Publish for Human Review — manuscript chapters only (never scenes
+				    or codex). The dialog self-gates on having claimed a handle. */}
+				{isManuscriptNode && reviewNodeType === 'chapter' && (
+					<MenuItem
+						dense
+						onClick={() => {
+							const target = { chapterId: menuNode.id, title: menuNode.title }
+							closeMenu()
+							setPublishTarget(target)
+							setPublishDialogOpen(true)
+						}}
+					>
+						<ListItemIcon><GroupsOutlinedIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Publish for Human Review…</ListItemText>
+					</MenuItem>
+				)}
+				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
 				{/* Memory document — Generate and Clear only; editing is via the
 				    Memory nav leaf in the editor panel. */}
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
@@ -1188,6 +1214,32 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				onClose={() => setHistoryDialogOpen(false)}
 				chapterId={reviewNodeType === 'chapter' ? menuNode?.id : null}
 			/>
+
+			{/* ── Publish for Human Review ────────────────────────────────── */}
+			<ReviewRequestDialog
+				open={publishDialogOpen}
+				mode="publish"
+				chapterId={publishTarget?.chapterId}
+				suggestedTitle={publishTarget?.title}
+				onClose={() => setPublishDialogOpen(false)}
+				onPublished={(req) => setPublishSnack({
+					severity: 'success',
+					message: `Published “${req.title}” for human review.`,
+				})}
+			/>
+
+			<Snackbar
+				open={!!publishSnack}
+				autoHideDuration={4000}
+				onClose={() => setPublishSnack(null)}
+				anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+			>
+				{publishSnack ? (
+					<Alert severity={publishSnack.severity} onClose={() => setPublishSnack(null)} sx={{ width: '100%' }}>
+						{publishSnack.message}
+					</Alert>
+				) : undefined}
+			</Snackbar>
 
 			<Snackbar
 				open={!!memorySnack}
