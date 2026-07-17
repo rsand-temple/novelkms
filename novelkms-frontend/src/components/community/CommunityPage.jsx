@@ -14,6 +14,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined'
 import ReviewProfilePanel from './ReviewProfilePanel'
 import MyRequestsPanel from './MyRequestsPanel'
+import ReviewQueuePanel from './ReviewQueuePanel'
 import { LogoMark } from '../branding/Logo'
 
 /**
@@ -29,7 +30,7 @@ import { LogoMark } from '../branding/Logo'
  */
 const TABS = [
 	{ key: 'profile',  label: 'My Profile' },
-	{ key: 'queue',    label: 'Review Queue',        soon: 'Browse open review requests from other writers.' },
+	{ key: 'queue',    label: 'Review Queue' },
 	{ key: 'requests', label: 'My Requests' },
 	{ key: 'writing',  label: "Reviews I'm Writing", soon: 'Drafts of reviews you have started.' },
 	{ key: 'received', label: 'Reviews Received',    soon: 'Feedback other writers have sent you.' },
@@ -144,6 +145,8 @@ export default function CommunityPage() {
 					<ReviewProfilePanel />
 				) : active.key === 'requests' ? (
 					<MyRequestsPanel />
+				) : active.key === 'queue' ? (
+					<ReviewQueuePanel onGoToProfile={() => handleTab(null, 'profile')} />
 				) : (
 					<Stack sx={{ alignItems: 'center', pt: 4 }}>
 						<ComingSoon label={active.label} description={active.soon} />
