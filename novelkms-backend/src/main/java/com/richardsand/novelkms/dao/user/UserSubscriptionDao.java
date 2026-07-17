@@ -210,6 +210,83 @@ public class UserSubscriptionDao {
         }
     }
 
+    /**
+     * Sets the user's local trial to end at {@code trialEnd}, creating the
+     * {@code user_subscription} row if it does not yet exist.
+     *
+     * <p>The caller (admin service) is responsible for resolving the absolute end
+     * date and for refusing to demote stronger entitlements such as {@code family},
+     * {@code active}, or {@code active_canceling}; this method unconditionally sets
+     * status to {@code trialing} and must therefore only be invoked once that guard
+     * has passed.</p>
+     *
+     * <p>{@code trial_start} is set to {@code now} only when it is currently null so
+     * an original trial start is preserved across extensions. {@code trial_end} is
+     * always written to a concrete value — a {@code trialing} row with a null
+     * {@code trial_end} grants no access under {@link UserSubscription#hasAccess}.</p>
+     */
+    public Optional<UserSubscription> extendTrial(UUID userId, Instant now, Instant trialEnd) throws SQLException {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId is required");
+        }
+        if (now == null) {
+            throw new IllegalArgumentException("now is required");
+        }
+        if (trialEnd == null || !trialEnd.isAfter(now)) {
+            throw new IllegalArgumentException("trialEnd must be after now");
+        }
+
+        try (Connection c = ds.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                Optional<UserSubscription> existing = findByUserId(c, userId);
+                if (existing.isPresent()) {
+                    String update = """
+                            UPDATE user_subscription
+                               SET status = 'trialing',
+                                   plan_key = COALESCE(plan_key, 'trial'),
+                                   trial_start = COALESCE(trial_start, ?),
+                                   trial_end = ?,
+                                   updated_at = CURRENT_TIMESTAMP
+                             WHERE user_id = ?
+                            """;
+                    try (PreparedStatement ps = c.prepareStatement(update)) {
+                        ps.setTimestamp(1, toTimestamp(now));
+                        ps.setTimestamp(2, toTimestamp(trialEnd));
+                        ps.setObject(3, userId);
+                        ps.executeUpdate();
+                    }
+                } else {
+                    String insert = """
+                            INSERT INTO user_subscription
+                                (user_id, status, plan_key,
+                                 trial_start, trial_end,
+                                 cancel_at_period_end,
+                                 created_at, updated_at)
+                            VALUES (?, 'trialing', 'trial',
+                                    ?, ?,
+                                    FALSE,
+                                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            """;
+                    try (PreparedStatement ps = c.prepareStatement(insert)) {
+                        ps.setObject(1, userId);
+                        ps.setTimestamp(2, toTimestamp(now));
+                        ps.setTimestamp(3, toTimestamp(trialEnd));
+                        ps.executeUpdate();
+                    }
+                }
+
+                c.commit();
+                return findByUserId(userId);
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
+
     public Optional<UserSubscription> upsertStripeSubscription(StripeSubscriptionUpdate update) throws SQLException {
         if (update == null || update.userId() == null) {
             throw new IllegalArgumentException("update.userId is required");

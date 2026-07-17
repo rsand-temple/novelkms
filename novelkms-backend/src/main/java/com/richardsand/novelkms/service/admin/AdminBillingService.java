@@ -1,7 +1,11 @@
 package com.richardsand.novelkms.service.admin;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.Set;
 import java.util.UUID;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -14,13 +18,28 @@ import com.richardsand.novelkms.model.UserSubscription;
 import com.richardsand.novelkms.model.admin.AdminBillingDetail;
 import com.richardsand.novelkms.model.admin.AdminUserDetail;
 import com.richardsand.novelkms.model.admin.AdminUserSubscriptionSummary;
+import com.richardsand.novelkms.model.admin.ExtendTrialRequest;
 
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 
 public class AdminBillingService {
 
     public static final String ACTION_GRANT_FAMILY_ACCESS = "GRANT_FAMILY_ACCESS";
+    public static final String ACTION_EXTEND_TRIAL        = "EXTEND_TRIAL";
     public static final String ENTITY_USER_SUBSCRIPTION   = "user_subscription";
+
+    /** Longest a trial may be extended to, measured from now. */
+    static final int MAX_TRIAL_DAYS_FROM_NOW = 365;
+
+    /**
+     * Statuses that already confer access at least as strong as a trial. Extending
+     * a trial over any of these would be a demotion: {@code family} is a manual
+     * override that must never be demoted, and {@code active}/{@code active_canceling}
+     * are live Stripe entitlements Stripe owns.
+     */
+    private static final Set<String> NON_DEMOTABLE_STATUSES =
+            Set.of("family", "active", "active_canceling");
 
     private final UserSubscriptionDao userSubscriptionDao;
     private final AdminAuditDao       adminAuditDao;
@@ -91,6 +110,110 @@ public class AdminBillingService {
                 auditReason(reason, note));
 
         return newSubscription;
+    }
+
+    public UserSubscription extendTrial(
+            UUID adminUserId,
+            UUID targetUserId,
+            ExtendTrialRequest request) throws SQLException {
+
+        if (adminUserId == null) {
+            throw new IllegalArgumentException("adminUserId is required");
+        }
+        if (targetUserId == null) {
+            throw new IllegalArgumentException("targetUserId is required");
+        }
+        if (request == null) {
+            throw new BadRequestException("Provide either trialEndsAt or extendDays");
+        }
+
+        Instant now = Instant.now();
+
+        // Conservative, same as grant-family: only mutate entitlement for active users.
+        if (authDao.trialEligibilityUser(targetUserId).isEmpty()) {
+            throw new NotFoundException("Target user not found or inactive");
+        }
+
+        UserSubscription oldSubscription = userSubscriptionDao.findByUserId(targetUserId).orElse(null);
+
+        String currentStatus = oldSubscription == null ? null : oldSubscription.status();
+        if (currentStatus != null && NON_DEMOTABLE_STATUSES.contains(currentStatus)) {
+            throw new BadRequestException(
+                    "Cannot extend a trial for a user with status '" + currentStatus
+                            + "'. Extending would demote a stronger entitlement.");
+        }
+
+        Instant currentTrialEnd = oldSubscription == null ? null : oldSubscription.trialEnd();
+        Instant resolvedTrialEnd = resolveTrialEnd(request, now, currentTrialEnd);
+
+        UserSubscription newSubscription = userSubscriptionDao.extendTrial(targetUserId, now, resolvedTrialEnd)
+                .orElseThrow(() -> new SQLException(
+                        "Trial extension completed but subscription row could not be re-read"));
+
+        adminAuditDao.record(
+                adminUserId,
+                targetUserId,
+                ACTION_EXTEND_TRIAL,
+                ENTITY_USER_SUBSCRIPTION,
+                targetUserId.toString(),
+                toJson(oldSubscription),
+                toJson(newSubscription),
+                extendTrialAuditReason(request, resolvedTrialEnd));
+
+        return newSubscription;
+    }
+
+    /**
+     * Resolves an {@link ExtendTrialRequest} into a single concrete UTC trial-end
+     * instant, validating that exactly one mode was supplied and that the result is
+     * in the future and within {@link #MAX_TRIAL_DAYS_FROM_NOW}.
+     */
+    Instant resolveTrialEnd(ExtendTrialRequest request, Instant now, Instant currentTrialEnd) {
+        boolean hasDate = request.trialEndsAt() != null;
+        boolean hasDays = request.extendDays() != null;
+
+        if (hasDate == hasDays) {
+            throw new BadRequestException("Provide exactly one of trialEndsAt or extendDays");
+        }
+
+        Instant maxEnd = now.plus(Duration.ofDays(MAX_TRIAL_DAYS_FROM_NOW));
+        Instant resolved;
+
+        if (hasDays) {
+            int days = request.extendDays();
+            if (days <= 0) {
+                throw new BadRequestException("extendDays must be a positive number of days");
+            }
+            // Anchor on the later of now and any live trial end so extending never
+            // shortens an existing future trial.
+            Instant anchor = (currentTrialEnd != null && currentTrialEnd.isAfter(now))
+                    ? currentTrialEnd
+                    : now;
+            resolved = anchor.plus(Duration.ofDays(days));
+        } else {
+            // Absolute date: resolve a plain date to end-of-day UTC to avoid an
+            // off-by-one where a picker's midnight would expire access that same day.
+            Instant requested = request.trialEndsAt();
+            LocalDate date = requested.atZone(ZoneOffset.UTC).toLocalDate();
+            resolved = date.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        }
+
+        if (!resolved.isAfter(now)) {
+            throw new BadRequestException("Trial end must be in the future");
+        }
+        if (resolved.isAfter(maxEnd)) {
+            throw new BadRequestException(
+                    "Trial end may be at most " + MAX_TRIAL_DAYS_FROM_NOW + " days from now");
+        }
+
+        return resolved;
+    }
+
+    private String extendTrialAuditReason(ExtendTrialRequest request, Instant resolvedTrialEnd) {
+        String base = request.extendDays() != null
+                ? "Trial extended by " + request.extendDays() + " day(s) to " + resolvedTrialEnd
+                : "Trial extended to " + resolvedTrialEnd;
+        return auditReason(base, request.reason(), request.note());
     }
 
     private AdminBillingDetail billingDetail(
@@ -192,20 +315,36 @@ public class AdminBillingService {
     }
 
     private String auditReason(String reason, String note) {
+        String combined = auditReason(null, reason, note);
+        return combined == null ? "Family access granted" : combined;
+    }
+
+    /**
+     * Joins an optional machine-generated {@code base} description with an
+     * admin-supplied {@code reason} and {@code note} into a single audit string.
+     * Returns null only when all three are blank.
+     */
+    private String auditReason(String base, String reason, String note) {
+        String normalizedBase   = blankToNull(base);
         String normalizedReason = blankToNull(reason);
         String normalizedNote   = blankToNull(note);
 
-        if (normalizedReason == null && normalizedNote == null) {
-            return "Family access granted";
-        }
-        if (normalizedReason == null) {
-            return normalizedNote;
-        }
-        if (normalizedNote == null) {
-            return normalizedReason;
-        }
+        StringBuilder sb = new StringBuilder();
+        appendPart(sb, normalizedBase);
+        appendPart(sb, normalizedReason);
+        appendPart(sb, normalizedNote);
 
-        return normalizedReason + " - " + normalizedNote;
+        return sb.length() == 0 ? null : sb.toString();
+    }
+
+    private static void appendPart(StringBuilder sb, String part) {
+        if (part == null) {
+            return;
+        }
+        if (sb.length() > 0) {
+            sb.append(" - ");
+        }
+        sb.append(part);
     }
 
     private String toJson(Object value) {

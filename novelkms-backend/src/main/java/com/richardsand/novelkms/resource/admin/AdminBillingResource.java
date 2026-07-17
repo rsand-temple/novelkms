@@ -7,6 +7,7 @@ import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.auth.Roles;
 import com.richardsand.novelkms.model.UserSubscription;
 import com.richardsand.novelkms.model.admin.AdminBillingDetail;
+import com.richardsand.novelkms.model.admin.ExtendTrialRequest;
 import com.richardsand.novelkms.model.admin.GrantFamilyAccessRequest;
 import com.richardsand.novelkms.service.admin.AdminBillingService;
 
@@ -59,5 +60,17 @@ public class AdminBillingResource {
                 userId,
                 effectiveBody.reason(),
                 effectiveBody.note());
+    }
+
+    @POST
+    @Path("/users/{userId}/extend-trial")
+    public UserSubscription extendTrial(
+            @Context ContainerRequestContext request,
+            @PathParam("userId") UUID userId,
+            ExtendTrialRequest body) throws SQLException {
+
+        UUID adminUserId = CurrentUser.id(request);
+
+        return adminBillingService.extendTrial(adminUserId, userId, body);
     }
 }

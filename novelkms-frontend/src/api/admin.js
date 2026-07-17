@@ -21,6 +21,15 @@ export const adminApi = {
 	).data,
 
 	/**
+	 * Extends (or starts) a user's local trial. The body must carry exactly one of
+	 * `trialEndsAt` (ISO-8601 UTC instant) or `extendDays` (positive integer),
+	 * plus an optional `reason` and `note`.
+	 */
+	extendTrial: async (userId, body) => (
+		await client.post(`/admin/billing/users/${encodeURIComponent(userId)}/extend-trial`, body)
+	).data,
+
+	/**
 	 * Permanently deletes a user and all their data. Irreversible.
 	 * Returns nothing on success (204 No Content).
 	 */

@@ -19,6 +19,8 @@ import {
 	Tab,
 	Tabs,
 	TextField,
+	ToggleButton,
+	ToggleButtonGroup,
 	Toolbar,
 	Typography,
 } from '@mui/material'
@@ -26,6 +28,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
 import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom'
+import MoreTimeIcon from '@mui/icons-material/MoreTime'
 import SearchIcon from '@mui/icons-material/Search'
 import { adminApi } from '../../api/admin'
 import { LogoMark } from '../branding/Logo'
@@ -428,6 +431,146 @@ function GrantFamilyAccessDialog({ open, user, saving, onClose, onSubmit }) {
 }
 
 /**
+ * Extends (or starts) a user's local trial. The admin picks one of two modes:
+ * an absolute end date or a fixed number of days to add. The chosen mode's value
+ * is the only one sent — the backend requires exactly one.
+ *
+ * A trial cannot be extended over a stronger entitlement (family/active/
+ * active_canceling); the button is disabled and a note is shown in that case so
+ * the admin sees why before opening the dialog is even useful.
+ */
+function ExtendTrialDialog({ open, user, billing, saving, onClose, onSubmit }) {
+	const [mode, setMode] = useState('days')
+	const [days, setDays] = useState('14')
+	const [endDate, setEndDate] = useState('')
+	const [reason, setReason] = useState('')
+	const [note, setNote] = useState('')
+
+	const status = billing?.subscription?.status ?? null
+	const blockedStatus =
+		status === 'family' || status === 'active' || status === 'active_canceling'
+
+	const parsedDays = Number.parseInt(days, 10)
+	const daysValid = Number.isFinite(parsedDays) && parsedDays > 0
+	const dateValid = Boolean(endDate)
+	const modeValid = mode === 'days' ? daysValid : dateValid
+	const canSubmit = !saving && !blockedStatus && modeValid
+
+	function handleSubmit() {
+		const body = { reason, note }
+		if (mode === 'days') {
+			body.extendDays = parsedDays
+		} else {
+			// A date-only input has no timezone; treat midnight as UTC. The backend
+			// resolves it to end-of-day UTC, so any local date maps to a full day.
+			body.trialEndsAt = new Date(`${endDate}T00:00:00Z`).toISOString()
+		}
+		onSubmit(body)
+	}
+
+	return (
+		<Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
+			<DialogTitle>Extend trial</DialogTitle>
+			<DialogContent>
+				<Stack spacing={2} sx={{ mt: 1 }}>
+					{blockedStatus ? (
+						<Alert severity="warning">
+							This user's status is <strong>{status}</strong>. Extending a trial would
+							demote a stronger entitlement, so it is not allowed. Manage this user's
+							access through Stripe (or family access) instead.
+						</Alert>
+					) : (
+						<Alert severity="info">
+							This sets a local trial end date outside the normal Stripe flow. When it
+							passes, the user loses access until they subscribe.
+						</Alert>
+					)}
+
+					<Typography variant="body2">
+						Target user: <strong>{user?.displayName ?? user?.emailAddress ?? user?.id}</strong>
+					</Typography>
+
+					<Typography variant="body2" color="text.secondary">
+						Current trial end: {formatDate(billing?.subscription?.trialEnd)}
+					</Typography>
+
+					<ToggleButtonGroup
+						exclusive
+						size="small"
+						value={mode}
+						onChange={(_event, next) => {
+							if (next) setMode(next)
+						}}
+						disabled={saving || blockedStatus}
+					>
+						<ToggleButton value="days">Add days</ToggleButton>
+						<ToggleButton value="date">Set date</ToggleButton>
+					</ToggleButtonGroup>
+
+					{mode === 'days' ? (
+						<TextField
+							label="Days to add"
+							type="number"
+							value={days}
+							onChange={(event) => setDays(event.target.value)}
+							helperText="Extends from the later of today or the current trial end."
+							fullWidth
+							size="small"
+							disabled={saving || blockedStatus}
+							slotProps={{ htmlInput: { min: 1, max: 365 } }}
+						/>
+					) : (
+						<TextField
+							label="Trial end date"
+							type="date"
+							value={endDate}
+							onChange={(event) => setEndDate(event.target.value)}
+							helperText="Access runs through the end of this day (UTC)."
+							fullWidth
+							size="small"
+							disabled={saving || blockedStatus}
+							slotProps={{ inputLabel: { shrink: true } }}
+						/>
+					)}
+
+					<TextField
+						label="Reason"
+						value={reason}
+						onChange={(event) => setReason(event.target.value)}
+						placeholder="extended_eval, support_comp, onboarding_delay"
+						fullWidth
+						size="small"
+						disabled={saving || blockedStatus}
+					/>
+
+					<TextField
+						label="Note"
+						value={note}
+						onChange={(event) => setNote(event.target.value)}
+						placeholder="Optional support note"
+						fullWidth
+						multiline
+						minRows={3}
+						disabled={saving || blockedStatus}
+					/>
+				</Stack>
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={onClose} disabled={saving}>Cancel</Button>
+				<Button
+					variant="contained"
+					onClick={handleSubmit}
+					disabled={!canSubmit}
+					startIcon={saving ? <CircularProgress size={16} /> : <MoreTimeIcon />}
+				>
+					Extend trial
+				</Button>
+			</DialogActions>
+		</Dialog>
+	)
+}
+
+/**
  * Confirmation dialog for the irreversible hard-delete action.
  *
  * The admin must type the target user's email address verbatim before the
@@ -525,8 +668,10 @@ export default function AdminSupportConsole() {
 	const [loadingUsers, setLoadingUsers] = useState(true)
 	const [loadingDetail, setLoadingDetail] = useState(false)
 	const [savingFamilyAccess, setSavingFamilyAccess] = useState(false)
+	const [savingTrial, setSavingTrial] = useState(false)
 	const [deletingUser, setDeletingUser] = useState(false)
 	const [familyDialogOpen, setFamilyDialogOpen] = useState(false)
+	const [extendTrialDialogOpen, setExtendTrialDialogOpen] = useState(false)
 	const [hardDeleteDialogOpen, setHardDeleteDialogOpen] = useState(false)
 	const [error, setError] = useState(null)
 	const [success, setSuccess] = useState(null)
@@ -739,6 +884,25 @@ export default function AdminSupportConsole() {
 		}
 	}
 
+	async function handleExtendTrial(body) {
+		if (!selectedUserId) return
+
+		setSavingTrial(true)
+		setError(null)
+		setSuccess(null)
+
+		try {
+			await adminApi.extendTrial(selectedUserId, body)
+			await loadSelectedUserDetail(selectedUserId)
+			setSuccess('Trial extended.')
+			setExtendTrialDialogOpen(false)
+		} catch (err) {
+			setError(err.response?.data?.message ?? 'Could not extend trial.')
+		} finally {
+			setSavingTrial(false)
+		}
+	}
+
 	async function handleHardDeleteUser(body) {
 		if (!selectedUserId) return
 
@@ -946,15 +1110,31 @@ export default function AdminSupportConsole() {
 									<Section
 										title="Billing"
 										actions={
-											<Button
-												size="small"
-												variant="contained"
-												startIcon={<FamilyRestroomIcon />}
-												onClick={() => setFamilyDialogOpen(true)}
-												disabled={!selectedUserId || billing?.familyAccess}
-											>
-												Grant family access
-											</Button>
+											<Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+												<Button
+													size="small"
+													variant="outlined"
+													startIcon={<MoreTimeIcon />}
+													onClick={() => setExtendTrialDialogOpen(true)}
+													disabled={
+														!selectedUserId ||
+														billing?.subscription?.status === 'family' ||
+														billing?.subscription?.status === 'active' ||
+														billing?.subscription?.status === 'active_canceling'
+													}
+												>
+													Extend trial
+												</Button>
+												<Button
+													size="small"
+													variant="contained"
+													startIcon={<FamilyRestroomIcon />}
+													onClick={() => setFamilyDialogOpen(true)}
+													disabled={!selectedUserId || billing?.familyAccess}
+												>
+													Grant family access
+												</Button>
+											</Stack>
 										}
 									>
 										{billing ? (
@@ -1012,6 +1192,17 @@ export default function AdminSupportConsole() {
 					saving={savingFamilyAccess}
 					onClose={() => setFamilyDialogOpen(false)}
 					onSubmit={handleGrantFamilyAccess}
+				/>
+			)}
+
+			{extendTrialDialogOpen && (
+				<ExtendTrialDialog
+					open={extendTrialDialogOpen}
+					user={userForHeader}
+					billing={billing}
+					saving={savingTrial}
+					onClose={() => setExtendTrialDialogOpen(false)}
+					onSubmit={handleExtendTrial}
 				/>
 			)}
 
