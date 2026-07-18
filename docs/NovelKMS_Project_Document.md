@@ -144,7 +144,11 @@ the CURRENT/CHANGED/DELETED source state.
 
 Frontend: "Publish for Human Review…" on the chapter nav context menu (manuscript chapters only);
 `ReviewRequestDialog` (publish + edit, profile-gated); **My Requests** tab at `/app/community?tab=requests`
-with status/source-state chips, snapshot viewer, and lifecycle actions.
+with status/source-state chips, snapshot viewer, and lifecycle actions. **Path-specificity fix (shipped
+with 1D):** `ReviewRequestResource` moved from `@Path("/")` to `@Path("/review")` so Jersey's
+class-level prefix matching no longer shadows it behind `ReviewQueueResource`; the publish endpoint
+(`POST /chapters/{chapterId}/review-requests`) split into `ReviewPublishResource @Path("/")` because
+the tenant filter's `chapters` segment authorization is load-bearing.
 
 ### Human Review Network — Phase 1C (reviewer queue + package + snapshot reader)
 
@@ -160,6 +164,34 @@ view carries no `contentHtml`. Frontend Review Queue tab (`/app/community?tab=qu
 sandboxed iframe (`SnapshotFrame`) — the first cross-user render boundary. Two JUnit suites
 (access matrix + HTTP/serialization contract).
 
+### Human Review Network — Phase 1D (write / submit / receive reviews)
+
+Completes the Phase 1 review loop: a reviewer can write, save, submit, and withdraw a
+review, and an author can read the feedback they receive.
+
+**Migration:** V41 adds `human_review.author_read_at TIMESTAMP` (nullable; NULL = unread).
+This single column is the whole of Phase 1's notification model — the Reviews Received badge
+is `COUNT(submitted reviews of my requests WHERE author_read_at IS NULL)`. No notification
+table, no email (deferred to 1F when close/withdraw/moderation events make an inbox
+worthwhile).
+
+**Backend:** `HumanReview` model + `ReviewWritingSummary` / `ReviewReceived` DTOs.
+`HumanReviewDao` — DRAFT/SUBMITTED/WITHDRAWN machine, block-filtered writing & received list
+reads, `countSubmitted` (cap), `countUnreadForAuthor` (badge), ownership-guarded
+`markAuthorRead`. `HumanReviewService` — two gates: `ensureCanStart` (new review: OPEN+PUBLIC,
+not self, not blocked, author active) and `ensureCanWrite` (existing draft: OPEN or PAUSED).
+404 for every cross-user denial; 403 only for the caller's own suspension.
+`HumanReviewResource @Path("/review")`: `GET|PUT /packages/{id}/review`,
+`POST .../review/submit`, `.../review/withdraw`, `GET /reviews/writing`,
+`GET /reviews/received`, `GET /reviews/received/unread`,
+`POST /reviews/received/{reviewId}/read`.
+
+**Frontend:** Review editor inside `ReviewPackageDialog` (plain-text body wrapped in `<p>`,
+AI-assist self-disclosure checkbox, Save/Submit/Withdraw, Revise for submitted);
+`MyWritingPanel` and `ReviewsReceivedPanel`; unread badge on the Reviews Received tab.
+Received review bodies render as plain text (`htmlToPlain`) — a cross-user render boundary
+that needs no iframe while reviews are plain-text only.
+
 ## Known issues / watchlist
 
 - Billing: extend trial, revoke-family semantics, plan mapping, webhook diagnostics, Stripe reconciliation.
@@ -174,14 +206,18 @@ sandboxed iframe (`SnapshotFrame`) — the first cross-user render boundary. Two
 - Delete confirmation dialog wording ("cannot be undone" → "move to trash"; codex entries called "scenes").
 - Help topics are seed content; expand as product matures.
 - Artifacts: blob dir must be in backup set; restore de-dup appends "(n)" to whole name; nav-pane folder drag deferred.
-- Review network: slices 1A–1C shipped (profiles, publish + My Requests, reviewer queue +
-  package + snapshot reader). Queue/reviews plumbing wired but `human_review` has no rows
-  until 1D; `reviewCount`/`max_reviews` therefore read 0/uncapped-effectively until then.
+- Review network: slices 1A–1D shipped (profiles, publish + My Requests, reviewer queue +
+  package + snapshot reader). 
   `review_context_item` unpopulated until Phase 2. `user_block`/`content_report` tables exist
   but are read-only/unused until 1F. **Follow-up:** snapshot HTML is sanitized only at the
   render boundary (sandboxed iframe); consider capture-time sanitization once a safelist can be
   validated against real TipTap markup. `closes_at` still advisory in the author record; the
   queue now honors it as an exclusion.
+- Review network: §30.2 Q5 participant-read of paused/closed packages not wired —
+  `ReviewAccessService.authorizeRead` still requires OPEN+PUBLIC for non-authors.
+  Reviewers can withdraw on any request state but cannot re-open the snapshot reader
+  once a request leaves OPEN. Fix = participant-aware read in `ReviewAccessService`
+  (ripples its constructor + 2 test files); own slice.
   
 ## Near-term next actions
 

@@ -405,14 +405,30 @@ commit on Apply for transparency (§12); 409 → claim-a-handle prompt.
 
 ## Phase 1 / Slice 1D — Human review write path
 
+### Slice 1D — Human review write path
+
+**Jersey path-specificity fix.** `ReviewRequestResource` was `@Path("/")` with method
+paths like `@Path("/review/requests")`. Once slice 1C added `ReviewQueueResource` at
+`@Path("/review")`, Jersey's class-level prefix matching gave the more-specific
+`@Path("/review")` priority — it routed `GET /review/requests` to `ReviewQueueResource`,
+found no `@Path("/requests")` method, and returned 404 without ever checking the
+`@Path("/")` resource. Fix: `ReviewRequestResource` moved to `@Path("/review")` with
+method paths shortened to `@Path("/requests")`, `@Path("/requests/{requestId}")`, etc.
+The publish endpoint (`POST /chapters/{chapterId}/review-requests`) split into a separate
+`ReviewPublishResource @Path("/")` because the tenant filter's `chapters` segment
+authorization is load-bearing. **Lesson:** once any resource claims `@Path("/review")`,
+no `@Path("/")` resource can own a method under `/review/...` — Jersey resolves the class
+match first and only then considers methods within the winning class.
+
 **Read-state as a column, not a table (V41).** The only durable state 1D needs beyond
 V38's frozen columns is "author has seen this feedback." A read marker on the review
-row expresses exactly that with no join and no inbox. A `review_notification` table is
-a better fit once 1F adds events genuinely worth an inbox; it can be added then without
-disturbing this column.
+row (`author_read_at TIMESTAMP`, NULL = unread) expresses exactly that with no join and
+no inbox. A `review_notification` table is a better fit once 1F adds events genuinely
+worth an inbox (close, withdrawal, moderation); it can be added then without disturbing
+this column.
 
 **Two write gates because PAUSE means different things.** `ensureCanStart` (OPEN+PUBLIC,
-not self, not blocked, author active) guards a *new* review; `ensureCanWrite` (OPEN or
+not self, not blocked, author ACTIVE) guards a *new* review; `ensureCanWrite` (OPEN or
 PAUSED) guards saving/submitting an *existing* one — so a reviewer finishes through a
 pause but no new reviewer slips in. Withdraw has no request-status gate: a reviewer may
 retract their own review whatever became of the request, and the row is retained (never
@@ -427,12 +443,14 @@ cap at the last honest moment even though the queue already excludes capped requ
 `ReviewWritingSummary`, and `ReviewReceived` keep `reviewerUserId`/`snapshotId`/
 `authorReadAt`/`sourceEntityId` off the wire. Resource tests assert the absence directly.
 `markAuthorRead` authorizes by request-ownership subquery inside the UPDATE (a forged id
-touches zero rows). All 1D SQL is plain-standard — runs on default-mode H2 and Postgres.
+touches zero rows). All 1D SQL is plain-standard — runs on default-mode H2 and PostgreSQL.
 
 **Render boundary.** Received review bodies are rendered as plain text (`htmlToPlain`),
 not live HTML — a hostile reviewer's markup shows as inert characters, so no sandboxed
 iframe is needed while Phase-1 reviews are plain text.
 
-**Deferred (watchlist):** §30.2 Q5 participant-read of paused/closed packages —
-`ReviewAccessService.authorizeRead` still gates to OPEN+PUBLIC. Own slice; ripples the
-1C service constructor and its two tests.
+**Deferred (watchlist).** §30.2 Q5 participant-read of paused/closed packages —
+`ReviewAccessService.authorizeRead` still gates to OPEN+PUBLIC for non-authors. Reviewers
+can withdraw on any request state but cannot re-open the snapshot reader once a request
+leaves OPEN. Fix = participant-aware read in `ReviewAccessService` (ripples its constructor
+and two 1C test files); scheduled as its own small slice.

@@ -101,6 +101,7 @@ import com.richardsand.novelkms.resource.codex.CodexEntryResource;
 import com.richardsand.novelkms.resource.codex.CodexResource;
 import com.richardsand.novelkms.resource.review.HumanReviewResource;
 import com.richardsand.novelkms.resource.review.ReviewProfileResource;
+import com.richardsand.novelkms.resource.review.ReviewPublishResource;
 import com.richardsand.novelkms.resource.review.ReviewRequestResource;
 import com.richardsand.novelkms.resource.review.ReviewQueueResource;
 import com.richardsand.novelkms.resource.template.BookSummaryTemplateResource;
@@ -356,6 +357,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(ProjectResource.class);
         env.jersey().register(HumanReviewResource.class);
         env.jersey().register(ReviewProfileResource.class);
+        env.jersey().register(ReviewPublishResource.class);
         env.jersey().register(ReviewRequestResource.class);
         env.jersey().register(ReviewQueueResource.class);
         env.jersey().register(SceneResource.class);

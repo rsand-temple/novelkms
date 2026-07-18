@@ -26,12 +26,10 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 /**
- * Publishing a chapter for human review, and the lifecycle of the resulting
- * package. Author-facing only — the reviewer's side of the network arrives in
- * slice 1C.
+ * The author's view of their published review requests: listing, reading,
+ * editing metadata, and lifecycle actions (pause/resume/close/withdraw).
  *
  * <ul>
- *   <li>{@code POST /chapters/{chapterId}/review-requests} — freeze and publish</li>
  *   <li>{@code GET  /review/requests}                      — the author's own requests</li>
  *   <li>{@code GET  /review/requests/{id}}                 — one request</li>
  *   <li>{@code GET  /review/requests/{id}/snapshot}        — the frozen text</li>
@@ -39,24 +37,30 @@ import jakarta.ws.rs.core.Response;
  *   <li>{@code POST /review/requests/{id}/{pause|resume|close|withdraw}}</li>
  * </ul>
  *
- * <p><b>Why publish hangs off the manuscript path.</b> {@code TenantAuthorizationFilter}
- * authorizes any UUID following a {@code chapters} segment, so
- * {@code POST /chapters/{chapterId}/review-requests} gets chapter-ownership
- * checking for free. A {@code chapterId} carried in the request body would be
- * <em>unauthorized</em> — {@code authorizeSensitiveJsonBody} only inspects
- * {@code /move}, {@code /reorder}, and {@code POST books/{id}/chapters}. The URL
- * shape is load-bearing, not cosmetic.
+ * <p><b>Why this is {@code @Path("/review")} rather than {@code @Path("/")}.</b>
+ * The review network's other resources ({@link ReviewProfileResource},
+ * {@link ReviewQueueResource}, {@link HumanReviewResource}) all live at
+ * {@code @Path("/review")}. Jersey's class-level path matching is prefix-based
+ * and more-specific wins: a request for {@code /review/requests} routes to the
+ * most specific class prefix first. When this resource was {@code @Path("/")},
+ * the {@code @Path("/review")} resources were more specific and swallowed the
+ * match — Jersey never even checked the methods here, producing a 404.
  *
- * <p>Conversely, {@code /review/...} paths fall through the tenant filter's
- * {@code default -> true}, so ownership there is enforced in the service, which
- * returns <b>404 rather than 403</b> for a request belonging to someone else — the
- * caller learns nothing about packages that are not theirs.
+ * <p>The one endpoint that <em>must</em> stay at {@code @Path("/")} is
+ * {@code POST /chapters/{chapterId}/review-requests}, because the
+ * {@code TenantAuthorizationFilter} authorizes any UUID following a
+ * {@code chapters} segment. That single method lives in the companion
+ * {@link ReviewPublishResource}.
+ *
+ * <p>{@code /review/...} paths fall through the tenant filter's
+ * {@code default -> true}, so ownership is enforced in the service, which
+ * returns <b>404 rather than 403</b> for a request belonging to someone else.
  *
  * <p>The request context is a method parameter, never a field: Jersey does not
  * proxy {@code ContainerRequestContext} into the fields of a singleton resource,
  * which is how {@code ResourceExtension} registers one.
  */
-@Path("/")
+@Path("/review")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class ReviewRequestResource {
@@ -103,7 +107,8 @@ public class ReviewRequestResource {
         public Instant closesAt;
     }
 
-    private static ReviewRequest toModel(RequestForm f) {
+    /** Package-visible so {@link ReviewPublishResource} can share the conversion. */
+    static ReviewRequest toModel(RequestForm f) {
         if (f == null) {
             throw new ReviewException(400, "missing_body", "A review request payload is required.");
         }
@@ -121,31 +126,17 @@ public class ReviewRequestResource {
     }
 
     // =========================================================================
-    // Publish
-    // =========================================================================
-
-    @POST
-    @Path("/chapters/{chapterId}/review-requests")
-    public Response publish(@PathParam("chapterId") UUID chapterId,
-            RequestForm form,
-            @Context ContainerRequestContext request) {
-
-        return run(() -> Response.ok(
-                service.publishChapter(CurrentUser.id(request), chapterId, toModel(form))).build());
-    }
-
-    // =========================================================================
     // Read
     // =========================================================================
 
     @GET
-    @Path("/review/requests")
+    @Path("/requests")
     public Response mine(@Context ContainerRequestContext request) {
         return run(() -> Response.ok(service.mine(CurrentUser.id(request))).build());
     }
 
     @GET
-    @Path("/review/requests/{requestId}")
+    @Path("/requests/{requestId}")
     public Response one(@PathParam("requestId") UUID requestId,
             @Context ContainerRequestContext request) {
 
@@ -154,7 +145,7 @@ public class ReviewRequestResource {
     }
 
     @GET
-    @Path("/review/requests/{requestId}/snapshot")
+    @Path("/requests/{requestId}/snapshot")
     public Response snapshot(@PathParam("requestId") UUID requestId,
             @Context ContainerRequestContext request) {
 
@@ -167,7 +158,7 @@ public class ReviewRequestResource {
     // =========================================================================
 
     @PUT
-    @Path("/review/requests/{requestId}")
+    @Path("/requests/{requestId}")
     public Response update(@PathParam("requestId") UUID requestId,
             RequestForm form,
             @Context ContainerRequestContext request) {
@@ -177,7 +168,7 @@ public class ReviewRequestResource {
     }
 
     @POST
-    @Path("/review/requests/{requestId}/pause")
+    @Path("/requests/{requestId}/pause")
     public Response pause(@PathParam("requestId") UUID requestId,
             @Context ContainerRequestContext request) {
 
@@ -185,7 +176,7 @@ public class ReviewRequestResource {
     }
 
     @POST
-    @Path("/review/requests/{requestId}/resume")
+    @Path("/requests/{requestId}/resume")
     public Response resume(@PathParam("requestId") UUID requestId,
             @Context ContainerRequestContext request) {
 
@@ -193,7 +184,7 @@ public class ReviewRequestResource {
     }
 
     @POST
-    @Path("/review/requests/{requestId}/close")
+    @Path("/requests/{requestId}/close")
     public Response close(@PathParam("requestId") UUID requestId,
             @Context ContainerRequestContext request) {
 
@@ -201,7 +192,7 @@ public class ReviewRequestResource {
     }
 
     @POST
-    @Path("/review/requests/{requestId}/withdraw")
+    @Path("/requests/{requestId}/withdraw")
     public Response withdraw(@PathParam("requestId") UUID requestId,
             @Context ContainerRequestContext request) {
 

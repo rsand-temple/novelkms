@@ -1041,8 +1041,8 @@ Phase 1 ships in six slices. V38 (whole Phase 1 schema) landed with 1A.
 | 1A    | Profiles & handles                                   | **Done** — V38, `review_profile`, `/app/community` |
 | 1B    | Publish chapter → request + snapshot; My Requests    | **Done** — V39; backend + frontend shipped |
 | 1C    | Queue, package view, snapshot reader                 | **Done** — backend + frontend; reviewer read path |
-| 1D    | Write/submit review; Reviews Received; notifications | Next |
-| 1E    | Contribution metrics                                 |                                                    |
+| 1D    | Write/submit review; Reviews Received; notifications | **Done** — V41; backend + frontend shipped |
+| 1E    | Contribution metrics                                 | *Next*                                                   |
 | 1F    | Blocking, reporting, admin removal                   |                                                    |
 
 **Slice 1C (reviewer read path).** `ReviewAccessService` is the first cross-user
