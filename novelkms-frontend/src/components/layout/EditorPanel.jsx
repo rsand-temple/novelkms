@@ -16,7 +16,7 @@ import { DraftHeading } from '../../extensions/DraftHeading';
 import { TemplateToken } from '../../extensions/TemplateToken';
 import { SearchHighlight, searchHighlightKey } from '../../extensions/SearchHighlight';
 import { ReviewHighlight } from '../../extensions/ReviewHighlight';
-import { SmartTypography } from '../../extensions/SmartTypography';
+import TiptapTypography from '@tiptap/extension-typography';
 import { useProjectSettings } from '../../hooks/useProjectSettings';
 import { useScenes, useScene, useDeleteScene, SCENE_KEYS } from '../../hooks/useScenes';
 import { useDraftDocument, flattenDraftScenes } from '../../hooks/useDraftDocument';
@@ -896,7 +896,33 @@ export default function EditorPanel({
 			CharacterCount,
 			SearchHighlight,
 			ReviewHighlight,
-			SmartTypography,
+			// Em dash, ellipsis, and curly quotes only — the rest of the built-in
+			// typography rules (arrows, (c)/(tm)/(r), fractions, x for multiplication,
+			// etc.) are disabled so ordinary manuscript prose isn't rewritten.
+			TiptapTypography.configure({
+				emDash: '—',
+				ellipsis: '…',
+				openDoubleQuote: '“',
+				closeDoubleQuote: '”',
+				openSingleQuote: '‘',
+				closeSingleQuote: '’',
+				leftArrow: false,
+				rightArrow: false,
+				copyright: false,
+				trademark: false,
+				servicemark: false,
+				registeredTrademark: false,
+				oneHalf: false,
+				oneQuarter: false,
+				threeQuarters: false,
+				plusMinus: false,
+				notEqual: false,
+				laquo: false,
+				raquo: false,
+				multiplication: false,
+				superscriptTwo: false,
+				superscriptThree: false,
+			}),
 		],
 		content: '',
 		onUpdate: ({ editor }) => {
