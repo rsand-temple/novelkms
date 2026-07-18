@@ -135,6 +135,50 @@ class SceneDaoTest extends NovelKmsTestBase {
     // -------------------------------------------------------------------------
 
     @Test
+    void split_updatesSourceAndInsertsNewSceneImmediatelyAfter() throws SQLException {
+        Scene first  = sceneDao.create(chapter.getId(), "First", null);
+        Scene source = sceneDao.create(chapter.getId(), "Source", null);
+        Scene last   = sceneDao.create(chapter.getId(), "Last", null);
+        sceneDao.saveContent(source.getId(), "<p>Before After</p>", 2);
+
+        Scene created = sceneDao.split(
+                source.getId(),
+                "New Scene [abcd]",
+                "<p>Before</p>",
+                1,
+                "<p>After</p>",
+                1)
+                .orElseThrow();
+
+        Scene updatedSource = sceneDao.findById(source.getId()).orElseThrow();
+        assertEquals("<p>Before</p>", updatedSource.getContent());
+        assertEquals(1, updatedSource.getWordCount());
+        assertEquals("New Scene [abcd]", created.getTitle());
+        assertEquals("<p>After</p>", created.getContent());
+        assertEquals(1, created.getWordCount());
+
+        List<Scene> ordered = sceneDao.findByChapterId(chapter.getId());
+        assertEquals(List.of(first.getId(), source.getId(), created.getId(), last.getId()),
+                ordered.stream().map(Scene::getId).toList());
+        assertEquals(List.of(0, 1, 2, 3),
+                ordered.stream().map(Scene::getDisplayOrder).toList());
+    }
+
+    @Test
+    void split_unknownSource_returnsEmptyAndCreatesNothing() throws SQLException {
+        Optional<Scene> result = sceneDao.split(
+                UUID.randomUUID(),
+                "New Scene [abcd]",
+                "<p>Before</p>",
+                1,
+                "<p>After</p>",
+                1);
+
+        assertTrue(result.isEmpty());
+        assertTrue(sceneDao.findByChapterId(chapter.getId()).isEmpty());
+    }
+
+    @Test
     void saveContent_storesJsonAndWordCount() throws SQLException {
         Scene s = sceneDao.create(chapter.getId(), "Draft Scene", null);
 

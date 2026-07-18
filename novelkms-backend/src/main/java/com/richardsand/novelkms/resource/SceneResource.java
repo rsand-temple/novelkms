@@ -68,6 +68,19 @@ public class SceneResource {
         public int    wordCount;
     }
 
+    public static class SplitRequest {
+        @JsonProperty
+        public String title;
+        @JsonProperty
+        public String beforeContent;
+        @JsonProperty
+        public int    beforeWordCount;
+        @JsonProperty
+        public String afterContent;
+        @JsonProperty
+        public int    afterWordCount;
+    }
+
     public static class SaveStructuredRequest {
         @JsonProperty
         public String structuredData;
@@ -154,6 +167,32 @@ public class SceneResource {
         try {
             return sceneDao.saveContent(id, req.content, req.wordCount)
                     .map(s -> Response.ok(s).build())
+                    .orElse(Response.noContent().build());
+        } catch (SQLException sqle) {
+            return serverError(sqle);
+        }
+    }
+
+    @POST
+    @Path("/scenes/{id}/split")
+    public Response splitScene(@PathParam("id") UUID id, SplitRequest req) {
+        logger.info("SceneResource.splitScene invoked: id={}", id);
+        if (req == null || req.title == null
+                || req.beforeContent == null || req.afterContent == null
+                || req.beforeWordCount < 0 || req.afterWordCount < 0) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("title, content fragments, and non-negative word counts are required")
+                    .build();
+        }
+        try {
+            return sceneDao.split(
+                    id,
+                    req.title,
+                    req.beforeContent,
+                    req.beforeWordCount,
+                    req.afterContent,
+                    req.afterWordCount)
+                    .map(scene -> Response.status(Response.Status.CREATED).entity(scene).build())
                     .orElse(Response.noContent().build());
         } catch (SQLException sqle) {
             return serverError(sqle);

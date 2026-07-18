@@ -22,6 +22,11 @@ export const scenesApi = {
 		return response.data
 	},
 
+	split: async (id, data) => {
+		const response = await client.post(`/scenes/${id}/split`, data)
+		return response.data
+	},
+
 	/**
 	 * Saves scene content and its word count.
 	 * wordCount must be supplied by the caller — the server stores it verbatim.

@@ -145,7 +145,7 @@ public class SceneDao {
         int     displayOrder = nextDisplayOrder(chapterId);
         // Default title for programmatically-created scenes (e.g. scene breaks)
         if (title == null || title.isBlank()) {
-            title = "New Scene [" + id.toString().substring(0, 4) + "]";
+            title = defaultSceneTitle(id);
         }
         String sql = """
                 INSERT INTO scene (id, chapter_id, title, display_order, content, word_count, paragraph_count, notes, created_at, updated_at)
@@ -167,6 +167,118 @@ public class SceneDao {
                 .displayOrder(displayOrder).wordCount(0).notes(notes)
                 .createdAt(now).updatedAt(now)
                 .build();
+    }
+
+    /**
+     * Atomically splits one manuscript scene into two scenes.
+     *
+     * The existing scene retains the content before the cursor. The newly
+     * created scene receives the content after the cursor and is inserted
+     * immediately after the source scene in display order.
+     */
+    public Optional<Scene> split(UUID sourceSceneId, String newTitle,
+            String beforeContent, int beforeWordCount,
+            String afterContent, int afterWordCount) throws SQLException {
+        UUID    newSceneId = UUID.randomUUID();
+        Instant now        = Instant.now();
+        if (newTitle == null || newTitle.isBlank()) {
+            newTitle = defaultSceneTitle(newSceneId);
+        }
+
+        String selectSourceSql = """
+                SELECT chapter_id, display_order
+                FROM scene
+                WHERE id = ? AND deleted_at IS NULL
+                """;
+        String updateSourceSql = """
+                UPDATE scene
+                SET content = ?, word_count = ?, paragraph_count = ?, updated_at = ?
+                WHERE id = ? AND deleted_at IS NULL
+                """;
+        String shiftLaterSql = """
+                UPDATE scene
+                SET display_order = display_order + 1, updated_at = ?
+                WHERE chapter_id = ? AND deleted_at IS NULL AND display_order > ?
+                """;
+        String insertNewSql = """
+                INSERT INTO scene
+                    (id, chapter_id, title, display_order, content, word_count,
+                     paragraph_count, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                """;
+
+        try (Connection c = ds.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                UUID chapterId;
+                int  sourceOrder;
+                try (PreparedStatement ps = c.prepareStatement(selectSourceSql)) {
+                    ps.setObject(1, sourceSceneId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            c.rollback();
+                            return Optional.empty();
+                        }
+                        chapterId = rs.getObject("chapter_id", UUID.class);
+                        sourceOrder = rs.getInt("display_order");
+                    }
+                }
+
+                int beforeParagraphCount = countParagraphsFromHtml(beforeContent);
+                int afterParagraphCount  = countParagraphsFromHtml(afterContent);
+
+                try (PreparedStatement ps = c.prepareStatement(updateSourceSql)) {
+                    ps.setString(1, beforeContent);
+                    ps.setInt(2, beforeWordCount);
+                    ps.setInt(3, beforeParagraphCount);
+                    ps.setTimestamp(4, Timestamp.from(now));
+                    ps.setObject(5, sourceSceneId);
+                    if (ps.executeUpdate() == 0) {
+                        c.rollback();
+                        return Optional.empty();
+                    }
+                }
+
+                try (PreparedStatement ps = c.prepareStatement(shiftLaterSql)) {
+                    ps.setTimestamp(1, Timestamp.from(now));
+                    ps.setObject(2, chapterId);
+                    ps.setInt(3, sourceOrder);
+                    ps.executeUpdate();
+                }
+
+                try (PreparedStatement ps = c.prepareStatement(insertNewSql)) {
+                    ps.setObject(1, newSceneId);
+                    ps.setObject(2, chapterId);
+                    ps.setString(3, newTitle);
+                    ps.setInt(4, sourceOrder + 1);
+                    ps.setString(5, afterContent);
+                    ps.setInt(6, afterWordCount);
+                    ps.setInt(7, afterParagraphCount);
+                    ps.setTimestamp(8, Timestamp.from(now));
+                    ps.setTimestamp(9, Timestamp.from(now));
+                    ps.executeUpdate();
+                }
+
+                c.commit();
+                return Optional.of(Scene.builder()
+                        .id(newSceneId)
+                        .chapterId(chapterId)
+                        .title(newTitle)
+                        .displayOrder(sourceOrder + 1)
+                        .content(afterContent)
+                        .wordCount(afterWordCount)
+                        .paragraphCount(afterParagraphCount)
+                        .notes(null)
+                        .createdAt(now)
+                        .updatedAt(now)
+                        .build());
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
     }
 
     /**
@@ -487,6 +599,10 @@ public class SceneDao {
             count++;
         }
         return count;
+    }
+
+    private static String defaultSceneTitle(UUID id) {
+        return "New Scene [" + id.toString().substring(0, 4) + "]";
     }
 
     // -------------------------------------------------------------------------

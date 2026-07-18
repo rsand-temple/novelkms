@@ -160,6 +160,43 @@ class SceneResourceTest extends NovelKmsTestBase {
     // -------------------------------------------------------------------------
 
     @Test
+    void splitScene_validRequest_returns201AndPersistsBothScenes() throws SQLException {
+        Scene source = sceneDao.create(testChapter.getId(), "Source", null);
+
+        Response r = RESOURCES.target("/scenes/" + source.getId() + "/split")
+                .request(MediaType.APPLICATION_JSON)
+                .post(Entity.json(Map.of(
+                        "title", "New Scene [abcd]",
+                        "beforeContent", "<p>Before</p>",
+                        "beforeWordCount", 1,
+                        "afterContent", "<p>After</p>",
+                        "afterWordCount", 1)));
+
+        assertEquals(Status.CREATED.getStatusCode(), r.getStatus());
+        Scene created = r.readEntity(Scene.class);
+        assertEquals("New Scene [abcd]", created.getTitle());
+        assertEquals("<p>After</p>", created.getContent());
+
+        Scene updatedSource = sceneDao.findById(source.getId()).orElseThrow();
+        assertEquals("<p>Before</p>", updatedSource.getContent());
+        assertEquals(2, sceneDao.findByChapterId(testChapter.getId()).size());
+    }
+
+    @Test
+    void splitScene_unknownSource_returnsNoContent() {
+        Response r = RESOURCES.target("/scenes/" + UUID.randomUUID() + "/split")
+                .request(MediaType.APPLICATION_JSON)
+                .post(Entity.json(Map.of(
+                        "title", "New Scene [abcd]",
+                        "beforeContent", "<p>Before</p>",
+                        "beforeWordCount", 1,
+                        "afterContent", "<p>After</p>",
+                        "afterWordCount", 1)));
+
+        assertEquals(Status.NO_CONTENT.getStatusCode(), r.getStatus());
+    }
+
+    @Test
     void saveContent_validRequest_returns200WithContent() throws SQLException {
         Scene s = sceneDao.create(testChapter.getId(), "Draft", null);
         String tiptapJson = "{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\"}]}";

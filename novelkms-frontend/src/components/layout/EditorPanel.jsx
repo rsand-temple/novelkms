@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useEditor, EditorContent } from '@tiptap/react';
+import { DOMSerializer } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
@@ -57,6 +58,7 @@ import { resolveValues, renderPreviewHtml, tokensForType } from '../../utils/tok
 import { buildStyleSx } from '../../utils/styles';
 import { derivePageConfig } from '../../utils/pageConfig';
 import EditorToolbar from '../editor/EditorToolbar';
+import SplitSceneDialog from '../nav/dialogs/SplitSceneDialog';
 import SearchBar from '../search/SearchBar';
 import { useSearch } from '../../search/SearchContext';
 import { useReview } from '../../review/ReviewContext';
@@ -66,6 +68,7 @@ import BookCoverPreview from '../editor/BookCoverPreview';
 import PartPagePreview from '../editor/PartPagePreview';
 import ProjectShelf from '../editor/ProjectShelf';
 import CodexEntryFields from '../codex/CodexEntryFields';
+import { generateDefaultSceneTitle } from '../../utils/sceneTitles';
 
 const AUTOSAVE_DELAY_MS = 1500;
 
@@ -197,6 +200,79 @@ function parseSceneChunks(html, firstSceneId) {
 	});
 
 	return chunks;
+}
+
+function serializeFragment(fragment, schema) {
+	const wrapper = document.createElement('div');
+	wrapper.appendChild(DOMSerializer.fromSchema(schema).serializeFragment(fragment));
+	return wrapper.innerHTML.trim() || '<p></p>';
+}
+
+function fragmentHasMeaningfulContent(fragment) {
+	let meaningful = false;
+	fragment.descendants((node) => {
+		if (meaningful) return false;
+		if (node.isText) {
+			if (node.text?.trim()) meaningful = true;
+			return false;
+		}
+		if (node.isLeaf && node.type.name !== 'hardBreak') meaningful = true;
+		return !meaningful;
+	});
+	return meaningful;
+}
+
+function locateSceneAtPosition(doc, firstSceneId, position) {
+	if (!firstSceneId) return null;
+	let sceneId = firstSceneId;
+	let from = 0;
+	let to = doc.content.size;
+
+	doc.forEach((node, offset) => {
+		if (node.type.name !== 'sceneBreak') return;
+		if (offset < position) {
+			sceneId = node.attrs.sceneId || null;
+			from = offset + node.nodeSize;
+		} else if (to === doc.content.size) {
+			to = offset;
+		}
+	});
+
+	return { sceneId, from, to };
+}
+
+function buildSceneSplitDraft(editor, singleSceneId, firstSceneId) {
+	const { doc, selection } = editor.state;
+	if (!selection.empty) {
+		return { error: 'Place the cursor where the scene should be split; do not select text.' };
+	}
+
+	const splitPosition = selection.from;
+	const bounds = singleSceneId
+		? { sceneId: singleSceneId, from: 0, to: doc.content.size }
+		: locateSceneAtPosition(doc, firstSceneId, splitPosition);
+
+	if (!bounds?.sceneId) {
+		return { error: 'The cursor is not inside a persisted manuscript scene.' };
+	}
+
+	const beforeDoc = doc.cut(bounds.from, splitPosition);
+	const afterDoc = doc.cut(splitPosition, bounds.to);
+	if (!fragmentHasMeaningfulContent(beforeDoc.content)
+			|| !fragmentHasMeaningfulContent(afterDoc.content)) {
+		return { error: 'Place the cursor between existing content so both scenes contain text.' };
+	}
+
+	const beforeContent = serializeFragment(beforeDoc.content, editor.schema);
+	const afterContent = serializeFragment(afterDoc.content, editor.schema);
+	return {
+		sourceSceneId: bounds.sceneId,
+		splitPosition,
+		beforeContent,
+		beforeWordCount: countWords(beforeContent),
+		afterContent,
+		afterWordCount: countWords(afterContent),
+	};
 }
 
 function getDocSceneBreakIds(editor) {
@@ -617,6 +693,10 @@ export default function EditorPanel({
 
 	const [isSaving, setIsSaving] = useState(false);
 	const [previewActive, setPreviewActive] = useState(false);
+	const [splitDraft, setSplitDraft] = useState(null);
+	const [splitTitle, setSplitTitle] = useState('');
+	const [splitPending, setSplitPending] = useState(false);
+	const [splitSnack, setSplitSnack] = useState(null);
 
 	// ── Review-rail resize state ──────────────────────────────────────────────
 	const [railWidth, setRailWidth] = useState(() => {
@@ -1028,26 +1108,114 @@ export default function EditorPanel({
 		};
 	}, [editor, registerEditorActions]);
 
-	// ── scene break insertion ─────────────────────────────────────────────────
+	// ── split scene at cursor ─────────────────────────────────────────────────
 
-	const handleSceneBreak = useCallback(async () => {
-		const cid = chapterIdRef.current;
-		const firstId = firstSceneIdRef.current;
-		if (!cid || !firstId || !isEditorReady(editorRef.current)) return;
+	const handleSplitSceneClick = useCallback(() => {
+		const ed = editorRef.current;
+		if (!isEditorReady(ed)) return;
 		try {
-			const newScene = await scenesApi.create(cid, { title: '' });
-			const ed = editorRef.current;
-			if (!isEditorReady(ed)) return;
-			ed.chain().focus().setSceneBreak({ sceneId: newScene.id }).run();
-			const breakIds = getDocSceneBreakIds(ed);
-			const orderedIds = [firstId, ...breakIds];
-			await scenesApi.reorderInChapter(cid, orderedIds);
-			loadedSceneOrderRef.current = orderedIds.join(',');
-			queryClient.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(cid) });
+			const draft = buildSceneSplitDraft(
+				ed,
+				singleSceneModeRef.current ? sceneIdRef.current : null,
+				firstSceneIdRef.current,
+			);
+			if (draft.error) {
+				setSplitSnack({ severity: 'warning', message: draft.error });
+				return;
+			}
+			setSplitTitle(generateDefaultSceneTitle());
+			setSplitDraft(draft);
 		} catch (err) {
-			console.error('[EditorPanel] Failed to insert scene break:', err);
+			console.error('[EditorPanel] Could not prepare scene split:', err);
+			setSplitSnack({ severity: 'error', message: 'Could not determine the split position.' });
 		}
-	}, [queryClient]);
+	}, []);
+
+	const handleSplitSceneCancel = useCallback(() => {
+		if (splitPending) return;
+		setSplitDraft(null);
+		setSplitTitle('');
+	}, [splitPending]);
+
+	const handleSplitSceneConfirm = useCallback(async () => {
+		const draft = splitDraft;
+		const title = splitTitle.trim();
+		if (!draft || !title || splitPending || isSaving) return;
+
+		if (saveTimer.current) {
+			clearTimeout(saveTimer.current);
+			saveTimer.current = null;
+		}
+
+		setSplitPending(true);
+		setIsSaving(true);
+		try {
+			const newScene = await scenesApi.split(draft.sourceSceneId, {
+				title,
+				beforeContent: draft.beforeContent,
+				beforeWordCount: draft.beforeWordCount,
+				afterContent: draft.afterContent,
+				afterWordCount: draft.afterWordCount,
+			});
+
+			const ed = editorRef.current;
+			if (!isEditorReady(ed)) throw new Error('Editor is no longer available.');
+
+			if (singleSceneModeRef.current) {
+				ed.commands.setContent(draft.beforeContent, false);
+				ed.commands.focus('end');
+			} else {
+				const currentScenes = activeScenesRef.current || [];
+				const sourceIndex = currentScenes.findIndex(scene => scene.id === draft.sourceSceneId);
+				if (sourceIndex >= 0) {
+					const nextScenes = [...currentScenes];
+					nextScenes.splice(sourceIndex + 1, 0, newScene);
+					activeScenesRef.current = nextScenes;
+					expectedSceneIdsRef.current = nextScenes.map(scene => scene.id);
+				}
+
+				const inserted = ed.chain()
+					.focus()
+					.setTextSelection(draft.splitPosition)
+					.setSceneBreak({ sceneId: newScene.id })
+					.run();
+
+				if (inserted && firstSceneIdRef.current) {
+					const orderedIds = [firstSceneIdRef.current, ...getDocSceneBreakIds(ed)];
+					loadedSceneOrderRef.current = orderedIds.join(',');
+					expectedSceneIdsRef.current = orderedIds;
+				} else {
+					// The database split already succeeded. Force the chapter editor to
+					// rebuild from the authoritative scene list if the local transform failed.
+					loadedChapterIdRef.current = null;
+					loadedSceneOrderRef.current = '';
+				}
+			}
+
+			const cid = chapterIdRef.current;
+			queryClient.setQueryData(SCENE_KEYS.detail(newScene.id), newScene);
+			queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(draft.sourceSceneId) });
+			if (cid) queryClient.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(cid) });
+			queryClient.invalidateQueries({
+				predicate: query => query.queryKey[query.queryKey.length - 1] === 'word-count',
+			});
+
+			setSplitDraft(null);
+			setSplitTitle('');
+			setSplitSnack({ severity: 'success', message: `Scene split. Created "${newScene.title}".` });
+		} catch (err) {
+			console.error('[EditorPanel] Failed to split scene:', err);
+			setSplitSnack({
+				severity: 'error',
+				message: err?.response?.data?.message ?? err?.message ?? 'Scene split failed.',
+			});
+			const ed = editorRef.current;
+			if (isEditorReady(ed)) scheduleSaveRef.current?.(ed.getHTML());
+		} finally {
+			setSplitPending(false);
+			setIsSaving(false);
+		}
+	}, [splitDraft, splitTitle, splitPending, isSaving, queryClient]);
 
 	// ── token insertion + preview ─────────────────────────────────────────────
 
@@ -1274,6 +1442,8 @@ export default function EditorPanel({
 	// preview and shelf modes pass null so the gear icon stays accessible
 	// but formatting controls are inactive.
 	const toolbarEditor = projectShelfMode ? null : editor;
+	const canSplitScene = multiSceneMode
+		|| (singleSceneMode && !isCodexEntry && !!bookId && !!chapterId);
 
 	const chapterHeadingTitle = (multiSceneMode && chapterData)
 		? (chapterData.title?.trim() || `Chapter ${chapterData.chapterNumber}`)
@@ -1287,7 +1457,7 @@ export default function EditorPanel({
 				editor={toolbarEditor}
 				settings={settings}
 				onSettingsChange={updateSettings}
-				onSceneBreak={(aiDocMode || singleSceneMode || templateMode || aggregateDraftMode || projectShelfMode) ? null : handleSceneBreak}
+				onSplitScene={canSplitScene ? handleSplitSceneClick : null}
 				isSaving={isSaving}
 				templateMode={templateMode}
 				tokenOptions={tokenOptions}
@@ -1643,6 +1813,15 @@ export default function EditorPanel({
 				)}
 			</Box>
 
+			<SplitSceneDialog
+				open={!!splitDraft}
+				title={splitTitle}
+				onTitleChange={setSplitTitle}
+				onConfirm={handleSplitSceneConfirm}
+				onClose={handleSplitSceneCancel}
+				isPending={splitPending || isSaving}
+			/>
+
 			<RegenerateConfirmDialog
 				open={aiDocRegenConfirmOpen}
 				onCancel={() => setAiDocRegenConfirmOpen(false)}
@@ -1684,6 +1863,19 @@ export default function EditorPanel({
 				{aiDocSnack ? (
 					<Alert severity={aiDocSnack.severity} onClose={() => setAiDocSnack(null)} sx={{ width: '100%' }}>
 						{aiDocSnack.message}
+					</Alert>
+				) : undefined}
+			</Snackbar>
+
+			<Snackbar
+				open={!!splitSnack}
+				autoHideDuration={4000}
+				onClose={() => setSplitSnack(null)}
+				anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+			>
+				{splitSnack ? (
+					<Alert severity={splitSnack.severity} onClose={() => setSplitSnack(null)} sx={{ width: '100%' }}>
+						{splitSnack.message}
 					</Alert>
 				) : undefined}
 			</Snackbar>

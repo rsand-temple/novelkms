@@ -16,7 +16,7 @@ import FormatIndentDecreaseIcon from '@mui/icons-material/FormatIndentDecrease'
 import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft'
 import FormatAlignCenterIcon from '@mui/icons-material/FormatAlignCenter'
 import FormatAlignRightIcon from '@mui/icons-material/FormatAlignRight'
-import HorizontalRuleIcon from '@mui/icons-material/HorizontalRule'
+import ContentCutIcon from '@mui/icons-material/ContentCut'
 import SettingsIcon from '@mui/icons-material/Settings'
 import FormatQuoteIcon from '@mui/icons-material/FormatQuote'
 import DataObjectIcon from '@mui/icons-material/DataObject'
@@ -161,7 +161,7 @@ function VDivider() {
  * Props:
  *   editor            — TipTap editor instance (from useEditor in EditorPanel)
  *   settings          — current project settings
- *   onSceneBreak      — async callback: creates DB scene then inserts SceneBreak node
+ *   onSplitScene      — callback: opens the split-at-cursor confirmation dialog
  *   isSaving          — boolean — shows saving spinner when true
  *   templateMode      — boolean — true when editing a page template
  *   tokenOptions      — [{ token, label }] for the Insert-field menu (template mode)
@@ -201,7 +201,7 @@ function VDivider() {
  *   contextSettingsLabel  — label for the selected project/book settings action
  */
 export default function EditorToolbar({
-	editor, settings = {}, onSceneBreak, isSaving,
+	editor, settings = {}, onSplitScene, isSaving,
 	templateMode = false, tokenOptions = [], onInsertToken,
 	previewActive = false, onTogglePreview,
 	styleSheet = [],
@@ -646,7 +646,7 @@ export default function EditorToolbar({
 				</Box>
 			</Toolbar>
 
-			{/* ── Row 2: lists / indent / align / scene break / image / word count ── */}
+			{/* ── Row 2: lists / indent / align / split scene / image / word count ── */}
 			<Toolbar variant="dense" disableGutters sx={{ px: 1, gap: 0.25, minHeight: 34, borderTop: 1, borderColor: 'divider' }}>
 
 				{/* Lists */}
@@ -769,13 +769,13 @@ export default function EditorToolbar({
 
 				<VDivider />
 
-				{/* Scene break */}
+				{/* Split scene at the current cursor position */}
 				<TBtn
-					title={onSceneBreak ? 'Scene break' : 'Not available here'}
-					onClick={onSceneBreak ?? undefined}
-					disabled={!onSceneBreak}
+					title={onSplitScene ? 'Split scene at cursor' : 'Not available here'}
+					onClick={onSplitScene ?? undefined}
+					disabled={!onSplitScene}
 				>
-					<HorizontalRuleIcon fontSize="small" />
+					<ContentCutIcon fontSize="small" />
 				</TBtn>
 
 				<VDivider />
