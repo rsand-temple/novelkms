@@ -5,17 +5,36 @@ import {
 } from '@mui/material'
 import { useCreateScene } from '../../../hooks/useScenes'
 
+function generateDefaultSceneTitle() {
+	const suffix = globalThis.crypto?.randomUUID
+		? globalThis.crypto.randomUUID().substring(0, 4)
+		: Math.floor(Math.random() * 0x10000)
+			.toString(16)
+			.padStart(4, '0')
+
+	return `New Scene [${suffix}]`
+}
+
+function isDefaultSceneTitle(title) {
+	return /^New Scene \[[0-9a-f]{4}\]$/i.test(title)
+}
+
 export default function AddSceneDialog({ open, onClose, chapterId }) {
-	const [title, setTitle] = useState('')
+	const [title, setTitle] = useState(generateDefaultSceneTitle)
 	const createScene = useCreateScene()
+
+	const resetTitle = () => {
+		setTitle(generateDefaultSceneTitle())
+	}
 
 	const handleSubmit = () => {
 		if (!title.trim()) return
+
 		createScene.mutate(
 			{ chapterId, data: { title: title.trim() } },
 			{
 				onSuccess: () => {
-					setTitle('')
+					resetTitle()
 					onClose()
 				},
 			}
@@ -23,8 +42,16 @@ export default function AddSceneDialog({ open, onClose, chapterId }) {
 	}
 
 	const handleClose = () => {
-		setTitle('')
+		resetTitle()
 		onClose()
+	}
+
+	const handleTitleFocus = (event) => {
+		// Make replacing the generated title effortless while preserving
+		// normal cursor behavior after the user begins editing it.
+		if (isDefaultSceneTitle(title)) {
+			event.target.select()
+		}
 	}
 
 	return (
@@ -37,8 +64,9 @@ export default function AddSceneDialog({ open, onClose, chapterId }) {
 					fullWidth
 					variant="outlined"
 					value={title}
-					onChange={(e) => setTitle(e.target.value)}
-					onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+					onChange={(event) => setTitle(event.target.value)}
+					onFocus={handleTitleFocus}
+					onKeyDown={(event) => event.key === 'Enter' && handleSubmit()}
 					sx={{ mt: 1 }}
 				/>
 			</DialogContent>
