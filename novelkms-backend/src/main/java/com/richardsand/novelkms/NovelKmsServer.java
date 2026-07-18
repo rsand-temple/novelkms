@@ -54,6 +54,7 @@ import com.richardsand.novelkms.dao.chapter.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
 import com.richardsand.novelkms.dao.codex.CodexDao;
 import com.richardsand.novelkms.dao.review.HumanReviewDao;
+import com.richardsand.novelkms.dao.review.ReviewMetricsDao;
 import com.richardsand.novelkms.dao.review.ReviewProfileDao;
 import com.richardsand.novelkms.dao.review.ReviewRequestDao;
 import com.richardsand.novelkms.dao.review.ReviewSnapshotDao;
@@ -234,6 +235,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         ReviewRequestDao      reviewRequestDao      = new ReviewRequestDao(ds);
         ReviewSnapshotDao     reviewSnapshotDao     = new ReviewSnapshotDao(ds);
         ReviewQueueDao        reviewQueueDao        = new ReviewQueueDao(ds);
+        ReviewMetricsDao      reviewMetricsDao      = new ReviewMetricsDao(ds);
         HumanReviewDao        humanReviewDao        = new HumanReviewDao(ds);
         UserBlockDao          userBlockDao          = new UserBlockDao(ds);
         SceneDao              sceneDao              = new SceneDao(ds);
@@ -430,6 +432,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(reviewRequestDao).to(ReviewRequestDao.class);
                 bind(reviewSnapshotDao).to(ReviewSnapshotDao.class);
                 bind(reviewQueueDao).to(ReviewQueueDao.class);
+                bind(reviewMetricsDao).to(ReviewMetricsDao.class);
                 bind(humanReviewDao).to(HumanReviewDao.class);
                 bind(userBlockDao).to(UserBlockDao.class);
                 bind(registrationNotificationService).to(RegistrationNotificationService.class);

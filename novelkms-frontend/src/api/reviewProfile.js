@@ -11,4 +11,11 @@ export const reviewProfileApi = {
 	update:      (body)   => client.put('/review/profile', body).then(r => r.data),
 	checkHandle: (handle) => client.get(`/review/handles/${encodeURIComponent(handle)}/available`).then(r => r.data),
 	byHandle:    (handle) => client.get(`/review/profiles/${encodeURIComponent(handle)}`).then(r => r.data),
+
+	// Contribution figures (§13). Derived server-side from submitted reviews; the
+	// self path 404s when the caller has no profile, the handle path 404s for a
+	// profile that is absent, hidden, or suspended — same non-disclosure as the
+	// profile reads above.
+	myMetrics:       ()       => client.get('/review/profile/metrics').then(r => r.data),
+	metricsByHandle: (handle) => client.get(`/review/profiles/${encodeURIComponent(handle)}/metrics`).then(r => r.data),
 }

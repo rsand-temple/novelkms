@@ -5,6 +5,8 @@ export const REVIEW_PROFILE_KEYS = {
 	me:      ['reviewProfile', 'me'],
 	handle:  (handle) => ['reviewProfile', 'handle', handle],
 	byHandle: (handle) => ['reviewProfile', 'byHandle', handle],
+	myMetrics: ['reviewProfile', 'metrics', 'me'],
+	metricsByHandle: (handle) => ['reviewProfile', 'metrics', 'byHandle', handle],
 }
 
 /** The signed-in user's profile, or null if they have not claimed a handle. */
@@ -38,6 +40,34 @@ export function useReviewProfileByHandle(handle) {
 		queryKey: REVIEW_PROFILE_KEYS.byHandle(handle),
 		queryFn:  () => reviewProfileApi.byHandle(handle),
 		enabled:  !!handle,
+	})
+}
+
+/**
+ * The signed-in user's contribution figures (§13).
+ *
+ * Kept as its own query rather than folded into the profile object: the figures
+ * are derived server-side from submitted/received reviews, so they change as the
+ * user reviews and receives — a separate cache entry lets them be refetched
+ * without disturbing the profile form. `enabled` is gated on having a profile,
+ * because the endpoint 404s for a caller who has not claimed a handle.
+ */
+export function useMyReviewProfileMetrics(enabled = true) {
+	return useQuery({
+		queryKey: REVIEW_PROFILE_KEYS.myMetrics,
+		queryFn:  reviewProfileApi.myMetrics,
+		enabled:  !!enabled,
+		staleTime: 30_000,
+	})
+}
+
+/** Another user's contribution figures. Same non-disclosure as the profile read. */
+export function useReviewProfileMetricsByHandle(handle) {
+	return useQuery({
+		queryKey: REVIEW_PROFILE_KEYS.metricsByHandle(handle),
+		queryFn:  () => reviewProfileApi.metricsByHandle(handle),
+		enabled:  !!handle,
+		staleTime: 30_000,
 	})
 }
 

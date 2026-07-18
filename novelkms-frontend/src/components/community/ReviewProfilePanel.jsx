@@ -18,6 +18,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import {
 	useMyReviewProfile,
+	useMyReviewProfileMetrics,
 	useHandleAvailability,
 	useCreateReviewProfile,
 	useUpdateReviewProfile,
@@ -32,6 +33,78 @@ const splitGenres = (raw) =>
 	raw.split(',').map(g => g.trim()).filter(Boolean).slice(0, 12)
 
 const joinGenres = (genres) => (genres ?? []).join(', ')
+
+const numberFormat = new Intl.NumberFormat()
+const formatCount = (n) => numberFormat.format(Number(n ?? 0))
+
+const monthYearFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
+function formatMemberSince(iso) {
+	if (!iso) return null
+	const date = new Date(iso)
+	return Number.isNaN(date.getTime()) ? null : monthYearFormat.format(date)
+}
+
+/**
+ * The signed-in user's contribution figures (§13). Shown only for an existing
+ * profile — there is nothing to report before a handle is claimed. The figures
+ * are objective totals, not a ranking, so the copy says so plainly and avoids
+ * anything leaderboard-shaped.
+ */
+function ContributionMetrics() {
+	const { data, isPending, isError } = useMyReviewProfileMetrics()
+
+	// Absent quietly on first load or error: metrics are supplementary, and a
+	// spinner or alert here would distract from the profile form below.
+	if (isPending || isError || !data) return null
+
+	const stats = [
+		{ label: 'Words reviewed', value: data.wordsReviewed },
+		{ label: 'Review words written', value: data.reviewWordsWritten },
+		{ label: 'Reviews completed', value: data.reviewsCompleted },
+		{ label: 'Reviews received', value: data.reviewsReceived },
+	]
+	const memberSince = formatMemberSince(data.memberSince)
+
+	return (
+		<Paper variant="outlined" sx={{ p: 2.5 }}>
+			<Stack spacing={2}>
+				<Box>
+					<Typography variant="overline" color="text.secondary">
+						Contribution
+					</Typography>
+					<Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+						From reviews you have submitted and received. These show participation, not a ranking.
+					</Typography>
+				</Box>
+
+				<Box
+					sx={{
+						display: 'grid',
+						gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' },
+						gap: 2,
+					}}
+				>
+					{stats.map(s => (
+						<Box key={s.label}>
+							<Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+								{formatCount(s.value)}
+							</Typography>
+							<Typography variant="caption" color="text.secondary">
+								{s.label}
+							</Typography>
+						</Box>
+					))}
+				</Box>
+
+				{memberSince && (
+					<Typography variant="caption" color="text.secondary">
+						Member since {memberSince}
+					</Typography>
+				)}
+			</Stack>
+		</Paper>
+	)
+}
 
 /** Trailing-edge debounce. A timer is a real side effect, not derived state. */
 function useDebounced(value, delay = 350) {
@@ -124,6 +197,8 @@ function ProfileForm({ profile }) {
 						: 'This is what other writers see. Your email address and login identity are never shown.'}
 				</Typography>
 			</Box>
+
+			{!isNew && <ContributionMetrics />}
 
 			{errorMessage && <Alert severity="error">{errorMessage}</Alert>}
 			{saved && !errorMessage && (

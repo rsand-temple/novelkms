@@ -192,6 +192,29 @@ AI-assist self-disclosure checkbox, Save/Submit/Withdraw, Revise for submitted);
 Received review bodies render as plain text (`htmlToPlain`) — a cross-user render boundary
 that needs no iframe while reviews are plain-text only.
 
+### Human Review Network — Phase 1E (contribution metrics)
+
+Public contribution figures (§13), derived at read time — no migration. Words reviewed =
+`SUM(review_snapshot.word_count)` over the user's SUBMITTED reviews; review words written =
+`SUM(human_review.word_count)`, SUBMITTED; reviews completed = `COUNT` SUBMITTED by user;
+reviews received = `COUNT` SUBMITTED against the user's requests; member since =
+`review_profile.created_at`. Everything comes from columns V38/V41 already froze.
+`human_review.word_count` is server-computed via `WordCount.fromHtml` at save/submit, so the
+metric cannot be inflated from the wire.
+
+New `ReviewMetricsDao` (two plain-standard SELECTs) + `ProfileMetrics` DTO. `ReviewProfileResource`
+gains `GET /review/profile/metrics` (self; 404 `no_profile` when absent) and
+`GET /review/profiles/{handle}/metrics` (cross-user; 404 for absent/hidden/suspended). Both
+cross-user reads share one private `readableByHandle` gate so the profile view and its metrics
+cannot drift — the single place a 1F block-hide rule slots in.
+
+Figures are **objective, not viewer-relative** (§6.5): reviews-received is NOT block-filtered,
+unlike the Reviews Received list. Public/private split and recent-activity are deferred — every
+Phase 1 review is PRIVATE (`HumanReviewService.submit` hardcodes it), so a public count would read
+zero for everyone. Frontend: Contribution stat block on My Profile (self only) via
+`useMyReviewProfileMetrics`; the cross-user endpoint ships backend-ready and tested but has no UI
+consumer until a public-profile page or queue click-through exists.
+
 ## Known issues / watchlist
 
 - Billing: extend trial, revoke-family semantics, plan mapping, webhook diagnostics, Stripe reconciliation.
@@ -227,7 +250,7 @@ that needs no iframe while reviews are plain-text only.
 4. Deferred AI findings view.
 5. Style-editor UI.
 6. Provider-variants Phase 3: provider-aware coverage/staleness, review-history grouping, fallback note.
-7. Review network slice 1D: write/submit review, Reviews Received, transactional notifications.
+7. Review network slice 1F: blocking, content reports, admin removal (activates `user_block`/`content_report`, adds block-aware profile visibility).
 
 ## Documentation maintenance rule
 

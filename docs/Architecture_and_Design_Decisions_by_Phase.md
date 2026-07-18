@@ -454,3 +454,27 @@ iframe is needed while Phase-1 reviews are plain text.
 can withdraw on any request state but cannot re-open the snapshot reader once a request
 leaves OPEN. Fix = participant-aware read in `ReviewAccessService` (ripples its constructor
 and two 1C test files); scheduled as its own small slice.
+
+### Slice 1E — Contribution metrics
+
+Derived at read time, no migration — everything measured already exists
+(`review_snapshot.word_count`, `human_review.word_count`/`status`,
+`review_request.author_user_id`, `review_profile.created_at`).
+`ReviewMetricsDao.contributionFor(userId)` runs two plain-standard SELECTs: a reviewer-side
+aggregate (words reviewed / review words written / reviews completed over SUBMITTED, self-deduping
+via `UNIQUE(request_id, reviewer_user_id)`) and a received count over the author's requests.
+`ProfileMetrics` assembles those with handle + member-since from the profile already in hand.
+
+**The objective-metric rule (§6.5).** Reviews-received is deliberately NOT block-filtered, unlike
+`HumanReviewDao`'s writing/received lists — a viewer-relative "received: 10 for me, 9 for you" is
+exactly what §6.5 forbids, so the aggregate carries no `user_block` predicate. Word-count integrity
+holds because `human_review.word_count` is server-computed (`WordCount.fromHtml`) at save/submit,
+never trusted from the client.
+
+**Shared cross-user gate.** `byHandle` and the new `metricsByHandle` both go through one private
+`readableByHandle` (missing/HIDDEN/SUSPENDED → non-disclosing 404; owner always reads own), so the
+profile view and its metrics cannot diverge and a 1F block-hide rule lands in exactly one place.
+Endpoints on `ReviewProfileResource`: `GET /review/profile/metrics` (self, 404 `no_profile`) and
+`GET /review/profiles/{handle}/metrics`. Deferred: public/private split (every submitted review is
+PRIVATE in Phase 1, so the public count is dead) and recent-activity (leaks cadence). Frontend wires
+self-view only; the cross-user endpoint ships tested with no UI consumer yet.

@@ -11,7 +11,9 @@ import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
+import com.richardsand.novelkms.dao.review.ReviewMetricsDao;
 import com.richardsand.novelkms.dao.review.ReviewProfileDao;
+import com.richardsand.novelkms.model.review.ProfileMetrics;
 import com.richardsand.novelkms.model.review.ReviewProfile;
 
 import jakarta.inject.Inject;
@@ -36,6 +38,8 @@ import jakarta.ws.rs.core.Response;
  *   <li>{@code PUT  /review/profile}                     — update the caller's own profile</li>
  *   <li>{@code GET  /review/handles/{handle}/available}  — live availability check for the claim form</li>
  *   <li>{@code GET  /review/profiles/{handle}}           — another user's public profile</li>
+ *   <li>{@code GET  /review/profile/metrics}             — the caller's own contribution figures</li>
+ *   <li>{@code GET  /review/profiles/{handle}/metrics}   — another user's contribution figures</li>
  * </ul>
  *
  * <p><b>Authorization.</b> These paths carry no manuscript UUID, so
@@ -99,10 +103,12 @@ public class ReviewProfileResource {
     private static final int MAX_GENRE_LENGTH = 40;
 
     private final ReviewProfileDao dao;
+    private final ReviewMetricsDao metricsDao;
 
     @Inject
-    public ReviewProfileResource(ReviewProfileDao dao) {
+    public ReviewProfileResource(ReviewProfileDao dao, ReviewMetricsDao metricsDao) {
         this.dao = dao;
+        this.metricsDao = metricsDao;
     }
 
     /** Create/update payload. Deliberately has no {@code status} — suspension is an admin action. */
@@ -136,6 +142,23 @@ public class ReviewProfileResource {
         return run(() -> dao.findByUserId(CurrentUser.id(request))
                 .map(p -> Response.ok(p).build())
                 .orElseGet(() -> Response.noContent().build()));
+    }
+
+    /**
+     * The caller's own contribution figures (§13). Unlike {@link #me}, a caller with
+     * no profile is a 404 {@code no_profile} rather than 204: metrics presuppose a
+     * profile, and there is nothing meaningful to report without one.
+     */
+    @GET
+    @Path("/profile/metrics")
+    public Response metricsMe(@Context ContainerRequestContext request) {
+        return run(() -> {
+            Optional<ReviewProfile> profile = dao.findByUserId(CurrentUser.id(request));
+            if (profile.isEmpty()) {
+                return noProfile();
+            }
+            return okMetrics(profile.get());
+        });
     }
 
     @POST
@@ -243,26 +266,77 @@ public class ReviewProfileResource {
     public Response byHandle(@PathParam("handle") String handle,
             @Context ContainerRequestContext request) {
 
+        return run(() -> readableByHandle(handle, request)
+                .map(p -> Response.ok(p).build())
+                .orElseGet(ReviewProfileResource::notFound));
+    }
+
+    /**
+     * Another user's contribution figures (§13). Rides the exact same
+     * non-disclosing gate as {@link #byHandle}: an absent, HIDDEN, or SUSPENDED
+     * handle reads as 404, never 403, and the owner always reaches their own row.
+     * Sharing {@link #readableByHandle} keeps the profile view and its metrics from
+     * ever disagreeing about who may be seen — the place a 1F block rule would slot
+     * in once.
+     */
+    @GET
+    @Path("/profiles/{handle}/metrics")
+    public Response metricsByHandle(@PathParam("handle") String handle,
+            @Context ContainerRequestContext request) {
+
         return run(() -> {
-            Optional<ReviewProfile> found = dao.findByHandle(handle);
-            if (found.isEmpty()) {
+            Optional<ReviewProfile> profile = readableByHandle(handle, request);
+            if (profile.isEmpty()) {
                 return notFound();
             }
-
-            ReviewProfile profile = found.get();
-            boolean       isOwner = profile.getUserId().equals(CurrentUser.id(request));
-
-            // 404 rather than 403 for hidden/suspended: existence is not disclosed.
-            // The owner always sees their own row so they can preview it.
-            if (!isOwner) {
-                if (ReviewProfileDao.VISIBILITY_HIDDEN.equals(profile.getVisibility())
-                        || ReviewProfileDao.STATUS_SUSPENDED.equals(profile.getStatus())) {
-                    return notFound();
-                }
-            }
-
-            return Response.ok(profile).build();
+            return okMetrics(profile.get());
         });
+    }
+
+    /**
+     * Resolves a handle to a profile the caller is permitted to see, or empty when
+     * it should read as absent — missing, HIDDEN, or SUSPENDED. The owner always
+     * sees their own row regardless of visibility so a hidden profile can still be
+     * previewed by its owner. This is the network's first legitimate cross-user
+     * read gate; both {@link #byHandle} and {@link #metricsByHandle} go through it so
+     * the two paths cannot drift.
+     */
+    private Optional<ReviewProfile> readableByHandle(String handle, ContainerRequestContext request)
+            throws SQLException {
+
+        Optional<ReviewProfile> found = dao.findByHandle(handle);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+
+        ReviewProfile profile = found.get();
+        boolean       isOwner = profile.getUserId().equals(CurrentUser.id(request));
+
+        if (!isOwner
+                && (ReviewProfileDao.VISIBILITY_HIDDEN.equals(profile.getVisibility())
+                        || ReviewProfileDao.STATUS_SUSPENDED.equals(profile.getStatus()))) {
+            return Optional.empty();
+        }
+        return Optional.of(profile);
+    }
+
+    /**
+     * Assembles the wire-facing {@link ProfileMetrics} from the derived aggregates
+     * and the profile already in hand ({@code handle}, {@code memberSince}). The DAO
+     * call throws {@link SQLException}, so every caller invokes this inside a
+     * {@link #run} lambda rather than through {@code Optional.map}.
+     */
+    private Response okMetrics(ReviewProfile profile) throws SQLException {
+        ReviewMetricsDao.Contribution c = metricsDao.contributionFor(profile.getUserId());
+        ProfileMetrics metrics = ProfileMetrics.builder()
+                .handle(profile.getHandle())
+                .wordsReviewed(c.wordsReviewed())
+                .reviewWordsWritten(c.reviewWordsWritten())
+                .reviewsCompleted(c.reviewsCompleted())
+                .reviewsReceived(c.reviewsReceived())
+                .memberSince(profile.getCreatedAt())
+                .build();
+        return Response.ok(metrics).build();
     }
 
     // =========================================================================

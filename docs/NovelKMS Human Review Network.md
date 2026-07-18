@@ -1042,8 +1042,8 @@ Phase 1 ships in six slices. V38 (whole Phase 1 schema) landed with 1A.
 | 1B    | Publish chapter → request + snapshot; My Requests    | **Done** — V39; backend + frontend shipped |
 | 1C    | Queue, package view, snapshot reader                 | **Done** — backend + frontend; reviewer read path |
 | 1D    | Write/submit review; Reviews Received; notifications | **Done** — V41; backend + frontend shipped |
-| 1E    | Contribution metrics                                 | *Next*                                                   |
-| 1F    | Blocking, reporting, admin removal                   |                                                    |
+| 1E    | Contribution metrics                                 | **Done** — no migration; `ReviewMetricsDao`, `/review/.../metrics` |
+| 1F    | Blocking, reporting, admin removal                   | *Next*                                             |
 
 **Slice 1C (reviewer read path).** `ReviewAccessService` is the first cross-user
 read seam — the tenant filter's `default -> true` lets `/review/...` through, so
@@ -1107,3 +1107,33 @@ wired — 1C's `ReviewAccessService.authorizeRead` still requires OPEN+PUBLIC. R
 can withdraw on any request state but can't re-open the reader once a request leaves
 OPEN. Fix = participant-aware read in `ReviewAccessService` (ripples its ctor + 2 tests);
 scheduled as its own slice.
+
+## Human Review Network — Slice 1E (contribution metrics) — DELIVERED
+
+Public contribution figures (§13), derived at read time. **No migration** — every figure comes from
+columns V38/V41 already froze.
+
+**Definitions.** Words reviewed = `SUM(review_snapshot.word_count)` over the user's SUBMITTED reviews
+(self-deduping via `UNIQUE(request_id, reviewer_user_id)`); review words written =
+`SUM(human_review.word_count)`, SUBMITTED; reviews completed = `COUNT` SUBMITTED by user; reviews
+received = `COUNT` SUBMITTED against the user's requests; member since = `review_profile.created_at`.
+
+**Objective, not viewer-relative (§6.5).** Reviews-received is NOT block-filtered — unlike the
+Reviews Received list, which hides a blocked counterparty. Metric integrity: `human_review.word_count`
+is server-computed via `WordCount.fromHtml`, never trusted from the wire.
+
+**Backend.** `ReviewMetricsDao.contributionFor(userId)` (two plain-standard SELECTs) + `ProfileMetrics`
+DTO. `ReviewProfileResource`: `GET /review/profile/metrics` (self, 404 `no_profile`),
+`GET /review/profiles/{handle}/metrics` (cross-user). Shared `readableByHandle` gate for both
+cross-user reads (non-disclosing 404 for missing/hidden/suspended; owner reads own).
+
+**Frontend.** Contribution stat block on My Profile (self only); `useMyReviewProfileMetrics` +
+`useReviewProfileMetricsByHandle`. Cross-user endpoint ships backend-ready/tested; no UI consumer
+until a public-profile page exists.
+
+**Deferred.** Public/private split (every Phase 1 review is PRIVATE, so the public count is dead until
+reviews can be published) and recent-activity (leaks contributor cadence).
+
+**Verification.** Static Java check ✓, esbuild transform ✓, `ReviewMetricsDaoTest` (zero-state,
+draft-excluded, withdraw-removes, reviewer sums, received count, block-objectivity) ✓,
+`ReviewProfileResourceTest` updated for the new constructor arg. `mvn test` pending (Maven unavailable).

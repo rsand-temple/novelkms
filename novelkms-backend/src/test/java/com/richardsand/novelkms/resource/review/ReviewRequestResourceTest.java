@@ -62,12 +62,14 @@ class ReviewRequestResourceTest extends NovelKmsTestBase {
     static final ResourceExtension AS_AUTHOR = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter(TEST_USER_ID))
             .addResource(new ReviewRequestResource(SERVICE))
+            .addResource(new ReviewPublishResource(SERVICE))
             .setMapper(createMapper())
             .build();
 
     static final ResourceExtension AS_STRANGER = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter(OTHER_USER_ID))
             .addResource(new ReviewRequestResource(SERVICE))
+            .addResource(new ReviewPublishResource(SERVICE))
             .setMapper(createMapper())
             .build();
 

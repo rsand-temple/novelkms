@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import com.richardsand.novelkms.NovelKmsTestBase;
+import com.richardsand.novelkms.dao.review.ReviewMetricsDao;
 import com.richardsand.novelkms.dao.review.ReviewProfileDao;
 import com.richardsand.novelkms.model.review.ReviewProfile;
 
@@ -52,19 +53,20 @@ import jakarta.ws.rs.core.Response.Status;
 @ExtendWith(DropwizardExtensionsSupport.class)
 class ReviewProfileResourceTest extends NovelKmsTestBase {
 
-    private static final ReviewProfileDao DAO = new ReviewProfileDao(ds);
+    private static final ReviewProfileDao DAO     = new ReviewProfileDao(ds);
+    private static final ReviewMetricsDao METRICS = new ReviewMetricsDao(ds);
 
     /** The profile owner in most tests. */
     static final ResourceExtension AS_OWNER = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter(TEST_USER_ID))
-            .addResource(new ReviewProfileResource(DAO))
+            .addResource(new ReviewProfileResource(DAO, METRICS))
             .setMapper(createMapper())
             .build();
 
     /** A different signed-in user — the one the disclosure rules are aimed at. */
     static final ResourceExtension AS_STRANGER = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter(OTHER_USER_ID))
-            .addResource(new ReviewProfileResource(DAO))
+            .addResource(new ReviewProfileResource(DAO, METRICS))
             .setMapper(createMapper())
             .build();
 
