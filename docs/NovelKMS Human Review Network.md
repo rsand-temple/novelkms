@@ -1067,3 +1067,43 @@ prohibition plus a self-disclosure flag (`human_review.ai_assisted`).
 
 Still open: **3, 4** (reviewer copy/download — 1C ships a "don't redistribute" watermark
 but no technical copy-block), **8, 10, 11, 12, 14**.
+
+## Human Review Network — Slice 1D (write / submit / receive reviews) — DELIVERED
+
+Completes the Phase 1 loop: a reviewer can now write, save, submit, and withdraw a
+review of a package, and an author can read the feedback they receive.
+
+**Migration:** V41 adds `human_review.author_read_at TIMESTAMP` (nullable; NULL =
+unread). This single column is the whole of Phase 1's notification model — the
+Reviews Received badge is `COUNT(submitted reviews of my requests WHERE
+author_read_at IS NULL)`. No notification table, no email (deferred to 1F, when
+close/withdraw/moderation events make an inbox worthwhile).
+
+**Backend:**
+- `HumanReview` model + `ReviewWritingSummary` / `ReviewReceived` DTOs.
+- `HumanReviewDao` — DRAFT/SUBMITTED/WITHDRAWN machine, block-filtered writing &
+  received list reads, `countSubmitted` (cap), `countUnreadForAuthor` (badge),
+  ownership-guarded `markAuthorRead`.
+- `HumanReviewService` — owns all `human_review` access; two gates: `ensureCanStart`
+  (new review: OPEN+PUBLIC, not self, not blocked, author active) and `ensureCanWrite`
+  (existing draft: OPEN or PAUSED). 404 for every cross-user denial; 403 only for the
+  caller's own suspension.
+- `HumanReviewResource` @Path("/review"): `GET|PUT /packages/{id}/review`,
+  `POST .../review/submit`, `.../review/withdraw`, `GET /reviews/writing`,
+  `GET /reviews/received`, `GET /reviews/received/unread`,
+  `POST /reviews/received/{reviewId}/read`.
+
+**Frontend:** review editor inside `ReviewPackageDialog` (plain-text body wrapped in
+`<p>`, AI-assist self-disclosure, Save/Submit/Withdraw, Revise for submitted);
+`MyWritingPanel` and `ReviewsReceivedPanel`; unread badge on the Reviews Received
+tab. Received review bodies render as **plain text** (`htmlToPlain`) — a cross-user
+render boundary that needs no iframe while reviews are plain-text only.
+
+**Verification:** static Java check ✓, H2 V1→V41 replay ✓, live SQL smoke test ✓,
+esbuild transform ✓. `mvn test` pending (Maven unavailable in the build env).
+
+**Known gap (watchlist):** §30.2 Q5 participant-read of paused/closed packages not
+wired — 1C's `ReviewAccessService.authorizeRead` still requires OPEN+PUBLIC. Reviewers
+can withdraw on any request state but can't re-open the reader once a request leaves
+OPEN. Fix = participant-aware read in `ReviewAccessService` (ripples its ctor + 2 tests);
+scheduled as its own slice.

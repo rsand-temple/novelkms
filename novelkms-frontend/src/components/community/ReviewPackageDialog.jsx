@@ -3,6 +3,7 @@ import {
 	Alert,
 	Box,
 	Button,
+	Checkbox,
 	Chip,
 	CircularProgress,
 	Dialog,
@@ -10,28 +11,32 @@ import {
 	DialogContent,
 	DialogTitle,
 	Divider,
+	FormControlLabel,
 	Stack,
+	TextField,
 	Typography,
 } from '@mui/material'
 import { feedbackTypeLabel } from '../../utils/reviewFeedbackTypes'
+import { htmlToPlain, plainToHtml } from '../../utils/reviewBody'
 import { useReviewPackage, usePackageSnapshot } from '../../hooks/useReviewQueue'
+import {
+	useMyReview,
+	useSaveDraft,
+	useSubmitReview,
+	useWithdrawReview,
+} from '../../hooks/useHumanReviews'
 
 /**
  * Renders a frozen snapshot's HTML in a fully sandboxed iframe.
  *
- * <p>This is the one place in NovelKMS where a user views HTML authored by someone
- * else, so the render trust boundary is real: a hostile author could embed
- * {@code <img onerror=...>} or a {@code javascript:} URL. {@code RichTextPreview}'s
- * own doc notes it is safe only because it renders the current user's own content —
- * that argument does not hold here, so it is deliberately not used.
- *
- * <p>{@code sandbox=""} (no {@code allow-scripts}, no {@code allow-same-origin})
- * puts the document in an opaque origin with scripting disabled: inline event
- * handlers never fire, {@code <script>} never runs, and the frame cannot reach the
+ * This is one of the two places in NovelKMS where a user views HTML authored by
+ * someone else, so the render trust boundary is real: a hostile author could embed
+ * an onerror handler or a javascript: URL. `sandbox=""` (no allow-scripts, no
+ * allow-same-origin) puts the document in an opaque origin with scripting disabled —
+ * inline handlers never fire, <script> never runs, and the frame cannot reach the
  * parent. The author's markup and images still render faithfully, styled by the
- * self-contained CSS below rather than the app's stylesheet (which the frame cannot
- * see). React encodes {@code srcDoc}, so the content cannot break out of the
- * attribute either.
+ * self-contained CSS below, and React encodes srcDoc so the content cannot break out
+ * of the attribute either.
  */
 function SnapshotFrame({ html }) {
 	const srcDoc = `<!doctype html><html><head><meta charset="utf-8">`
@@ -65,24 +70,157 @@ function SnapshotFrame({ html }) {
 	)
 }
 
+const REVIEW_STATUS_CHIP = {
+	DRAFT:     { color: 'default', label: 'Draft' },
+	SUBMITTED: { color: 'success', label: 'Submitted' },
+	WITHDRAWN: { color: 'default', label: 'Withdrawn' },
+}
+
 /**
- * A reviewer's view of one package: the author's request and questions first, then
- * the frozen chapter on demand. The manuscript is fetched only when the reviewer
- * chooses to read it — metadata renders instantly while a whole chapter would not.
+ * The review editor. Kept as an inner component mounted with a key so it initializes
+ * its own state from the loaded review once, rather than syncing through an effect —
+ * the house rule is "derive during render or remount with a key," and a review is
+ * saved on explicit clicks, so a remount after save is harmless.
  *
- * <p>Writing and submitting a review is slice 1D; this is read-only.
+ * A submitted review is shown read-only with Revise/Withdraw: there is no in-place
+ * edit of a submission (spec §30.2 Q6). Revise reopens it — saving moves the row back
+ * to DRAFT on the server — which is the "withdraw and rewrite" path made concrete.
+ */
+function ReviewEditor({ requestId, review, onNotify }) {
+	const initialStatus = review?.status ?? null
+	const submitted = initialStatus === 'SUBMITTED'
+
+	const [text, setText] = useState(htmlToPlain(review?.contentHtml ?? ''))
+	const [aiAssisted, setAiAssisted] = useState(review?.aiAssisted ?? false)
+	const [revising, setRevising] = useState(false)
+
+	const save = useSaveDraft()
+	const submit = useSubmitReview()
+	const withdraw = useWithdrawReview()
+	const busy = save.isPending || submit.isPending || withdraw.isPending
+
+	const readOnly = submitted && !revising
+	const hasText = text.trim().length > 0
+
+	const notifyError = (verb) => (e) =>
+		onNotify({ severity: 'error', message: e?.response?.data?.message ?? `Could not ${verb} your review.` })
+
+	const doSave = () =>
+		save.mutate(
+			{ requestId, contentHtml: plainToHtml(text), aiAssisted },
+			{
+				onSuccess: () => { setRevising(false); onNotify({ severity: 'success', message: 'Draft saved.' }) },
+				onError: notifyError('save'),
+			},
+		)
+
+	const doSubmit = () =>
+		submit.mutate(
+			{ requestId, contentHtml: plainToHtml(text), aiAssisted },
+			{
+				onSuccess: () => { setRevising(false); onNotify({ severity: 'success', message: 'Review submitted.' }) },
+				onError: notifyError('submit'),
+			},
+		)
+
+	const doWithdraw = () =>
+		withdraw.mutate(
+			{ requestId },
+			{
+				onSuccess: () => onNotify({ severity: 'success', message: 'Review withdrawn.' }),
+				onError: notifyError('withdraw'),
+			},
+		)
+
+	const chip = initialStatus ? REVIEW_STATUS_CHIP[initialStatus] : null
+
+	return (
+		<Stack spacing={1.5}>
+			<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+				<Typography variant="subtitle2" sx={{ fontWeight: 700, flexGrow: 1 }}>Your review</Typography>
+				{chip && <Chip size="small" color={chip.color} label={chip.label} />}
+			</Stack>
+
+			{submitted && !revising && (
+				<Alert severity="success" variant="outlined">
+					You submitted this review. To change it, choose Revise — it returns to a draft you can edit and resubmit.
+				</Alert>
+			)}
+
+			<TextField
+				value={text}
+				onChange={(e) => setText(e.target.value)}
+				multiline
+				minRows={6}
+				maxRows={16}
+				fullWidth
+				placeholder="Share what worked, what confused you, and anything the author asked about."
+				disabled={readOnly || busy}
+			/>
+
+			<FormControlLabel
+				control={
+					<Checkbox
+						checked={aiAssisted}
+						onChange={(e) => setAiAssisted(e.target.checked)}
+						disabled={readOnly || busy}
+						size="small"
+					/>
+				}
+				label={<Typography variant="body2">I used AI assistance for this review</Typography>}
+			/>
+
+			<Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
+				{readOnly ? (
+					<>
+						<Button size="small" onClick={() => setRevising(true)} disabled={busy}>Revise</Button>
+						<Button size="small" color="error" onClick={doWithdraw} disabled={busy}>Withdraw</Button>
+					</>
+				) : (
+					<>
+						<Button size="small" onClick={doSave} disabled={busy}>Save draft</Button>
+						<Button size="small" variant="contained" onClick={doSubmit} disabled={busy || !hasText}>
+							Submit review
+						</Button>
+						{initialStatus && initialStatus !== 'WITHDRAWN' && (
+							<Button size="small" color="error" onClick={doWithdraw} disabled={busy}>Withdraw</Button>
+						)}
+					</>
+				)}
+			</Stack>
+
+			<Typography variant="caption" color="text.secondary">
+				Your review is shared privately with the author.
+			</Typography>
+		</Stack>
+	)
+}
+
+/**
+ * A reviewer's view of one package: the author's request and questions, the frozen
+ * chapter on demand, and — slice 1D — an editor to write, submit, and withdraw a
+ * review. The manuscript is fetched only when the reviewer chooses to read it, so
+ * metadata renders instantly while a whole chapter loads lazily.
  */
 export default function ReviewPackageDialog({ open, onClose, requestId }) {
 	const [reading, setReading] = useState(false)
+	const [notice, setNotice] = useState(null)
 
 	const { data: pkg, isLoading, isError, error } = useReviewPackage(requestId, open && !!requestId)
 	const snapshot = usePackageSnapshot(requestId, open && reading && !!requestId)
+	const myReview = useMyReview(requestId, open && !!requestId)
 
-	// Reset the reader when the dialog closes so reopening starts on the metadata.
 	const handleClose = () => {
 		setReading(false)
+		setNotice(null)
 		onClose()
 	}
+
+	// The editor initializes from the loaded review, so it must not mount until that
+	// query has settled; its key includes the review id so a first save (null -> id)
+	// cleanly remounts it around the newly-created row.
+	const reviewReady = myReview.isSuccess || myReview.isError
+	const editorKey = `${requestId}:${myReview.data?.id ?? 'none'}`
 
 	return (
 		<Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
@@ -157,6 +295,25 @@ export default function ReviewPackageDialog({ open, onClose, requestId }) {
 								<SnapshotFrame html={snapshot.data.contentHtml} />
 							</Box>
 						) : null}
+
+						<Divider />
+
+						{notice && (
+							<Alert severity={notice.severity} onClose={() => setNotice(null)}>
+								{notice.message}
+							</Alert>
+						)}
+
+						{reviewReady ? (
+							<ReviewEditor
+								key={editorKey}
+								requestId={requestId}
+								review={myReview.data ?? null}
+								onNotify={setNotice}
+							/>
+						) : (
+							<Stack sx={{ alignItems: 'center', py: 2 }}><CircularProgress size={22} /></Stack>
+						)}
 					</Stack>
 				) : null}
 			</DialogContent>

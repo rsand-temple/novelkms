@@ -1,20 +1,21 @@
 import { useState } from 'react'
 import {
 	AppBar,
+	Badge,
 	Box,
 	Button,
-	Paper,
-	Stack,
 	Tab,
 	Tabs,
 	Toolbar,
 	Typography,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined'
 import ReviewProfilePanel from './ReviewProfilePanel'
 import MyRequestsPanel from './MyRequestsPanel'
 import ReviewQueuePanel from './ReviewQueuePanel'
+import MyWritingPanel from './MyWritingPanel'
+import ReviewsReceivedPanel from './ReviewsReceivedPanel'
+import { useUnreadReceivedCount } from '../../hooks/useHumanReviews'
 import { LogoMark } from '../branding/Logo'
 
 /**
@@ -24,16 +25,17 @@ import { LogoMark } from '../branding/Logo'
  * nav tree: review packages are derived, published snapshots, not editable
  * manuscript children, and putting them in the tree would imply otherwise.
  *
- * The tab set is the full Phase 1 shape. Only "My Profile" is built (slice 1A) —
- * the rest render an honest placeholder rather than a mock, so the roadmap is
- * visible without anything pretending to work.
+ * The full Phase 1 tab set is now live end to end: claim a handle (1A), publish and
+ * manage requests (1B), browse the queue (1C), and — slice 1D — write and submit
+ * reviews and read the feedback you receive. The Reviews Received tab carries an
+ * unread badge, the whole of Phase 1's notification model.
  */
 const TABS = [
 	{ key: 'profile',  label: 'My Profile' },
 	{ key: 'queue',    label: 'Review Queue' },
 	{ key: 'requests', label: 'My Requests' },
-	{ key: 'writing',  label: "Reviews I'm Writing", soon: 'Drafts of reviews you have started.' },
-	{ key: 'received', label: 'Reviews Received',    soon: 'Feedback other writers have sent you.' },
+	{ key: 'writing',  label: "Reviews I'm Writing" },
+	{ key: 'received', label: 'Reviews Received' },
 ]
 
 // The active tab is deep-linkable: /app/community?tab=requests lands directly on
@@ -44,37 +46,14 @@ function initialTab() {
 	return TABS.some(t => t.key === requested) ? requested : 'profile'
 }
 
-function ComingSoon({ label, description }) {
-	return (
-		<Paper
-			variant="outlined"
-			sx={{
-				p: 5,
-				display: 'flex',
-				flexDirection: 'column',
-				alignItems: 'center',
-				textAlign: 'center',
-				gap: 1,
-				maxWidth: 520,
-			}}
-		>
-			<RateReviewOutlinedIcon sx={{ fontSize: 34, color: 'text.disabled' }} />
-			<Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-				{label}
-			</Typography>
-			<Typography variant="body2" color="text.secondary">
-				{description}
-			</Typography>
-			<Typography variant="caption" color="text.disabled" sx={{ mt: 1 }}>
-				Not built yet.
-			</Typography>
-		</Paper>
-	)
-}
-
 export default function CommunityPage() {
 	const [tab, setTab] = useState(initialTab)
 	const active = TABS.find(t => t.key === tab) ?? TABS[0]
+
+	// The badge is a lightweight count endpoint, safe to poll on this surface; it
+	// returns 0 for a handle-less user rather than erroring.
+	const unread = useUnreadReceivedCount()
+	const unreadCount = unread.data ?? 0
 
 	// Keep the tab in the URL (without a history entry) so a refresh or a shared
 	// link stays on the same tab.
@@ -86,6 +65,19 @@ export default function CommunityPage() {
 			else url.searchParams.set('tab', next)
 			window.history.replaceState(null, '', url)
 		}
+	}
+
+	const goToProfile = () => handleTab(null, 'profile')
+
+	const tabLabel = (t) => {
+		if (t.key === 'received' && unreadCount > 0) {
+			return (
+				<Badge color="primary" badgeContent={unreadCount} max={99} sx={{ '& .MuiBadge-badge': { right: -14, top: 2 } }}>
+					{t.label}
+				</Badge>
+			)
+		}
+		return t.label
 	}
 
 	return (
@@ -135,7 +127,7 @@ export default function CommunityPage() {
 					sx={{ px: 2 }}
 				>
 					{TABS.map(t => (
-						<Tab key={t.key} value={t.key} label={t.label} />
+						<Tab key={t.key} value={t.key} label={tabLabel(t)} />
 					))}
 				</Tabs>
 			</Box>
@@ -146,11 +138,11 @@ export default function CommunityPage() {
 				) : active.key === 'requests' ? (
 					<MyRequestsPanel />
 				) : active.key === 'queue' ? (
-					<ReviewQueuePanel onGoToProfile={() => handleTab(null, 'profile')} />
+					<ReviewQueuePanel onGoToProfile={goToProfile} />
+				) : active.key === 'writing' ? (
+					<MyWritingPanel />
 				) : (
-					<Stack sx={{ alignItems: 'center', pt: 4 }}>
-						<ComingSoon label={active.label} description={active.soon} />
-					</Stack>
+					<ReviewsReceivedPanel />
 				)}
 			</Box>
 		</Box>

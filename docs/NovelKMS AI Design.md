@@ -128,6 +128,14 @@ A per-entry AI generation flow that fills in a codex entry's structured fields a
 
 **Codex entry DOCX export/import.** Round-trip contract: H1 title, H3+Normal per schema field, H2 "Description," body paragraphs. Import is direct-save, no preview. Endpoints: `GET/POST /api/scenes/{sceneId}/codex-docx`.
 
+## Slice 1D — reviewer AI-assist self-disclosure
+
+Reviews carry an `ai_assisted` boolean the reviewer sets themselves (spec §30.2
+Q15/Q16). It is self-disclosure only — no detection, no enforcement. Surfaced as an
+"AI-assisted" chip on the author's Reviews Received card so the author can weigh the
+feedback accordingly. Stored on `human_review.ai_assisted`; recomputed nowhere (it is
+the reviewer's assertion, not a derived signal). No AI provider is involved in 1D.
+
 ## Non-goals for the current AI slice
 
 - General chat interface.

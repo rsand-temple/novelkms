@@ -402,3 +402,37 @@ images, font-size spans) and can't be validated without a build; the frozen snap
 stays faithful, and safety is enforced at the render boundary where the trust
 transition actually happens. Queue uses `useInfiniteQuery` (offset paging); filters
 commit on Apply for transparency (§12); 409 → claim-a-handle prompt.
+
+## Phase 1 / Slice 1D — Human review write path
+
+**Read-state as a column, not a table (V41).** The only durable state 1D needs beyond
+V38's frozen columns is "author has seen this feedback." A read marker on the review
+row expresses exactly that with no join and no inbox. A `review_notification` table is
+a better fit once 1F adds events genuinely worth an inbox; it can be added then without
+disturbing this column.
+
+**Two write gates because PAUSE means different things.** `ensureCanStart` (OPEN+PUBLIC,
+not self, not blocked, author active) guards a *new* review; `ensureCanWrite` (OPEN or
+PAUSED) guards saving/submitting an *existing* one — so a reviewer finishes through a
+pause but no new reviewer slips in. Withdraw has no request-status gate: a reviewer may
+retract their own review whatever became of the request, and the row is retained (never
+deleted) for dispute handling (§30.2 Q8).
+
+**Saving always lands in DRAFT.** `saveContent` clears both terminal timestamps, which
+makes "withdraw and rewrite" (§30.2 Q6/Q7) and "revise a submission" one rule instead of
+special cases. Submit is atomic (save-then-mark) and enforces the author's `max_reviews`
+cap at the last honest moment even though the queue already excludes capped requests.
+
+**Cross-user identity keyhole.** Both list reads carry only handles; `HumanReview`,
+`ReviewWritingSummary`, and `ReviewReceived` keep `reviewerUserId`/`snapshotId`/
+`authorReadAt`/`sourceEntityId` off the wire. Resource tests assert the absence directly.
+`markAuthorRead` authorizes by request-ownership subquery inside the UPDATE (a forged id
+touches zero rows). All 1D SQL is plain-standard — runs on default-mode H2 and Postgres.
+
+**Render boundary.** Received review bodies are rendered as plain text (`htmlToPlain`),
+not live HTML — a hostile reviewer's markup shows as inert characters, so no sandboxed
+iframe is needed while Phase-1 reviews are plain text.
+
+**Deferred (watchlist):** §30.2 Q5 participant-read of paused/closed packages —
+`ReviewAccessService.authorizeRead` still gates to OPEN+PUBLIC. Own slice; ripples the
+1C service constructor and its two tests.

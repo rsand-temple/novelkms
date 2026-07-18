@@ -53,6 +53,7 @@ import com.richardsand.novelkms.dao.chapter.ChapterMemoryDao;
 import com.richardsand.novelkms.dao.chapter.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
 import com.richardsand.novelkms.dao.codex.CodexDao;
+import com.richardsand.novelkms.dao.review.HumanReviewDao;
 import com.richardsand.novelkms.dao.review.ReviewProfileDao;
 import com.richardsand.novelkms.dao.review.ReviewRequestDao;
 import com.richardsand.novelkms.dao.review.ReviewSnapshotDao;
@@ -98,6 +99,7 @@ import com.richardsand.novelkms.resource.ai.AiFormInstructionsResource;
 import com.richardsand.novelkms.resource.ai.AiReviewResource;
 import com.richardsand.novelkms.resource.codex.CodexEntryResource;
 import com.richardsand.novelkms.resource.codex.CodexResource;
+import com.richardsand.novelkms.resource.review.HumanReviewResource;
 import com.richardsand.novelkms.resource.review.ReviewProfileResource;
 import com.richardsand.novelkms.resource.review.ReviewRequestResource;
 import com.richardsand.novelkms.resource.review.ReviewQueueResource;
@@ -118,6 +120,7 @@ import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
 import com.richardsand.novelkms.service.PdfExportService;
 import com.richardsand.novelkms.service.RegistrationNotificationService;
+import com.richardsand.novelkms.service.HumanReviewService;
 import com.richardsand.novelkms.service.ReviewPublishService;
 import com.richardsand.novelkms.service.ReviewAccessService;
 import com.richardsand.novelkms.service.StarterContentService;
@@ -230,6 +233,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         ReviewRequestDao      reviewRequestDao      = new ReviewRequestDao(ds);
         ReviewSnapshotDao     reviewSnapshotDao     = new ReviewSnapshotDao(ds);
         ReviewQueueDao        reviewQueueDao        = new ReviewQueueDao(ds);
+        HumanReviewDao        humanReviewDao        = new HumanReviewDao(ds);
         UserBlockDao          userBlockDao          = new UserBlockDao(ds);
         SceneDao              sceneDao              = new SceneDao(ds);
         TemplateDao           templateDao           = new TemplateDao(ds);
@@ -275,6 +279,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 reviewProfileDao, reviewRequestDao, reviewSnapshotDao);
         ReviewAccessService             reviewAccessService             = new ReviewAccessService(
                 reviewRequestDao, reviewSnapshotDao, reviewProfileDao, reviewQueueDao, userBlockDao);
+        HumanReviewService              humanReviewService              = new HumanReviewService(
+                reviewRequestDao, reviewSnapshotDao, reviewProfileDao, humanReviewDao, userBlockDao);
         SessionService                  sessionService                  = new SessionService(authDao, config.getAuth());
         StarterContentService           starterContentService           = new StarterContentService(projectDao, bookDao, partDao, chapterDao, sceneDao);
         TrashService                    trashService                    = new TrashService(trashDao, projectDao, bookDao, chapterDao, sceneDao,
@@ -348,6 +354,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(PageLayoutResource.class);
         env.jersey().register(PartResource.class);
         env.jersey().register(ProjectResource.class);
+        env.jersey().register(HumanReviewResource.class);
         env.jersey().register(ReviewProfileResource.class);
         env.jersey().register(ReviewRequestResource.class);
         env.jersey().register(ReviewQueueResource.class);
@@ -417,9 +424,11 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(reviewProfileDao).to(ReviewProfileDao.class);
                 bind(reviewPublishService).to(ReviewPublishService.class);
                 bind(reviewAccessService).to(ReviewAccessService.class);
+                bind(humanReviewService).to(HumanReviewService.class);
                 bind(reviewRequestDao).to(ReviewRequestDao.class);
                 bind(reviewSnapshotDao).to(ReviewSnapshotDao.class);
                 bind(reviewQueueDao).to(ReviewQueueDao.class);
+                bind(humanReviewDao).to(HumanReviewDao.class);
                 bind(userBlockDao).to(UserBlockDao.class);
                 bind(registrationNotificationService).to(RegistrationNotificationService.class);
                 bind(sceneDao).to(SceneDao.class);

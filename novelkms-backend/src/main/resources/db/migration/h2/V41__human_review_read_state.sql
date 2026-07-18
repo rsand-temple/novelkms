@@ -1,0 +1,27 @@
+-- ===========================================================================
+-- V41 — Human Review Network slice 1D: author read-state on a submitted review
+--
+-- Slice 1D adds writing, submitting, and receiving reviews. The one piece of
+-- durable state it needs beyond the columns V38 already froze onto human_review
+-- is a marker for "the author has seen this feedback": that single fact drives
+-- the only notification Phase 1 ships — an unread badge on Reviews Received.
+--
+-- WHY A COLUMN, NOT A NOTIFICATION TABLE. The spec's notification model (§20) is
+-- deliberately narrow and transactional, and the sole event that matters to the
+-- Phase 1 workflow is "you received a review." A read marker on the review row
+-- expresses exactly that with no new table, no inbox, and no join: the badge is
+-- COUNT(submitted reviews of my requests WHERE author_read_at IS NULL), and
+-- opening a review stamps it. A dedicated review_notification table — with an
+-- inbox UI and multiple event types — is a better fit once 1F introduces close,
+-- withdrawal, and moderation events genuinely worth an inbox, and it can be added
+-- then without disturbing this column.
+--
+-- NULL means unread; a timestamp means the author has opened it at least once.
+-- The stamp is first-read only (set once, never rewritten), so it doubles as a
+-- lightweight "first seen at" without pretending to be a full read log.
+--
+-- TIMESTAMP is valid in both H2 and PostgreSQL, so this file is identical to the
+-- postgresql dialect file. One column, so H2's one-ALTER-per-column rule is met.
+-- ===========================================================================
+
+ALTER TABLE human_review ADD COLUMN author_read_at TIMESTAMP;
