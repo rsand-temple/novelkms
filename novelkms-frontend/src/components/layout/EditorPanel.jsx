@@ -16,6 +16,7 @@ import { DraftHeading } from '../../extensions/DraftHeading';
 import { TemplateToken } from '../../extensions/TemplateToken';
 import { SearchHighlight, searchHighlightKey } from '../../extensions/SearchHighlight';
 import { ReviewHighlight } from '../../extensions/ReviewHighlight';
+import { SmartTypography } from '../../extensions/SmartTypography';
 import { useProjectSettings } from '../../hooks/useProjectSettings';
 import { useScenes, useScene, useDeleteScene, SCENE_KEYS } from '../../hooks/useScenes';
 import { useDraftDocument, flattenDraftScenes } from '../../hooks/useDraftDocument';
@@ -895,6 +896,7 @@ export default function EditorPanel({
 			CharacterCount,
 			SearchHighlight,
 			ReviewHighlight,
+			SmartTypography,
 		],
 		content: '',
 		onUpdate: ({ editor }) => {
