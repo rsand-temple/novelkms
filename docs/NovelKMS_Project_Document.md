@@ -146,6 +146,20 @@ Frontend: "Publish for Human Review…" on the chapter nav context menu (manuscr
 `ReviewRequestDialog` (publish + edit, profile-gated); **My Requests** tab at `/app/community?tab=requests`
 with status/source-state chips, snapshot viewer, and lifecycle actions.
 
+### Human Review Network — Phase 1C (reviewer queue + package + snapshot reader)
+
+Reviewer read path — the first cross-user read in NovelKMS. `ReviewAccessService`
+authorizes each read explicitly (404 never 403; author reads own any status).
+`GET /review/queue` (filters genre/min-max words/sort; offset paging), `GET /review/packages/{id}`,
+`GET /review/packages/{id}/snapshot`. `ReviewQueueDao` applies all exclusions in SQL
+(OPEN+PUBLIC, not-own, author ACTIVE, not past `closes_at`, below `max_reviews` cap, no
+block either direction); `max_reviews` enforced from here. `UserBlockDao` read-only ahead
+of 1F. DTOs expose `authorHandle` only — never `authorUserId`/`sourceEntityId`; package
+view carries no `contentHtml`. Frontend Review Queue tab (`/app/community?tab=queue`,
+`ReviewQueuePanel`/`QueueEntryCard`); `ReviewPackageDialog` renders the frozen chapter in a
+sandboxed iframe (`SnapshotFrame`) — the first cross-user render boundary. Two JUnit suites
+(access matrix + HTTP/serialization contract).
+
 ## Known issues / watchlist
 
 - Billing: extend trial, revoke-family semantics, plan mapping, webhook diagnostics, Stripe reconciliation.
@@ -160,11 +174,14 @@ with status/source-state chips, snapshot viewer, and lifecycle actions.
 - Delete confirmation dialog wording ("cannot be undone" → "move to trash"; codex entries called "scenes").
 - Help topics are seed content; expand as product matures.
 - Artifacts: blob dir must be in backup set; restore de-dup appends "(n)" to whole name; nav-pane folder drag deferred.
-- Review network: slices 1A (profiles) and 1B (publish + My Requests) shipped; queue/reviews/metrics/
-  moderation tables exist but are unused. `review_context_item` unpopulated until Phase 2.
-  `ReviewRequestSummary` carries no `sourceEntityId`, so Republish cannot be offered from a My Requests
-  card — publishing runs from the chapter in the workspace. `max_reviews` is stored but unenforced
-  until 1C. `closes_at` is advisory; nothing sweeps it.
+- Review network: slices 1A–1C shipped (profiles, publish + My Requests, reviewer queue +
+  package + snapshot reader). Queue/reviews plumbing wired but `human_review` has no rows
+  until 1D; `reviewCount`/`max_reviews` therefore read 0/uncapped-effectively until then.
+  `review_context_item` unpopulated until Phase 2. `user_block`/`content_report` tables exist
+  but are read-only/unused until 1F. **Follow-up:** snapshot HTML is sanitized only at the
+  render boundary (sandboxed iframe); consider capture-time sanitization once a safelist can be
+  validated against real TipTap markup. `closes_at` still advisory in the author record; the
+  queue now honors it as an exclusion.
   
 ## Near-term next actions
 
@@ -174,7 +191,7 @@ with status/source-state chips, snapshot viewer, and lifecycle actions.
 4. Deferred AI findings view.
 5. Style-editor UI.
 6. Provider-variants Phase 3: provider-aware coverage/staleness, review-history grouping, fallback note.
-7. Review network slice 1C: queue, package view, snapshot reader.
+7. Review network slice 1D: write/submit review, Reviews Received, transactional notifications.
 
 ## Documentation maintenance rule
 

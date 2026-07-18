@@ -1039,11 +1039,25 @@ Phase 1 ships in six slices. V38 (whole Phase 1 schema) landed with 1A.
 | Slice | Scope                                                | Status                                             |
 | ----- | ---------------------------------------------------- | -------------------------------------------------- |
 | 1A    | Profiles & handles                                   | **Done** — V38, `review_profile`, `/app/community` |
-| 1B    | Publish chapter → request + snapshot; My Requests    | **Done** — V39, `review_request`/`review_snapshot`, `/app/community?tab=requests` |
-| 1C    | Queue, package view, snapshot reader                 | Next                                               |
-| 1D    | Write/submit review; Reviews Received; notifications |                                                    |
+| 1B    | Publish chapter → request + snapshot; My Requests    | **Done** — V39; backend + frontend shipped |
+| 1C    | Queue, package view, snapshot reader                 | **Done** — backend + frontend; reviewer read path |
+| 1D    | Write/submit review; Reviews Received; notifications | Next |
 | 1E    | Contribution metrics                                 |                                                    |
 | 1F    | Blocking, reporting, admin removal                   |                                                    |
+
+**Slice 1C (reviewer read path).** `ReviewAccessService` is the first cross-user
+read seam — the tenant filter's `default -> true` lets `/review/...` through, so
+authorization is explicit here, returning 404 (never 403) for anything a viewer may
+not see; the author always reads their own in any status. Endpoints `GET /review/queue`
+(genre / min-max words / sort newest|oldest|fewest, offset paging), `GET /review/packages/{id}`,
+`GET /review/packages/{id}/snapshot`. `ReviewQueueDao` applies every exclusion in SQL:
+OPEN+PUBLIC, not-own, author ACTIVE, not past `closes_at`, below `max_reviews` cap,
+no block either direction. `max_reviews` is now enforced (was advisory through 1B).
+Block-awareness is wired read-only (`UserBlockDao`) ahead of 1F. Reviewer-facing DTOs
+expose `authorHandle` only — never `authorUserId` or `sourceEntityId`; the package view
+carries no `contentHtml`. Frontend Review Queue tab at `/app/community?tab=queue`;
+the snapshot reader renders another user's HTML in a sandboxed iframe, the first
+cross-user render boundary in the app.
 
 Resolved open questions (§30.2): **1** chapter-only initially; **2** anonymity deferred to Phase 2;
 **5** closed requests stay readable to participants indefinitely, drop out of the queue; **6** no;
@@ -1051,4 +1065,5 @@ withdraw-and-rewrite instead; **7** yes; **9** yes, visibility is a disclosure s
 contribution setting; **13** any authenticated user who can see the package; **15/16** terms-level
 prohibition plus a self-disclosure flag (`human_review.ai_assisted`).
 
-Still open: **3, 4** (reviewer copy/download), **8, 10, 11, 12, 14**.
+Still open: **3, 4** (reviewer copy/download — 1C ships a "don't redistribute" watermark
+but no technical copy-block), **8, 10, 11, 12, 14**.

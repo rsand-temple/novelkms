@@ -361,3 +361,44 @@ whole request rather than seeding from `ReviewRequestSummary`: the summary omits
 blank three fields silently. Feedback types are stored as stable UPPER_SNAKE keys with a UI-side label
 map, so relabeling is never a data migration. Visibility is not exposed: the backend defaults to
 PUBLIC, and INVITE would produce a package no reviewer can reach until invitations exist.
+
+### V39 frontend (reconstitution note)
+
+The 1B frontend was originally delivered as a bundle that was never committed; the
+later `/app` static-site split moved `master` on, so it was rebuilt against current
+`master`. `ReviewRequestDialog` loads the full request in edit mode rather than
+seeding from `ReviewRequestSummary` (the summary omits `authorQuestions`/
+`contentWarnings`/`maxReviews`; PUT rewrites every column). The publish entry point
+lives on the chapter nav context menu, not in My Requests, because summaries carry no
+`sourceEntityId` to republish from. `RequestCard`'s offered actions are derived from
+status to match the service's legal transitions, so the UI never triggers a 409.
+
+### Slice 1C — reviewer read path (backend)
+
+Reader seam split from author CRUD: `ReviewAccessService` (cross-user reads) vs
+`ReviewPublishService` (author's own). Read path named `/review/packages/...` not
+`/review/queue/...` so the URL stays honest once a CLOSED package stays readable to
+participants (§30.2 Q5) but has dropped out of the queue. All queue exclusions live in
+one `ReviewQueueDao` statement: author-profile join filters SUSPENDED, symmetric
+`NOT EXISTS` block check, left-joined submitted-review aggregate drives the cap.
+404-not-403 for every cross-user denial; author reads own in any status. Participation
+gated on a handle (409 `profile_required`); suspended viewer 403. `max_reviews` and
+`reviewCount` wired ahead of 1D (both read 0 until reviews exist); `UserBlockDao`
+read-only ahead of 1F. New DTOs `ReviewQueueEntry`/`ReviewPackage` expose handles, never
+user/source ids. H2 test DB is default mode (no `MODE=PostgreSQL`), so queue SQL stays
+plain-standard (`LIMIT ? OFFSET ?`, `COALESCE`, `LOWER()`, `NOT EXISTS`). Test-harness
+note: `ResourceExtension.target(path)` percent-encodes a `?` folded into the path — query
+params must be attached with `.queryParam(...)`.
+
+### Slice 1C — cross-user render boundary (frontend)
+
+The reviewer snapshot reader renders another user's HTML, so `RichTextPreview`
+(self-trust `dangerouslySetInnerHTML`) is unsafe here — a hostile author's
+`<img onerror=…>` would be live XSS in a reviewer's session. `SnapshotFrame` uses
+`<iframe sandbox="" srcDoc=…>`: opaque origin, no scripting, faithful markup,
+self-contained CSS, no new dependency. Capture-time sanitization is deliberately
+deferred — a Jsoup safelist could strip custom TipTap markup (`data-style`, resizable
+images, font-size spans) and can't be validated without a build; the frozen snapshot
+stays faithful, and safety is enforced at the render boundary where the trust
+transition actually happens. Queue uses `useInfiniteQuery` (offset paging); filters
+commit on Apply for transparency (§12); 409 → claim-a-handle prompt.
