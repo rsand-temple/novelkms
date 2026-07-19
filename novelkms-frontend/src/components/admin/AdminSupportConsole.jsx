@@ -31,6 +31,7 @@ import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom'
 import MoreTimeIcon from '@mui/icons-material/MoreTime'
 import SearchIcon from '@mui/icons-material/Search'
 import { adminApi } from '../../api/admin'
+import AdminModerationPanel from './AdminModerationPanel'
 import { LogoMark } from '../branding/Logo'
 
 function valueOrDash(value) {
@@ -960,6 +961,7 @@ export default function AdminSupportConsole() {
 					<Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ px: 1 }}>
 						<Tab value="overview" label="Overview" />
 						<Tab value="users" label="Users" />
+						<Tab value="moderation" label="Moderation" />
 					</Tabs>
 				</Paper>
 			</Box>
@@ -972,6 +974,8 @@ export default function AdminSupportConsole() {
 						<AdminOverview metrics={metrics} loading={loadingMetrics} onRefresh={loadMetrics} />
 					</Stack>
 				</Box>
+			) : tab === 'moderation' ? (
+				<AdminModerationPanel />
 			) : (
 				<Box sx={{ p: 2, display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '360px 1fr' }, gap: 2 }}>				<Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', bgcolor: 'background.paper' }}>
 					<Box component="form" onSubmit={handleSearchSubmit} sx={{ p: 2 }}>

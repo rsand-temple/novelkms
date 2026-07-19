@@ -1,6 +1,7 @@
 import { Box, Button, Chip, Paper, Stack, Typography } from '@mui/material'
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined'
 import { feedbackTypeLabel } from '../../utils/reviewFeedbackTypes'
+import ReviewCardMenu from './ReviewCardMenu'
 
 // A coarse "published N ago" without pulling in a date library — the queue only
 // needs a sense of freshness, not a precise timestamp.
@@ -44,6 +45,10 @@ export default function QueueEntryCard({ entry, onOpen }) {
 							label="Content warning"
 						/>
 					)}
+					<ReviewCardMenu
+						handle={entry.authorHandle}
+						contentTarget={{ type: 'REQUEST', id: entry.id, label: 'this request' }}
+					/>
 				</Stack>
 
 				{entry.description && (

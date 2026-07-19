@@ -18,6 +18,7 @@ import {
 } from '@mui/material'
 import { feedbackTypeLabel } from '../../utils/reviewFeedbackTypes'
 import { htmlToPlain, plainToHtml } from '../../utils/reviewBody'
+import ReviewCardMenu from './ReviewCardMenu'
 import { useReviewPackage, usePackageSnapshot } from '../../hooks/useReviewQueue'
 import {
 	useMyReview,
@@ -224,7 +225,17 @@ export default function ReviewPackageDialog({ open, onClose, requestId }) {
 
 	return (
 		<Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-			<DialogTitle>{pkg?.title || 'Review package'}</DialogTitle>
+			<DialogTitle sx={{ pr: 2 }}>
+				<Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+					<Box sx={{ flexGrow: 1, minWidth: 0 }}>{pkg?.title || 'Review package'}</Box>
+					{pkg && (
+						<ReviewCardMenu
+							handle={pkg.authorHandle}
+							contentTarget={{ type: 'REQUEST', id: requestId, label: 'this request' }}
+						/>
+					)}
+				</Stack>
+			</DialogTitle>
 			<DialogContent dividers>
 				{isLoading ? (
 					<Stack sx={{ alignItems: 'center', py: 4 }}><CircularProgress /></Stack>

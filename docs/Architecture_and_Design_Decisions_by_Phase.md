@@ -478,3 +478,46 @@ Endpoints on `ReviewProfileResource`: `GET /review/profile/metrics` (self, 404 `
 `GET /review/profiles/{handle}/metrics`. Deferred: public/private split (every submitted review is
 PRIVATE in Phase 1, so the public count is dead) and recent-activity (leaks cadence). Frontend wires
 self-view only; the cross-user endpoint ships tested with no UI consumer yet.
+
+### Slice 1F — Blocking, reporting, admin removal
+
+Phase 1's final slice, and its safety floor. **No migration** — `user_block` and
+`content_report` were part of V38's whole-Phase-1 schema, read-only until now.
+
+**Two resources, two trust levels.** `ReviewSafetyResource` is user-facing and
+active-profile-gated (409 `profile_required` / 403 suspended); `AdminModerationResource`
+is `@RolesAllowed(ADMIN)`. Both keep the cross-user keyhole from earlier slices:
+everything on the wire is a handle, cross-user denial is 404 never 403. A report's
+PROFILE target is addressed by `targetHandle` and resolved to a profile id server-side —
+there is deliberately no bare USER target, so a report always names a concrete artifact
+or a public profile, never an opaque account.
+
+**Auto-resolve on removal.** Taking content down (`requests/{id}/remove`,
+`reviews/{id}/remove`) or suspending a profile also auto-resolves that target's OPEN
+reports in the same transaction. The moderation queue therefore never shows a report
+whose subject has already been actioned, without a second admin step or a reconciliation
+sweep — the removal *is* the resolution.
+
+**Report is file-and-forget.** The reporter gets back only `{id, status}` and cannot
+list their own reports in Phase 1. This sidesteps a retaliation/harassment surface
+(a visible "my reports" feed invites score-keeping) while the audit log still preserves
+everything a moderator or dispute needs.
+
+**Block is symmetric and idempotent.** A block hides the counterparty's requests from
+the blocker's queue and their reviews from both review lists, in both directions;
+re-blocking is a no-op and unblocking a non-blocked handle still returns cleanly. The
+objective-metric rule (§6.5) is untouched: reviews-received counts are *not*
+block-filtered, so a block changes what you see, never the public totals.
+
+**Frontend — one shared menu, one shared dialog.** Rather than duplicate block/report
+wiring into four cards, `ReviewCardMenu` owns the ⋯ trigger, the block mutation (with an
+Undo-in-snackbar that exercises unblock), and a conditionally-mounted `ReportDialog`;
+each surface drops in one element. The ⋯ trigger is a literal glyph, not an icon import —
+no `MoreVert`/`MoreHoriz` is proven present in node_modules, and an absent icon fails the
+Rolldown build. Menu children stay flat (no Fragment wrappers) per the MUI child-indexing
+rule. Block/unblock invalidation is scoped to exactly the block-filtered reads (blocks
+list, queue, received, writing). The admin surface is a self-contained
+`AdminModerationPanel` mounted from a new console tab (imperative useState + adminApi,
+matching the console rather than introducing react-query there); one `{reason, note}`
+dialog drives every moderation action, and profile suspension is keyed by handle because
+`ContentReportView` carries a target id but not a target handle.

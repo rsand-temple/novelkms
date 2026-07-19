@@ -9,6 +9,7 @@ import {
 	Typography,
 } from '@mui/material'
 import { htmlToPlain } from '../../utils/reviewBody'
+import ReviewCardMenu from './ReviewCardMenu'
 import { useReviewsReceived, useMarkReceivedRead } from '../../hooks/useHumanReviews'
 
 /**
@@ -42,9 +43,13 @@ function ReceivedCard({ row, busy, onMarkRead }) {
 							{sourceLine ? ` · ${sourceLine}` : ''}
 						</Typography>
 					</Box>
-					<Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', justifyContent: 'flex-end', rowGap: 0.5 }}>
+					<Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', rowGap: 0.5 }}>
 						{!row.read && <Chip size="small" color="primary" label="New" />}
 						{row.aiAssisted && <Chip size="small" variant="outlined" label="AI-assisted" />}
+						<ReviewCardMenu
+							handle={row.reviewerHandle}
+							contentTarget={{ type: 'REVIEW', id: row.reviewId, label: 'this review' }}
+						/>
 					</Stack>
 				</Stack>
 

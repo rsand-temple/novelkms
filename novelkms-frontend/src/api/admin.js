@@ -48,4 +48,43 @@ export const adminApi = {
 	getOverviewMetrics: async () => (
 		await client.get('/admin/metrics/overview')
 	).data,
+
+	// --- Human-review moderation (slice 1F) ---
+	//
+	// Reports arrive from users as file-and-forget; an admin triages them here. Every
+	// target on the wire is addressed by its own id or (for a profile) by handle —
+	// never a raw user id. Removing a request or review, or suspending a profile,
+	// auto-resolves that target's still-OPEN reports server-side, so the reports list
+	// stays honest without a second call.
+
+	/** ContentReportView[]. status blank/ALL returns every report. */
+	listModerationReports: async (status = '', limit = 50) => {
+		const params = { limit }
+		if (status && status !== 'ALL') params.status = status
+		return (await client.get('/admin/moderation/reports', { params })).data
+	},
+
+	resolveReport: async (reportId, body) => (
+		await client.post(`/admin/moderation/reports/${encodeURIComponent(reportId)}/resolve`, body)
+	).data,
+
+	dismissReport: async (reportId, body) => (
+		await client.post(`/admin/moderation/reports/${encodeURIComponent(reportId)}/dismiss`, body)
+	).data,
+
+	removeRequest: async (requestId, body) => (
+		await client.post(`/admin/moderation/requests/${encodeURIComponent(requestId)}/remove`, body)
+	).data,
+
+	removeReview: async (reviewId, body) => (
+		await client.post(`/admin/moderation/reviews/${encodeURIComponent(reviewId)}/remove`, body)
+	).data,
+
+	suspendProfile: async (handle, body) => (
+		await client.post(`/admin/moderation/profiles/${encodeURIComponent(handle)}/suspend`, body)
+	).data,
+
+	reinstateProfile: async (handle, body) => (
+		await client.post(`/admin/moderation/profiles/${encodeURIComponent(handle)}/reinstate`, body)
+	).data,
 }

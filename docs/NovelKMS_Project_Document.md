@@ -215,6 +215,39 @@ zero for everyone. Frontend: Contribution stat block on My Profile (self only) v
 `useMyReviewProfileMetrics`; the cross-user endpoint ships backend-ready and tested but has no UI
 consumer until a public-profile page or queue click-through exists.
 
+### Human Review Network — Phase 1F (blocking, reporting, admin removal)
+
+The final Phase 1 slice. No migration — V38 already froze `user_block` and
+`content_report`; 1F is the code that finally writes and reads them.
+
+**User-facing safety.** `ReviewSafetyResource @Path("/review")` (active-profile gated:
+409 `profile_required` / 403 suspended): `GET/POST /review/blocks`,
+`DELETE /review/blocks/{handle}` (block idempotent both ways, block-self 400), and
+`POST /review/reports`. A report targets REQUEST | REVIEW | PROFILE (PROFILE by
+`targetHandle`, resolved to a profile id server-side; no bare USER target); reasons are
+SPAM | HARASSMENT | COPYRIGHT | HATE | EXPLICIT | OTHER; `detail` ≤ 2000 chars. Reports
+are file-and-forget — the reporter cannot list their own.
+
+**Admin moderation.** `AdminModerationResource @Path("/admin/moderation")
+@RolesAllowed(ADMIN)`: `GET /reports?status=&limit=` (rows are `ContentReportView`,
+reporter shown by handle only), `POST /reports/{id}/resolve|dismiss`,
+`POST /requests/{id}/remove`, `POST /reviews/{id}/remove`,
+`POST /profiles/{handle}/suspend|reinstate` — all `{reason, note}`, all audited.
+Removing a request/review or suspending a profile auto-resolves that target's OPEN
+reports. Cross-user denial is 404 everywhere; everything on the wire is by handle.
+
+**Frontend.** `api/reviewSafety.js` + `hooks/useReviewSafety.js` (blocks list;
+block/unblock/report mutations, block-invalidation scoped to blocks + queue + received +
+writing); `utils/reviewReportReasons.js` (stable-key → label map); `ReportDialog`
+(shared, reason select + 2000-char detail); `ReviewCardMenu` (the ⋯ overflow — block +
+report — dropped into all four card surfaces: queue, package dialog, Reviews I'm
+Writing, Reviews Received). The ⋯ trigger is a glyph, not an icon import (no MoreVert
+proven present; an absent icon fails the Rolldown build). My Profile gains a self-only
+"Blocked writers" list with unblock. The admin console gains a Moderation tab
+(`AdminModerationPanel`): a status-filtered report queue with resolve/dismiss and
+content removal, plus a handle-keyed profile suspend/reinstate tool. Received-review and
+report bodies stay plain text; no new render boundary.
+
 ## Known issues / watchlist
 
 - Billing: extend trial, revoke-family semantics, plan mapping, webhook diagnostics, Stripe reconciliation.
@@ -229,28 +262,24 @@ consumer until a public-profile page or queue click-through exists.
 - Delete confirmation dialog wording ("cannot be undone" → "move to trash"; codex entries called "scenes").
 - Help topics are seed content; expand as product matures.
 - Artifacts: blob dir must be in backup set; restore de-dup appends "(n)" to whole name; nav-pane folder drag deferred.
-- Review network: slices 1A–1D shipped (profiles, publish + My Requests, reviewer queue +
-  package + snapshot reader). 
-  `review_context_item` unpopulated until Phase 2. `user_block`/`content_report` tables exist
-  but are read-only/unused until 1F. **Follow-up:** snapshot HTML is sanitized only at the
-  render boundary (sandboxed iframe); consider capture-time sanitization once a safelist can be
-  validated against real TipTap markup. `closes_at` still advisory in the author record; the
-  queue now honors it as an exclusion.
-- Review network: §30.2 Q5 participant-read of paused/closed packages not wired —
-  `ReviewAccessService.authorizeRead` still requires OPEN+PUBLIC for non-authors.
-  Reviewers can withdraw on any request state but cannot re-open the snapshot reader
-  once a request leaves OPEN. Fix = participant-aware read in `ReviewAccessService`
-  (ripples its constructor + 2 test files); own slice.
+- Review network: slices 1A–1F shipped. Phase 1 is complete (profiles, publish + My
+  Requests, reviewer queue + package + snapshot reader, write/submit/receive,
+  contribution metrics, blocking/reporting/admin removal). `user_block` and
+  `content_report` are now written/read by the safety + moderation endpoints.
+  `review_context_item` remains unpopulated until Phase 2. **Follow-up:** snapshot HTML
+  is still sanitized only at the render boundary (sandboxed iframe); consider
+  capture-time sanitization once a safelist can be validated against real TipTap markup.
+- Review network: §30.2 Q5 participant-read of paused/closed packages still not wired —
+  `ReviewAccessService.authorizeRead` requires OPEN+PUBLIC for non-authors. Own slice.
   
 ## Near-term next actions
 
-1. Admin billing: extend trial, revoke-family semantics, plan mapping, webhook diagnostics.
+1. Admin billing: revoke-family semantics, plan mapping, webhook diagnostics.
 2. Frontend Phase 2 cleanup.
 3. ePub export repair.
 4. Deferred AI findings view.
 5. Style-editor UI.
 6. Provider-variants Phase 3: provider-aware coverage/staleness, review-history grouping, fallback note.
-7. Review network slice 1F: blocking, content reports, admin removal (activates `user_block`/`content_report`, adds block-aware profile visibility).
 
 ## Documentation maintenance rule
 

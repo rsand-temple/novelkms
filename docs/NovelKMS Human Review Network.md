@@ -1043,7 +1043,7 @@ Phase 1 ships in six slices. V38 (whole Phase 1 schema) landed with 1A.
 | 1C    | Queue, package view, snapshot reader                 | **Done** — backend + frontend; reviewer read path |
 | 1D    | Write/submit review; Reviews Received; notifications | **Done** — V41; backend + frontend shipped |
 | 1E    | Contribution metrics                                 | **Done** — no migration; `ReviewMetricsDao`, `/review/.../metrics` |
-| 1F    | Blocking, reporting, admin removal                   | *Next*                                             |
+| 1F    | Blocking, reporting, admin removal                   | **Done**  — no migration                           |
 
 **Slice 1C (reviewer read path).** `ReviewAccessService` is the first cross-user
 read seam — the tenant filter's `default -> true` lets `/review/...` through, so
@@ -1137,3 +1137,37 @@ reviews can be published) and recent-activity (leaks contributor cadence).
 **Verification.** Static Java check ✓, esbuild transform ✓, `ReviewMetricsDaoTest` (zero-state,
 draft-excluded, withdraw-removes, reviewer sums, received count, block-objectivity) ✓,
 `ReviewProfileResourceTest` updated for the new constructor arg. `mvn test` pending (Maven unavailable).
+
+## Human Review Network — Slice 1F (blocking / reporting / admin removal) — DELIVERED
+
+Closes Phase 1. **No migration** — V38 froze `user_block` and `content_report`; 1F is
+the code that writes and reads them.
+
+**User-facing.** `ReviewSafetyResource @Path("/review")`, active-profile gated (409
+`profile_required` / 403 suspended): `GET/POST /review/blocks` (idempotent both
+directions, block-self 400), `DELETE /review/blocks/{handle}`, `POST /review/reports`.
+Report `targetType` ∈ REQUEST | REVIEW | PROFILE (PROFILE by `targetHandle` →
+profile.id server-side; no bare USER target); `reason` ∈ SPAM | HARASSMENT | COPYRIGHT |
+HATE | EXPLICIT | OTHER; `detail` ≤ 2000. File-and-forget — no reporter-facing list.
+
+**Admin.** `AdminModerationResource @Path("/admin/moderation") @RolesAllowed(ADMIN)`:
+`GET /reports?status=&limit=` (`ContentReportView` — reporter by handle, never user_id),
+`/reports/{id}/resolve|dismiss`, `/requests/{id}/remove`, `/reviews/{id}/remove`,
+`/profiles/{handle}/suspend|reinstate` — all `{reason, note}`, all audited. Removing a
+request/review or suspending a profile auto-resolves that target's OPEN reports.
+Cross-user denial 404 everywhere; everything by handle.
+
+**Frontend.** `reviewSafety.js` API + `useReviewSafety` hooks (block/unblock invalidate
+blocks + queue + received + writing — the block-filter's blast radius); `ReportDialog`
+(shared) and `ReviewCardMenu` (⋯ block/report) on all four surfaces; "Blocked writers"
+list on My Profile (self, unblock); Moderation tab in the admin console
+(`AdminModerationPanel`) — status-filtered report queue + resolve/dismiss + content
+removal + handle-keyed profile suspend/reinstate. ⋯ trigger is a glyph (no MoreVert
+proven present). No new render boundary — report/received bodies are plain text.
+
+**Resolved open question (§30.2): 14** (moderation tools before a controlled pilot) —
+reporting, blocking, request/review removal, profile suspension, and audit logging are
+in place, satisfying the §21 minimum-safety list for an invited pilot.
+
+**Verification:** backend static + JUnit green (committed with Part 1); frontend esbuild
+transform ✓ on all 13 files. `mvn`/Vite build pending (unavailable in the build env).

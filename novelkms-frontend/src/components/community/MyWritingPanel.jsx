@@ -15,6 +15,7 @@ import {
 	Typography,
 } from '@mui/material'
 import ReviewPackageDialog from './ReviewPackageDialog'
+import ReviewCardMenu from './ReviewCardMenu'
 import { useReviewsWriting, useWithdrawReview } from '../../hooks/useHumanReviews'
 
 const REVIEW_STATUS_CHIP = {
@@ -55,6 +56,10 @@ function WritingCard({ row, busy, onContinue, onWithdraw }) {
 						</Typography>
 					</Box>
 					<Chip size="small" color={statusChip.color} label={statusChip.label} />
+					<ReviewCardMenu
+						handle={row.authorHandle}
+						contentTarget={{ type: 'REQUEST', id: row.requestId, label: 'this request' }}
+					/>
 				</Stack>
 
 				{stateNote && (

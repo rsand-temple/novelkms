@@ -23,6 +23,7 @@ import {
 	useCreateReviewProfile,
 	useUpdateReviewProfile,
 } from '../../hooks/useReviewProfile'
+import { useMyBlocks, useUnblockUser } from '../../hooks/useReviewSafety'
 
 const MAX_BIO = 2000
 
@@ -323,7 +324,95 @@ function ProfileForm({ profile }) {
 					</Typography>
 				)}
 			</Stack>
+
+			{!isNew && <Divider />}
+			{!isNew && <BlockedUsers />}
 		</Stack>
+	)
+}
+
+/**
+ * The signed-in user's block list (slice 1F), self only. A blocked writer's
+ * requests drop out of your queue and their reviews out of your received/writing
+ * lists, in both directions — this section is where you see who that is and lift a
+ * block. Only mounted for an existing profile, so the underlying endpoint never hits
+ * its handle-less 409.
+ */
+function BlockedUsers() {
+	const { data: blocks, isPending, isError, error } = useMyBlocks(true)
+	const unblock = useUnblockUser()
+
+	const title = (
+		<Typography variant="overline" color="text.secondary">Blocked writers</Typography>
+	)
+
+	if (isPending) {
+		return (
+			<Paper variant="outlined" sx={{ p: 2.5 }}>
+				<Stack spacing={1.5}>
+					{title}
+					<Stack sx={{ alignItems: 'center', py: 1 }}><CircularProgress size={22} /></Stack>
+				</Stack>
+			</Paper>
+		)
+	}
+
+	if (isError) {
+		return (
+			<Paper variant="outlined" sx={{ p: 2.5 }}>
+				<Stack spacing={1.5}>
+					{title}
+					<Alert severity="error">
+						{error?.response?.data?.message ?? 'Could not load your blocked writers.'}
+					</Alert>
+				</Stack>
+			</Paper>
+		)
+	}
+
+	const list = blocks ?? []
+
+	return (
+		<Paper variant="outlined" sx={{ p: 2.5 }}>
+			<Stack spacing={1.5}>
+				{title}
+				{list.length === 0 ? (
+					<Typography variant="body2" color="text.secondary">
+						You haven't blocked anyone. Blocking a writer hides their requests and reviews
+						from you, both ways. You can block someone from the ⋯ menu on their card.
+					</Typography>
+				) : (
+					<Stack spacing={1}>
+						{list.map(b => (
+							<Stack
+								key={b.handle}
+								direction="row"
+								spacing={1}
+								sx={{ alignItems: 'center' }}
+							>
+								<Box sx={{ flexGrow: 1, minWidth: 0 }}>
+									<Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+										@{b.handle}{b.displayName ? ` (${b.displayName})` : ''}
+									</Typography>
+									{b.blockedAt && (
+										<Typography variant="caption" color="text.secondary">
+											Blocked {new Date(b.blockedAt).toLocaleDateString()}
+										</Typography>
+									)}
+								</Box>
+								<Button
+									size="small"
+									disabled={unblock.isPending}
+									onClick={() => unblock.mutate(b.handle)}
+								>
+									Unblock
+								</Button>
+							</Stack>
+						))}
+					</Stack>
+				)}
+			</Stack>
+		</Paper>
 	)
 }
 
