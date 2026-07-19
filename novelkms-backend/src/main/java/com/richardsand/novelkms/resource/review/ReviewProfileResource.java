@@ -13,6 +13,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.auth.CurrentUser;
 import com.richardsand.novelkms.dao.review.ReviewMetricsDao;
 import com.richardsand.novelkms.dao.review.ReviewProfileDao;
+import com.richardsand.novelkms.dao.review.UserBlockDao;
 import com.richardsand.novelkms.model.review.ProfileMetrics;
 import com.richardsand.novelkms.model.review.ReviewProfile;
 
@@ -104,11 +105,13 @@ public class ReviewProfileResource {
 
     private final ReviewProfileDao dao;
     private final ReviewMetricsDao metricsDao;
+    private final UserBlockDao     blockDao;
 
     @Inject
-    public ReviewProfileResource(ReviewProfileDao dao, ReviewMetricsDao metricsDao) {
+    public ReviewProfileResource(ReviewProfileDao dao, ReviewMetricsDao metricsDao, UserBlockDao blockDao) {
         this.dao = dao;
         this.metricsDao = metricsDao;
+        this.blockDao = blockDao;
     }
 
     /** Create/update payload. Deliberately has no {@code status} — suspension is an admin action. */
@@ -295,11 +298,16 @@ public class ReviewProfileResource {
 
     /**
      * Resolves a handle to a profile the caller is permitted to see, or empty when
-     * it should read as absent — missing, HIDDEN, or SUSPENDED. The owner always
-     * sees their own row regardless of visibility so a hidden profile can still be
-     * previewed by its owner. This is the network's first legitimate cross-user
-     * read gate; both {@link #byHandle} and {@link #metricsByHandle} go through it so
-     * the two paths cannot drift.
+     * it should read as absent — missing, HIDDEN, SUSPENDED, or blocked in either
+     * direction. The owner always sees their own row regardless of visibility so a
+     * hidden profile can still be previewed by its owner. This is the network's first
+     * legitimate cross-user read gate; both {@link #byHandle} and
+     * {@link #metricsByHandle} go through it so the two paths cannot drift.
+     *
+     * <p>The block check is the slice-1F wiring the earlier slices left a seat for:
+     * blocking is symmetric at read time (§21), so a block in <em>either</em>
+     * direction makes the other's profile read as absent, exactly as it already does
+     * for the queue and the package reader.
      */
     private Optional<ReviewProfile> readableByHandle(String handle, ContainerRequestContext request)
             throws SQLException {
@@ -310,13 +318,22 @@ public class ReviewProfileResource {
         }
 
         ReviewProfile profile = found.get();
-        boolean       isOwner = profile.getUserId().equals(CurrentUser.id(request));
+        UUID          viewerId = CurrentUser.id(request);
+        boolean       isOwner = profile.getUserId().equals(viewerId);
 
-        if (!isOwner
-                && (ReviewProfileDao.VISIBILITY_HIDDEN.equals(profile.getVisibility())
-                        || ReviewProfileDao.STATUS_SUSPENDED.equals(profile.getStatus()))) {
+        if (isOwner) {
+            return Optional.of(profile);
+        }
+
+        if (ReviewProfileDao.VISIBILITY_HIDDEN.equals(profile.getVisibility())
+                || ReviewProfileDao.STATUS_SUSPENDED.equals(profile.getStatus())) {
             return Optional.empty();
         }
+
+        if (blockDao.blockedBetween(viewerId, profile.getUserId())) {
+            return Optional.empty();
+        }
+
         return Optional.of(profile);
     }
 

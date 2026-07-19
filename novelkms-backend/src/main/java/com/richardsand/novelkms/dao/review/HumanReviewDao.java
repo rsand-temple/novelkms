@@ -250,6 +250,24 @@ public class HumanReviewDao {
         }
     }
 
+    /**
+     * Moderation status change (slice 1F). Unlike {@link #submit}/{@link #withdraw},
+     * this is NOT scoped by {@code reviewer_user_id}: an administrator removes a
+     * review they did not write. Reachable only from {@code AdminModerationResource}
+     * ({@code @RolesAllowed(ADMIN)}), so the role annotation — not a WHERE clause —
+     * is the guard. Setting REMOVED drops the review from every list read for free:
+     * the received/metrics reads count SUBMITTED only, and the writing read filters
+     * to DRAFT/SUBMITTED. The caller captures the prior status for the audit trail
+     * before invoking this.
+     */
+    public Optional<HumanReview> adminSetStatus(UUID id, String status) throws SQLException {
+        String sql = "UPDATE human_review SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        return applyUpdate(sql, ps -> {
+            ps.setString(1, status);
+            ps.setObject(2, id);
+        }, id);
+    }
+
     // =========================================================================
     // Counts
     // =========================================================================

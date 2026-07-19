@@ -53,6 +53,7 @@ import com.richardsand.novelkms.dao.chapter.ChapterMemoryDao;
 import com.richardsand.novelkms.dao.chapter.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
 import com.richardsand.novelkms.dao.codex.CodexDao;
+import com.richardsand.novelkms.dao.review.ContentReportDao;
 import com.richardsand.novelkms.dao.review.HumanReviewDao;
 import com.richardsand.novelkms.dao.review.ReviewMetricsDao;
 import com.richardsand.novelkms.dao.review.ReviewProfileDao;
@@ -92,6 +93,7 @@ import com.richardsand.novelkms.resource.UserPreferenceResource;
 import com.richardsand.novelkms.resource.admin.AdminAuditResource;
 import com.richardsand.novelkms.resource.admin.AdminBillingResource;
 import com.richardsand.novelkms.resource.admin.AdminMetricsResource;
+import com.richardsand.novelkms.resource.admin.AdminModerationResource;
 import com.richardsand.novelkms.resource.admin.AdminSystemResource;
 import com.richardsand.novelkms.resource.admin.AdminUserResource;
 import com.richardsand.novelkms.resource.ai.AiContextResource;
@@ -105,6 +107,7 @@ import com.richardsand.novelkms.resource.review.ReviewProfileResource;
 import com.richardsand.novelkms.resource.review.ReviewPublishResource;
 import com.richardsand.novelkms.resource.review.ReviewRequestResource;
 import com.richardsand.novelkms.resource.review.ReviewQueueResource;
+import com.richardsand.novelkms.resource.review.ReviewSafetyResource;
 import com.richardsand.novelkms.resource.template.BookSummaryTemplateResource;
 import com.richardsand.novelkms.resource.template.ChapterSummaryTemplateResource;
 import com.richardsand.novelkms.resource.template.EditorialTemplateResource;
@@ -128,6 +131,7 @@ import com.richardsand.novelkms.service.ReviewAccessService;
 import com.richardsand.novelkms.service.StarterContentService;
 import com.richardsand.novelkms.service.TrashService;
 import com.richardsand.novelkms.service.admin.AdminBillingService;
+import com.richardsand.novelkms.service.admin.AdminModerationService;
 import com.richardsand.novelkms.service.admin.AdminUserDeleteService;
 import com.richardsand.novelkms.service.tools.CalendarToolsService;
 import com.richardsand.novelkms.service.tools.OpenMeteoWeatherProvider;
@@ -238,6 +242,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         ReviewMetricsDao      reviewMetricsDao      = new ReviewMetricsDao(ds);
         HumanReviewDao        humanReviewDao        = new HumanReviewDao(ds);
         UserBlockDao          userBlockDao          = new UserBlockDao(ds);
+        ContentReportDao      contentReportDao      = new ContentReportDao(ds);
         SceneDao              sceneDao              = new SceneDao(ds);
         TemplateDao           templateDao           = new TemplateDao(ds);
         TenantAccessDao       tenantAccessDao       = new TenantAccessDao(ds);
@@ -254,6 +259,13 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 adminAuditDao,
                 adminUserDao,
                 authDao,
+                mapper);
+        AdminModerationService adminModerationService = new AdminModerationService(
+                contentReportDao,
+                reviewRequestDao,
+                humanReviewDao,
+                reviewProfileDao,
+                adminAuditDao,
                 mapper);
         ArchiveService      archiveService      = new ArchiveService(archiveDao);
         ArtifactStorage     artifactStorage     = new ArtifactStorage(
@@ -328,6 +340,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(AdminAuditResource.class);
         env.jersey().register(AdminBillingResource.class);
         env.jersey().register(AdminMetricsResource.class);
+        env.jersey().register(AdminModerationResource.class);
         env.jersey().register(AdminUserResource.class);
         env.jersey().register(AdminSystemResource.class);
         env.jersey().register(AiFormInstructionsResource.class);
@@ -362,6 +375,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         env.jersey().register(ReviewPublishResource.class);
         env.jersey().register(ReviewRequestResource.class);
         env.jersey().register(ReviewQueueResource.class);
+        env.jersey().register(ReviewSafetyResource.class);
         env.jersey().register(SceneResource.class);
         env.jersey().register(StripeWebhookResource.class);
         env.jersey().register(StyleResource.class);
@@ -435,6 +449,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(reviewMetricsDao).to(ReviewMetricsDao.class);
                 bind(humanReviewDao).to(HumanReviewDao.class);
                 bind(userBlockDao).to(UserBlockDao.class);
+                bind(contentReportDao).to(ContentReportDao.class);
+                bind(adminModerationService).to(AdminModerationService.class);
                 bind(registrationNotificationService).to(RegistrationNotificationService.class);
                 bind(sceneDao).to(SceneDao.class);
                 bind(starterContentService).to(StarterContentService.class);

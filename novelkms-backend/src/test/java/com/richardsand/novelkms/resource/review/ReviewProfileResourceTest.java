@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import com.richardsand.novelkms.NovelKmsTestBase;
 import com.richardsand.novelkms.dao.review.ReviewMetricsDao;
 import com.richardsand.novelkms.dao.review.ReviewProfileDao;
+import com.richardsand.novelkms.dao.review.UserBlockDao;
 import com.richardsand.novelkms.model.review.ReviewProfile;
 
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
@@ -55,18 +56,19 @@ class ReviewProfileResourceTest extends NovelKmsTestBase {
 
     private static final ReviewProfileDao DAO     = new ReviewProfileDao(ds);
     private static final ReviewMetricsDao METRICS = new ReviewMetricsDao(ds);
+    private static final UserBlockDao     BLOCK   = new UserBlockDao(ds);
 
     /** The profile owner in most tests. */
     static final ResourceExtension AS_OWNER = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter(TEST_USER_ID))
-            .addResource(new ReviewProfileResource(DAO, METRICS))
+            .addResource(new ReviewProfileResource(DAO, METRICS, BLOCK))
             .setMapper(createMapper())
             .build();
 
     /** A different signed-in user — the one the disclosure rules are aimed at. */
     static final ResourceExtension AS_STRANGER = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter(OTHER_USER_ID))
-            .addResource(new ReviewProfileResource(DAO, METRICS))
+            .addResource(new ReviewProfileResource(DAO, METRICS, BLOCK))
             .setMapper(createMapper())
             .build();
 
@@ -563,6 +565,23 @@ class ReviewProfileResourceTest extends NovelKmsTestBase {
 
         assertEquals(200, r.getStatus(),
                 "a suspended user must still be able to see their own profile");
+    }
+
+    /**
+     * Slice 1F: a block hides the profile symmetrically. Here the stranger has
+     * blocked the owner, yet the owner's PUBLIC profile must still read as 404 to
+     * the stranger — a block in either direction closes the cross-user read the same
+     * way HIDDEN and SUSPENDED do.
+     */
+    @Test
+    void byHandle_blockedViewer_is404_evenForPublicProfile() throws SQLException {
+        assertEquals(200, post(AS_OWNER, body("Author_A")).getStatus());
+        BLOCK.block(OTHER_USER_ID, TEST_USER_ID);
+
+        Response r = AS_STRANGER.target("/review/profiles/Author_A").request().get();
+
+        assertEquals(Status.NOT_FOUND.getStatusCode(), r.getStatus(),
+                "a block in either direction must hide the profile, like HIDDEN/SUSPENDED");
     }
 
     // =========================================================================

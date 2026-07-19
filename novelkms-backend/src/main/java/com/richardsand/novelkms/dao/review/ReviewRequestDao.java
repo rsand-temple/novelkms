@@ -218,6 +218,33 @@ public class ReviewRequestDao {
         return findById(id);
     }
 
+    /**
+     * Moderation status change (slice 1F). Unlike {@link #setStatus}, this is NOT
+     * scoped by {@code author_user_id}: an administrator acts on a request they do
+     * not own. It is reachable only from {@code AdminModerationResource}, which is
+     * {@code @RolesAllowed(ADMIN)} — the missing author scope is deliberate, not an
+     * oversight, so the one guard is the role annotation, not the SQL.
+     *
+     * <p>A terminal moderation status (REMOVED) leaves the queue, so {@code closed_at}
+     * is stamped if it was not already. The caller captures the prior status for the
+     * audit trail before invoking this.
+     */
+    public Optional<ReviewRequest> adminSetStatus(UUID id, String status) throws SQLException {
+        String sql = "UPDATE review_request SET status = ?, "
+                + "closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP), "
+                + "updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+
+        try (Connection c = ds.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, status);
+            ps.setObject(2, id);
+
+            if (ps.executeUpdate() == 0) {
+                return Optional.empty();
+            }
+        }
+        return findById(id);
+    }
+
     // =========================================================================
     // Reads
     // =========================================================================
