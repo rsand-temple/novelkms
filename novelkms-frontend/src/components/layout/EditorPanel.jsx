@@ -22,7 +22,7 @@ import { useProjectSettings } from '../../hooks/useProjectSettings';
 import { useScenes, useScene, useDeleteScene, SCENE_KEYS } from '../../hooks/useScenes';
 import { useDraftDocument, flattenDraftScenes } from '../../hooks/useDraftDocument';
 import { useChapter } from '../../hooks/useChapters';
-import { useCodexCategories } from '../../hooks/useCodex';
+import { useCodexType } from '../../hooks/useCodex';
 import { useGlobalTemplate, useBookTemplate, TEMPLATE_KEYS } from '../../hooks/useTemplates';
 import { useBook } from '../../hooks/useBooks';
 import client from '../../api/client';
@@ -743,16 +743,17 @@ export default function EditorPanel({
 		? (singleScene?.title?.trim() || 'Untitled Entry')
 		: null;
 
-	// Structured-field schema for a codex entry's category (e.g. CHARACTER,
-	// VOICE), if any. Categories are a data table returned with an optional
-	// JSON `schema`; an unstructured category resolves to null and the entry is
+	// Structured-field schema for a codex entry, resolved from the entry's own
+	// Type instance (its parent category chapter) via GET /codex/types/{typeId}.
+	// Each Type owns its active fields, so renaming/removing a field affects only
+	// this project. A schema-less Type resolves to empty fields and the entry is
 	// plain title-plus-body, unchanged.
-	const { data: codexCategories } = useCodexCategories();
+	const codexTypeId = isCodexEntry ? (chapterData?.id ?? null) : null;
+	const { data: codexType } = useCodexType(codexTypeId);
 	const codexEntrySchema = useMemo(() => {
-		if (!isCodexEntry) return null;
-		const cat = (codexCategories || []).find((c) => c.categoryKey === chapterData?.codexCategory);
-		return cat?.schema || null;
-	}, [isCodexEntry, codexCategories, chapterData?.codexCategory]);
+		if (!isCodexEntry || !codexType) return null;
+		return { fields: codexType.fields || [] };
+	}, [isCodexEntry, codexType]);
 
 	useEffect(() => { chapterIdRef.current = chapterId; }, [chapterId]);
 	useEffect(() => { singleSceneModeRef.current = singleSceneMode; }, [singleSceneMode]);

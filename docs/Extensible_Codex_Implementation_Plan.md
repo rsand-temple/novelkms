@@ -35,7 +35,7 @@ Repo: `https://github.com/rsand-temple/novelkms`, branch `master`. Next free mig
 | ----- | ----- | ----- | ------ |
 | E1 | Migration V42: `codex_type_field` table + `chapter.codex_type_description`; backfill fields from seeded schemas | Backend (SQL only) | **Done** |
 | E2 | `CodexTypeFieldDao` + `CodexType` DTO + `GET /codex/types/{typeId}` (read-only) | Backend | **Done** |
-| E3 | Cutover: entry form + `CodexAiService` read fields per-instance instead of global lookup | Backend + Frontend | Not started |
+| E3 | Cutover: entry form + AI fill read the per-instance Type schema; `/codex/categories` becomes seed/promotion-only | Backend + Frontend | **Done** |
 | E4 | Type-editor write path: create/edit type, add/rename/reorder/change-style fields; immutable-key generator | Backend | Not started |
 | E5 | Type-editor UI: Manage Types surface, type editor, field editor, entry-create type picker | Frontend | Not started |
 | E6 | Field soft-remove / restore (non-destructive), removed-fields area, entry-count warning | Backend + Frontend | Not started |
@@ -379,3 +379,28 @@ surprises, and anything the next phase must know._
     (Central blocked) — run `mvn test` locally before deploy.
   - **Next:** E3 — cut the live entry form + `CodexAiService` over to
     `GET /codex/types/{typeId}`; after E3, `/codex/categories` is seed/promotion-only.
+- **2026-07-19 — E3 done (backend + frontend cutover).** The live entry form and
+  AI fill now read the entry's own Type fields, not the global category master.
+  - **Backend (`CodexAiService`):** injects `CodexTypeFieldDao` (dropped
+    `CodexCategoryDao`). The filled entry's schema = `findActiveByType(chapterId)`;
+    label = Type name (`chapter.title`, fallback category key). `buildSchemaDescription`
+    / `buildExistingFieldsText` / `renderStructuredFields` now take `List<CodexField>`.
+    Reference-context renders each pinned entry from its own Type
+    (`AiContextEntry.chapterId()`), cached per Type; `feeds_ai` filtering intact.
+    Removed `resolveCategory` + `schemaByKey` + `CodexCategory`/`CodexSchema` imports.
+    `NovelKmsServer` passes `codexTypeFieldDao` to the service.
+  - **Frontend:** added `codexApi.getType(typeId)` + `useCodexType(typeId)`
+    (`['codex','type',typeId]`). `EditorPanel` resolves `codexEntrySchema` from
+    `useCodexType(chapterData.id)` → `{ fields }` instead of matching
+    `useCodexCategories()` by key. `CodexEntryFields` unchanged (`schema?.fields`).
+  - **Parity:** V42-backfilled instance fields == the old global set, so existing
+    CHARACTER/VOICE entries render identically and AI fill keeps the same shape;
+    schema-less Types render plain title+body.
+  - **`/codex/categories` is now consumed only for seeding new codexes + AI
+    promotion mapping** (`useCodexCategories` remains defined for that; no longer
+    imported by `EditorPanel`).
+  - **Verification:** Java brace balance; esbuild transform on the 3 JS/JSX files;
+    grep for removed-symbol residue. No in-thread build — run `mvn test` + a manual
+    entry-render diff before deploy.
+  - **Next:** E4 — the Type editor (create/rename Type, edit description; write path
+    to `chapter.codex_type_description` + `codex_type_field`).

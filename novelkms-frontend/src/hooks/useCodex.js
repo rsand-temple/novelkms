@@ -6,6 +6,7 @@ import { chaptersApi } from '../api/chapters'
 
 export const CODEX_KEYS = {
     categories: ()          => ['codex', 'categories'],
+    type:       (typeId)    => ['codex', 'type', typeId],
     byProject:  (projectId) => ['codex', 'byProject', projectId],
     byBook:     (bookId)    => ['codex', 'byBook', bookId],
     detail:     (id)        => ['codex', id],
@@ -29,6 +30,19 @@ export function useCodexCategories() {
     return useQuery({
         queryKey:  CODEX_KEYS.categories(),
         queryFn:   () => codexApi.getCategories(),
+        staleTime: 5 * 60 * 1000,
+    })
+}
+
+// Resolves a codex entry's form schema from its own Type instance (the parent
+// category chapter) rather than matching the global categories list by key.
+// Each Type owns its active fields, so renaming/removing a field affects only
+// that project. Returns { id, name, description, systemKey, fields }.
+export function useCodexType(typeId) {
+    return useQuery({
+        queryKey: CODEX_KEYS.type(typeId),
+        queryFn:  () => codexApi.getType(typeId),
+        enabled:  !!typeId,
         staleTime: 5 * 60 * 1000,
     })
 }

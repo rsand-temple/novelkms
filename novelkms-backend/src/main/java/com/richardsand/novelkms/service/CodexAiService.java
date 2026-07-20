@@ -27,23 +27,23 @@ import com.richardsand.novelkms.dao.ai.AiCredentialDao;
 import com.richardsand.novelkms.dao.book.BookDao;
 import com.richardsand.novelkms.dao.chapter.ChapterDao;
 import com.richardsand.novelkms.dao.chapter.ChapterSummaryDao;
-import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
 import com.richardsand.novelkms.dao.codex.CodexDao;
+import com.richardsand.novelkms.dao.codex.CodexTypeFieldDao;
 import com.richardsand.novelkms.model.Scene;
 import com.richardsand.novelkms.model.ai.AiCredential;
 import com.richardsand.novelkms.model.book.Book;
 import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.model.codex.Codex;
-import com.richardsand.novelkms.model.codex.CodexCategory;
 import com.richardsand.novelkms.model.codex.CodexField;
-import com.richardsand.novelkms.model.codex.CodexSchema;
 
 import jakarta.ws.rs.core.Response.Status;
 
 /**
  * Orchestrates AI-driven fill-in of a single codex entry. The service:
  * <ol>
- * <li>Resolves the entry's schema from its parent codex category.</li>
+ * <li>Resolves the entry's field schema from its own Type instance (the parent
+ * category chapter's {@code codex_type_field} rows), not the system-global
+ * category master.</li>
  * <li>Assembles manuscript context from chapter summaries (filtered to the
  * author-selected chapters when {@code selectedChapterIds} is provided).</li>
  * <li>Assembles pinned codex entries as reference context.</li>
@@ -118,20 +118,20 @@ public class CodexAiService {
 	private final ChapterDao              chapterDao;
 	private final BookDao                 bookDao;
 	private final CodexDao                codexDao;
-	private final CodexCategoryDao        codexCategoryDao;
+	private final CodexTypeFieldDao       codexTypeFieldDao;
 	private final AiCredentialDao         credentialDao;
 	private final ChapterSummaryDao       chapterSummaryDao;
 	private final Map<String, AiProvider> providers;
 
 	public CodexAiService(SceneDao sceneDao, ChapterDao chapterDao, BookDao bookDao,
-			CodexDao codexDao, CodexCategoryDao codexCategoryDao,
+			CodexDao codexDao, CodexTypeFieldDao codexTypeFieldDao,
 			AiCredentialDao credentialDao, ChapterSummaryDao chapterSummaryDao,
 			Map<String, AiProvider> providers) {
 		this.sceneDao = sceneDao;
 		this.chapterDao = chapterDao;
 		this.bookDao = bookDao;
 		this.codexDao = codexDao;
-		this.codexCategoryDao = codexCategoryDao;
+		this.codexTypeFieldDao = codexTypeFieldDao;
 		this.credentialDao = credentialDao;
 		this.chapterSummaryDao = chapterSummaryDao;
 		this.providers = providers;
@@ -251,13 +251,15 @@ public class CodexAiService {
 				.orElseThrow(() -> new ReviewException(Status.BAD_REQUEST,
 						"not_found", "The entry's codex could not be found."));
 
-		// ── Resolve category and schema ─────────────────────────────────────
-		String        categoryKey   = chapter.getCodexCategory();
-		CodexCategory category      = resolveCategory(categoryKey);
-		CodexSchema   schema        = category != null ? category.getSchema() : null;
-		String        categoryLabel = category != null && category.getLabel() != null
-				? category.getLabel()
-				: (categoryKey != null ? categoryKey : "Codex Entry");
+		// ── Resolve the Type's fields (per-instance schema) and label ───────
+		// The entry's parent chapter IS its Type; its active fields are the
+		// schema. The Type name (chapter.title) is the author-facing label.
+		String           categoryKey   = chapter.getCodexCategory();
+		List<CodexField> fields        = codexTypeFieldDao.findActiveByType(chapterId);
+		String           categoryLabel = firstNonBlank(chapter.getTitle(), categoryKey);
+		if (categoryLabel.isBlank()) {
+			categoryLabel = "Codex Entry";
+		}
 
 		// ── Resolve AI credential and provider ──────────────────────────────
 		AiCredential credential = resolveCredential(userId, credentialId);
@@ -297,8 +299,8 @@ public class CodexAiService {
 				categoryKey, scene.getTitle());
 
 		// ── Build prompt ingredients ────────────────────────────────────────
-		String schemaDescription = buildSchemaDescription(schema);
-		String existingFields    = buildExistingFieldsText(schema, scene.getStructuredData());
+		String schemaDescription = buildSchemaDescription(fields);
+		String existingFields    = buildExistingFieldsText(fields, scene.getStructuredData());
 		String entryTitle        = scene.getTitle() != null && !scene.getTitle().isBlank()
 				? scene.getTitle().trim()
 				: "Untitled";
@@ -308,7 +310,7 @@ public class CodexAiService {
 				+ "userGuidanceChars={}",
 				entryTitle, credential.getProvider(), model,
 				codex.getBookId() != null ? "BOOK" : "PROJECT",
-				schema != null && schema.getFields() != null ? schema.getFields().size() : 0,
+				fields.size(),
 				manuscriptContext.length(),
 				referenceContext == null ? 0 : referenceContext.length(),
 				userGuidance == null ? 0 : userGuidance.length());
@@ -426,12 +428,10 @@ public class CodexAiService {
 		List<CodexDao.AiContextEntry> entries = codexDao.listPinnedAiContextEntries(codexId);
 		if (entries.isEmpty()) return null;
 
-		// Pre-load schemas for structured field rendering
-		Map<String, CodexSchema> schemaByKey = new HashMap<>();
-		for (CodexCategory cat : codexCategoryDao.findAll()) {
-			if (cat.getSchema() != null)
-				schemaByKey.put(cat.getCategoryKey(), cat.getSchema());
-		}
+		// Each pinned entry's parent chapter is its Type; render its structured
+		// fields from that Type's own active fields. Cache per Type so entries
+		// sharing a Type don't re-query.
+		Map<UUID, List<CodexField>> fieldsByType = new HashMap<>();
 
 		StringBuilder sb      = new StringBuilder();
 		String        lastCat = null;
@@ -444,8 +444,13 @@ public class CodexAiService {
 				continue;
 			}
 
-			String structured = renderStructuredFields(schemaByKey.get(e.categoryKey()),
-					e.structuredData());
+			List<CodexField> typeFields = fieldsByType.get(e.chapterId());
+			if (typeFields == null) {
+				typeFields = codexTypeFieldDao.findActiveByType(e.chapterId());
+				fieldsByType.put(e.chapterId(), typeFields);
+			}
+
+			String structured = renderStructuredFields(typeFields, e.structuredData());
 			String plain      = htmlToPlainText(e.content());
 			if (structured.isBlank() && plain.isBlank()) continue;
 
@@ -470,8 +475,8 @@ public class CodexAiService {
 		return result.isEmpty() ? null : result;
 	}
 
-	private String renderStructuredFields(CodexSchema schema, String structuredJson) {
-		if (schema == null || schema.getFields() == null
+	private String renderStructuredFields(List<CodexField> fields, String structuredJson) {
+		if (fields == null || fields.isEmpty()
 				|| structuredJson == null || structuredJson.isBlank()) {
 			return "";
 		}
@@ -483,7 +488,7 @@ public class CodexAiService {
 			return "";
 		}
 		StringBuilder sb = new StringBuilder();
-		for (CodexField field : schema.getFields()) {
+		for (CodexField field : fields) {
 			if (!field.isFeedsAi()) continue;
 			Object raw   = values.get(field.getKey());
 			String value = raw == null ? "" : raw.toString().trim();
@@ -525,13 +530,13 @@ public class CodexAiService {
 	 * should fill in. Includes field key, label, type, valid options (for
 	 * SELECT), and help text.
 	 */
-	private static String buildSchemaDescription(CodexSchema schema) {
-		if (schema == null || schema.getFields() == null || schema.getFields().isEmpty()) {
+	private static String buildSchemaDescription(List<CodexField> fields) {
+		if (fields == null || fields.isEmpty()) {
 			return "(no structured fields — provide a body description only)";
 		}
 		StringBuilder sb = new StringBuilder();
 		sb.append("Structured fields to fill in (use the exact field key names in your JSON response):\n");
-		for (CodexField field : schema.getFields()) {
+		for (CodexField field : fields) {
 			sb.append("- ").append(field.getKey())
 					.append(" (").append(field.getLabel() != null ? field.getLabel() : field.getKey())
 					.append("): ").append(field.getType());
@@ -552,8 +557,8 @@ public class CodexAiService {
 	 * block so the AI knows what the author has already written and must not
 	 * contradict.
 	 */
-	private static String buildExistingFieldsText(CodexSchema schema, String structuredJson) {
-		if (schema == null || schema.getFields() == null
+	private static String buildExistingFieldsText(List<CodexField> fields, String structuredJson) {
+		if (fields == null || fields.isEmpty()
 				|| structuredJson == null || structuredJson.isBlank()) {
 			return "none";
 		}
@@ -565,7 +570,7 @@ public class CodexAiService {
 			return "none";
 		}
 		StringBuilder sb = new StringBuilder();
-		for (CodexField field : schema.getFields()) {
+		for (CodexField field : fields) {
 			Object val = data.get(field.getKey());
 			if (val == null) continue;
 			String text = val.toString().trim();
@@ -580,14 +585,6 @@ public class CodexAiService {
 	// =========================================================================
 	// Utility helpers
 	// =========================================================================
-
-	private CodexCategory resolveCategory(String categoryKey) throws SQLException {
-		if (categoryKey == null || categoryKey.isBlank()) return null;
-		for (CodexCategory cat : codexCategoryDao.findAll()) {
-			if (categoryKey.equals(cat.getCategoryKey())) return cat;
-		}
-		return null;
-	}
 
 	private AiCredential resolveCredential(UUID userId, UUID credentialId) throws SQLException {
 		if (credentialId != null) {

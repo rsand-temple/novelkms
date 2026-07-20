@@ -3,6 +3,12 @@ import client from './client'
 export const codexApi = {
     getCategories:    ()                => client.get('/codex/categories').then(r => r.data),
 
+    // Per-instance Codex Type (category chapter + its own active field set).
+    // typeId is the category chapter id. Source of truth for a codex entry's
+    // form schema; the global categories list is now only for seeding + AI
+    // promotion mapping.
+    getType:          (typeId)          => client.get(`/codex/types/${typeId}`).then(r => r.data),
+
     getByProject:     (projectId)       => client.get(`/projects/${projectId}/codex`).then(r => r.data),
     createForProject: (projectId, data) => client.post(`/projects/${projectId}/codex`, data ?? {}).then(r => r.data),
 
