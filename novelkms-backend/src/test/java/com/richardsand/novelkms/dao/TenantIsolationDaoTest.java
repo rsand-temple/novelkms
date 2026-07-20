@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
+import com.richardsand.novelkms.dao.book.BookDao;
+import com.richardsand.novelkms.dao.chapter.ChapterDao;
+import com.richardsand.novelkms.dao.codex.CodexDao;
 import com.richardsand.novelkms.model.AppUser;
 import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.support.DatabaseIntegrationTest;
@@ -55,5 +58,51 @@ class TenantIsolationDaoTest extends DatabaseIntegrationTest {
 
         assertTrue(dao.getTotalWordCountForUser(alice.id(), tree.projectId()) >= 1);
         assertEquals(-1, dao.getTotalWordCountForUser(bob.id(), tree.projectId()));
+    }
+
+    // -------------------------------------------------------------------------
+    // Codex-category chapters (book_id NULL, codex_id set)
+    //
+    // A Codex Type is a category chapter, and the extensible-codex read route
+    // GET /codex/types/{typeId} authorizes it via TenantAuthorizationFilter's
+    // `types -> ownsChapter` arm. ownsChapter must therefore resolve ownership
+    // for a chapter that has no book_id, by COALESCEing the project through the
+    // owning codex. These cases lock that resolution for both codex scopes.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void ownsChapter_projectScopedCodexChapter_scopedToOwner() throws Exception {
+        AppUser alice = createUser("alice-codex", "alice-codex@example.com", "Alice");
+        AppUser bob   = createUser("bob-codex", "bob-codex@example.com", "Bob");
+        ProjectDao      projects = new ProjectDao(dataSource);
+        CodexDao        codexes  = new CodexDao(dataSource);
+        ChapterDao      chapters = new ChapterDao(dataSource);
+        TenantAccessDao access   = new TenantAccessDao(dataSource);
+
+        Project project = projects.createForUser(alice.id(), "Alice Project", null);
+        var     codex   = codexes.createForProject(project.getId(), "Codex");
+        var     type    = chapters.createCodexChapter(codex.getId(), "CHARACTER", "Characters");
+
+        assertTrue(access.ownsChapter(alice.id(), type.getId()));
+        assertFalse(access.ownsChapter(bob.id(), type.getId()));
+    }
+
+    @Test
+    void ownsChapter_bookScopedCodexChapter_scopedToOwner() throws Exception {
+        AppUser alice = createUser("alice-bcodex", "alice-bcodex@example.com", "Alice");
+        AppUser bob   = createUser("bob-bcodex", "bob-bcodex@example.com", "Bob");
+        ProjectDao      projects = new ProjectDao(dataSource);
+        BookDao         books    = new BookDao(dataSource);
+        CodexDao        codexes  = new CodexDao(dataSource);
+        ChapterDao      chapters = new ChapterDao(dataSource);
+        TenantAccessDao access   = new TenantAccessDao(dataSource);
+
+        Project project = projects.createForUser(alice.id(), "Alice Project", null);
+        var     book    = books.create(project.getId(), "Alice Book", null, null, null);
+        var     codex   = codexes.createForBook(book.getId(), "Codex");
+        var     type    = chapters.createCodexChapter(codex.getId(), "VOICE", "Voices");
+
+        assertTrue(access.ownsChapter(alice.id(), type.getId()));
+        assertFalse(access.ownsChapter(bob.id(), type.getId()));
     }
 }

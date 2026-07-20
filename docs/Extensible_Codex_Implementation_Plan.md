@@ -402,5 +402,11 @@ surprises, and anything the next phase must know._
   - **Verification:** Java brace balance; esbuild transform on the 3 JS/JSX files;
     grep for removed-symbol residue. No in-thread build — run `mvn test` + a manual
     entry-render diff before deploy.
+  - **Tests (E1–E3 coverage):** added `TenantIsolationDaoTest.ownsChapter_projectScopedCodexChapter_scopedToOwner`
+    and `..._bookScopedCodexChapter_scopedToOwner` (security basis of the
+    `types -> ownsChapter` route), and `CodexResourceTest` for `GET /codex/types/{typeId}`
+    (200 header+active fields; 404 for manuscript chapter / unknown id). Cross-tenant
+    denial is covered at the DAO layer since ResourceExtension doesn't register the
+    tenant filter. `CodexAiServiceTest` (fake AiProvider) deferred to E4.
   - **Next:** E4 — the Type editor (create/rename Type, edit description; write path
     to `chapter.codex_type_description` + `codex_type_field`).
