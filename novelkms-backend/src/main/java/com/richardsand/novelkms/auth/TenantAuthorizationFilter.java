@@ -84,6 +84,10 @@ public class TenantAuthorizationFilter implements ContainerRequestFilter {
             case "parts" -> access.ownsPart(userId, id);
             case "codex" -> access.ownsCodex(userId, id);
             case "chapters" -> access.ownsChapter(userId, id);
+            // /codex/types/{typeId}: a Codex Type is a category chapter row, so
+            // its id is authorized exactly like a chapter (ownsChapter resolves
+            // codex chapters through their codex's project/book).
+            case "types" -> access.ownsChapter(userId, id);
             case "scenes" -> access.ownsScene(userId, id);
             default -> true;
             };

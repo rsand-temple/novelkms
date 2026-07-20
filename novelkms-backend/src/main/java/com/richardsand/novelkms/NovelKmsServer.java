@@ -53,6 +53,8 @@ import com.richardsand.novelkms.dao.chapter.ChapterMemoryDao;
 import com.richardsand.novelkms.dao.chapter.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
 import com.richardsand.novelkms.dao.codex.CodexDao;
+import com.richardsand.novelkms.dao.codex.CodexTypeDao;
+import com.richardsand.novelkms.dao.codex.CodexTypeFieldDao;
 import com.richardsand.novelkms.dao.review.ContentReportDao;
 import com.richardsand.novelkms.dao.review.HumanReviewDao;
 import com.richardsand.novelkms.dao.review.ReviewMetricsDao;
@@ -227,6 +229,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         ChapterEditorialDao   chapterEditorialDao   = new ChapterEditorialDao(ds);
         CodexDao              codexDao              = new CodexDao(ds);
         CodexCategoryDao      codexCategoryDao      = new CodexCategoryDao(ds);
+        CodexTypeFieldDao     codexTypeFieldDao     = new CodexTypeFieldDao(ds);
+        CodexTypeDao          codexTypeDao          = new CodexTypeDao(ds, codexTypeFieldDao);
         EditorSettingsDao     editorSettingsDao     = new EditorSettingsDao(ds);
         ArchiveDao            archiveDao            = new ArchiveDao(ds);
         ArtifactNodeDao       artifactNodeDao       = new ArtifactNodeDao(ds);
@@ -426,6 +430,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(codexAiService).to(CodexAiService.class);
                 bind(codexCategoryDao).to(CodexCategoryDao.class);
                 bind(codexDao).to(CodexDao.class);
+                bind(codexTypeFieldDao).to(CodexTypeFieldDao.class);
+                bind(codexTypeDao).to(CodexTypeDao.class);
                 bind(codexExportService).to(CodexExportService.class);
                 bind(config).to(NovelKmsConfig.class);
                 bind(editorSettingsDao).to(EditorSettingsDao.class);

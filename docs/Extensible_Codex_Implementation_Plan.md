@@ -34,7 +34,7 @@ Repo: `https://github.com/rsand-temple/novelkms`, branch `master`. Next free mig
 | Phase | Scope | Layer | Status |
 | ----- | ----- | ----- | ------ |
 | E1 | Migration V42: `codex_type_field` table + `chapter.codex_type_description`; backfill fields from seeded schemas | Backend (SQL only) | **Done** |
-| E2 | `CodexTypeFieldDao` + `CodexType` DTO + `GET /codex/types/{typeId}` (read-only) | Backend | Not started |
+| E2 | `CodexTypeFieldDao` + `CodexType` DTO + `GET /codex/types/{typeId}` (read-only) | Backend | **Done** |
 | E3 | Cutover: entry form + `CodexAiService` read fields per-instance instead of global lookup | Backend + Frontend | Not started |
 | E4 | Type-editor write path: create/edit type, add/rename/reorder/change-style fields; immutable-key generator | Backend | Not started |
 | E5 | Type-editor UI: Manage Types surface, type editor, field editor, entry-create type picker | Frontend | Not started |
@@ -354,3 +354,28 @@ surprises, and anything the next phase must know._
     `authorNotes` is the only `feeds_ai=false` field in both. SELECT fields: CHARACTER `role`
     (9 options), VOICE `register` (6 options).
   - **Next:** E2 — `CodexTypeFieldDao` + `CodexType` DTO + read-only `GET /codex/types/{typeId}`.
+ - **2026-07-19 — E2 done (backend, read-only).** Added `CodexTypeFieldDao`
+  (`findActiveByType` / `findAllByType` → `List<CodexField>`; `options` JSON →
+  `List<String>`, fail-soft; ORDER BY `display_order, field_key`), a thin
+  `CodexTypeDao.findType(typeId)` assembling the new `CodexType`
+  `{ id, name, description, systemKey, fields }` read model, and
+  `GET /codex/types/{typeId}` on `CodexResource`. `CodexField` reused verbatim.
+  - **D2 chosen (structural):** the Type header (title / codex_category /
+    codex_type_description) is read directly from `chapter` by `CodexTypeDao` as a
+    purpose-built projection, NOT threaded through `ChapterDao.map()`. `ChapterDao`
+    and the `Chapter` model are untouched — the `Chapter` projection already omits
+    codex-only columns, so this is consistent, not a shortcut. Header guarded to
+    `codex_id IS NOT NULL AND deleted_at IS NULL` → manuscript chapter / plain codex
+    chapter / trashed Type / unknown id all 404.
+  - **D1 chosen (security):** `GET /codex/types/{typeId}` was NOT auto-authorized —
+    the `types` segment preceded the UUID and hit `default -> true`. Added
+    `case "types" -> ownsChapter` to `TenantAuthorizationFilter.authorizePathIds`
+    (typeId is a chapter id; `ownsChapter` resolves codex chapters via their codex's
+    project/book). Grep confirmed no other route uses a `types/{uuid}` segment.
+  - **DI:** `CodexTypeFieldDao` + `CodexTypeDao` constructed and bound in
+    `NovelKmsServer`; `CodexResource` constructor now takes `CodexTypeDao`.
+  - **Verification:** static (brace/package/signature) + SQLite read-query
+    simulation + a Flyway-backed `CodexTypeDaoTest`. No in-thread H2 replay
+    (Central blocked) — run `mvn test` locally before deploy.
+  - **Next:** E3 — cut the live entry form + `CodexAiService` over to
+    `GET /codex/types/{typeId}`; after E3, `/codex/categories` is seed/promotion-only.

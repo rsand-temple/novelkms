@@ -12,6 +12,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.richardsand.novelkms.dao.chapter.ChapterDao;
 import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
 import com.richardsand.novelkms.dao.codex.CodexDao;
+import com.richardsand.novelkms.dao.codex.CodexTypeDao;
 import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.model.codex.Codex;
 import com.richardsand.novelkms.model.codex.CodexCategory;
@@ -46,12 +47,15 @@ public class CodexResource {
     private final CodexDao         codexDao;
     private final CodexCategoryDao codexCategoryDao;
     private final ChapterDao       chapterDao;
+    private final CodexTypeDao     codexTypeDao;
 
     @Inject
-    public CodexResource(CodexDao codexDao, CodexCategoryDao codexCategoryDao, ChapterDao chapterDao) {
+    public CodexResource(CodexDao codexDao, CodexCategoryDao codexCategoryDao, ChapterDao chapterDao,
+            CodexTypeDao codexTypeDao) {
         this.codexDao = codexDao;
         this.codexCategoryDao = codexCategoryDao;
         this.chapterDao = chapterDao;
+        this.codexTypeDao = codexTypeDao;
     }
 
     // -------------------------------------------------------------------------
@@ -86,6 +90,33 @@ public class CodexResource {
         try {
             List<CodexCategory> categories = codexCategoryDao.findAll();
             return Response.ok(categories).build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Per-instance Codex Type (category chapter + its own field set)
+    //
+    // typeId is a category chapter id. Ownership is enforced by
+    // TenantAuthorizationFilter, which maps the "types" path segment to
+    // ownsChapter (a codex chapter resolves ownership through its codex's
+    // project/book). The header read is guarded to live codex chapters, so a
+    // manuscript chapter, a trashed Type, or an unknown id yields 404.
+    //
+    // This is the read side of the Extensible Codex feature. In E3 the entry
+    // form and AI fill resolve their schema here instead of matching the global
+    // /codex/categories lookup by key.
+    // -------------------------------------------------------------------------
+
+    @GET
+    @Path("/codex/types/{typeId}")
+    public Response getCodexType(@PathParam("typeId") UUID typeId) {
+        logger.debug("CodexResource.getCodexType invoked: typeId={}", typeId);
+        try {
+            return codexTypeDao.findType(typeId)
+                    .map(type -> Response.ok(type).build())
+                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
         } catch (SQLException e) {
             return serverError(e);
         }
