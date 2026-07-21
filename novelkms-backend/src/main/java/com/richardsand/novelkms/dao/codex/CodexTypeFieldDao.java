@@ -4,8 +4,13 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.commons.dbcp2.BasicDataSource;
@@ -15,14 +20,15 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.richardsand.novelkms.model.codex.CodexField;
+import com.richardsand.novelkms.util.CodexFieldKeys;
 
 /**
- * Read access to the normalized per-instance field definitions in
+ * Read and write access to the normalized per-instance field definitions in
  * {@code codex_type_field}. Each row is one field of a Codex Type (a category
  * chapter row); {@code chapter_id} points at that Type. This table is the
  * source of truth for a Type's schema — it replaces the system-global
  * {@code codex_category.field_schema} JSON that {@link CodexCategoryDao} still
- * serves until phase E3 cuts the live read path over.
+ * serves only for seeding and AI-promotion mapping after the E3 cutover.
  *
  * <p>Rows map to {@link CodexField} verbatim ({@code field_key -> key},
  * {@code input_type -> type}, {@code feeds_ai -> feedsAi}) so the entry form and
@@ -31,13 +37,25 @@ import com.richardsand.novelkms.model.codex.CodexField;
  * it is parsed here into a {@code List<String>}, failing soft (null) on a blank
  * or malformed value exactly as the categories lookup does for its schema JSON.
  *
- * <p>This DAO is read-only in E2. Write methods (add / rename / reorder /
- * change-style / soft-remove / restore) arrive in E4 and E6.
+ * <p><b>Field identity across the write API is the immutable {@code field_key}</b>,
+ * not the row id. Keys are unique within a Type (the {@code uq_codex_type_field_key}
+ * index), never regenerated, and already the value the client holds via
+ * {@link CodexField#getKey()} — so update / reorder address fields by key. Every
+ * write is guarded by {@code chapter_id = ?}, so a key that belongs to a
+ * different Type simply matches no row (the same isolation pattern
+ * {@code ChapterDao.reorderInCodex} uses with its {@code codex_id} guard); the
+ * caller can only reach a Type it already owns because {@code typeId} is a
+ * tenant-authorized path segment.
+ *
+ * <p>Write methods here (add / update / reorder) are the E4 type-editor write
+ * path. Soft-remove / restore ({@code deleted_at}) is E6 and is deliberately not
+ * exposed yet — {@link #updateField} refuses to touch an already soft-removed
+ * row.
  */
 public class CodexTypeFieldDao {
 
-    private static final Logger                   logger      = LoggerFactory.getLogger(CodexTypeFieldDao.class);
-    private static final ObjectMapper             MAPPER      = new ObjectMapper();
+    private static final Logger                      logger      = LoggerFactory.getLogger(CodexTypeFieldDao.class);
+    private static final ObjectMapper                MAPPER      = new ObjectMapper();
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
 
@@ -50,6 +68,10 @@ public class CodexTypeFieldDao {
     public CodexTypeFieldDao(BasicDataSource ds) {
         this.ds = ds;
     }
+
+    // -------------------------------------------------------------------------
+    // Reads (E2)
+    // -------------------------------------------------------------------------
 
     /**
      * Active fields for a Type, in display order. Soft-removed fields
@@ -72,6 +94,147 @@ public class CodexTypeFieldDao {
                 + "WHERE chapter_id = ? "
                 + "ORDER BY display_order, field_key", chapterId);
     }
+
+    /**
+     * A single active field of a Type by its immutable key, or empty if no
+     * active field with that key belongs to the Type. Used to echo the persisted
+     * row back after a write.
+     */
+    public Optional<CodexField> findField(UUID chapterId, String fieldKey) throws SQLException {
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(SELECT_COLUMNS
+                        + "WHERE chapter_id = ? AND field_key = ? AND deleted_at IS NULL")) {
+            ps.setObject(1, chapterId);
+            ps.setString(2, fieldKey);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(map(rs)) : Optional.empty();
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Writes (E4)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Adds a new field to a Type. A fresh immutable key is generated from the
+     * label (unique across all of the Type's fields, active or soft-removed) and
+     * the field is appended after the current highest {@code display_order}.
+     * {@code options} is persisted only for SELECT fields; for text fields it is
+     * stored NULL regardless of what was passed. Returns the created field
+     * (carrying its generated key).
+     */
+    public CodexField addField(UUID chapterId, String label, String inputType,
+            List<String> options, String help, boolean feedsAi) throws SQLException {
+        String  optionsJson = optionsJson(inputType, options);
+        UUID    id          = UUID.randomUUID();
+        Instant now         = Instant.now();
+        String  insert = "INSERT INTO codex_type_field "
+                + "(id, chapter_id, field_key, label, input_type, options, help, feeds_ai, display_order, created_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        String key;
+        int    order;
+        try (Connection c = ds.getConnection()) {
+            key   = CodexFieldKeys.generate(label, existingKeys(c, chapterId));
+            order = nextDisplayOrder(c, chapterId);
+            try (PreparedStatement ps = c.prepareStatement(insert)) {
+                ps.setObject(1, id);
+                ps.setObject(2, chapterId);
+                ps.setString(3, key);
+                ps.setString(4, label);
+                ps.setString(5, inputType);
+                ps.setString(6, optionsJson);
+                ps.setString(7, help);
+                ps.setBoolean(8, feedsAi);
+                ps.setInt(9, order);
+                ps.setTimestamp(10, Timestamp.from(now));
+                ps.setTimestamp(11, Timestamp.from(now));
+                ps.executeUpdate();
+            }
+        }
+
+        return CodexField.builder()
+                .key(key)
+                .label(label)
+                .type(inputType)
+                .options(parseOptions(optionsJson))
+                .help(help)
+                .feedsAi(feedsAi)
+                .build();
+    }
+
+    /**
+     * Updates a field's presentation (label, input type, options, help,
+     * feeds-AI) by its immutable key. <b>The key is never touched</b>, so every
+     * stored {@code structured_data} value keeps resolving. {@code options} is
+     * persisted only for SELECT; switching to a text type clears any prior
+     * options so they cannot resurface on a later switch back. Only an active
+     * field is editable (a soft-removed field must be restored first, in E6).
+     * Returns the updated field, or empty if no active field with that key
+     * belongs to the Type (the resource maps empty to 404).
+     */
+    public Optional<CodexField> updateField(UUID chapterId, String fieldKey, String label,
+            String inputType, List<String> options, String help, boolean feedsAi) throws SQLException {
+        String optionsJson = optionsJson(inputType, options);
+        String sql = "UPDATE codex_type_field "
+                + "SET label = ?, input_type = ?, options = ?, help = ?, feeds_ai = ?, updated_at = ? "
+                + "WHERE chapter_id = ? AND field_key = ? AND deleted_at IS NULL";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, label);
+            ps.setString(2, inputType);
+            ps.setString(3, optionsJson);
+            ps.setString(4, help);
+            ps.setBoolean(5, feedsAi);
+            ps.setTimestamp(6, Timestamp.from(Instant.now()));
+            ps.setObject(7, chapterId);
+            ps.setString(8, fieldKey);
+            if (ps.executeUpdate() == 0) {
+                return Optional.empty();
+            }
+        }
+        return findField(chapterId, fieldKey);
+    }
+
+    /**
+     * Assigns {@code display_order} 0..n-1 to the given field keys in the order
+     * supplied. The {@code chapter_id} guard confines the change to fields of
+     * this Type — a key that belongs to another Type matches nothing and is a
+     * silent no-op. Only reorders keys present in the list; keys omitted keep
+     * their current order (callers send the full active set).
+     */
+    public void reorderFields(UUID chapterId, List<String> fieldKeys) throws SQLException {
+        if (fieldKeys == null || fieldKeys.isEmpty()) {
+            return;
+        }
+        String sql = "UPDATE codex_type_field SET display_order = ?, updated_at = ? "
+                + "WHERE chapter_id = ? AND field_key = ?";
+        try (Connection c = ds.getConnection()) {
+            c.setAutoCommit(false);
+            try (PreparedStatement ps = c.prepareStatement(sql)) {
+                Instant now = Instant.now();
+                for (int i = 0; i < fieldKeys.size(); i++) {
+                    ps.setInt(1, i);
+                    ps.setTimestamp(2, Timestamp.from(now));
+                    ps.setObject(3, chapterId);
+                    ps.setString(4, fieldKeys.get(i));
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
 
     private List<CodexField> query(String sql, UUID chapterId) throws SQLException {
         List<CodexField> result = new ArrayList<>();
@@ -96,6 +259,59 @@ public class CodexTypeFieldDao {
                 .help(rs.getString("help"))
                 .feedsAi(rs.getBoolean("feeds_ai"))
                 .build();
+    }
+
+    /**
+     * Every key currently used by a Type, active or soft-removed. The uniqueness
+     * index spans deleted rows, so a new key must avoid all of them — otherwise
+     * restoring an old field (E6) could collide with a freshly added one.
+     */
+    private Set<String> existingKeys(Connection c, UUID chapterId) throws SQLException {
+        Set<String> keys = new HashSet<>();
+        try (PreparedStatement ps = c.prepareStatement(
+                "SELECT field_key FROM codex_type_field WHERE chapter_id = ?")) {
+            ps.setObject(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    keys.add(rs.getString(1));
+                }
+            }
+        }
+        return keys;
+    }
+
+    /**
+     * Next {@code display_order} for a Type: one past the current maximum across
+     * all its rows (including soft-removed), so a new field never shares an order
+     * slot with a field that might later be restored.
+     */
+    private int nextDisplayOrder(Connection c, UUID chapterId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(
+                "SELECT COALESCE(MAX(display_order), -1) + 1 FROM codex_type_field WHERE chapter_id = ?")) {
+            ps.setObject(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    /**
+     * Serializes SELECT options to a JSON array, or returns null for a non-SELECT
+     * field or an absent/empty option list. A SELECT with no options yet is still
+     * a SELECT (distinguished by {@code input_type}); it simply renders an empty
+     * dropdown until the author adds choices.
+     */
+    private String optionsJson(String inputType, List<String> options) {
+        if (!"SELECT".equals(inputType) || options == null || options.isEmpty()) {
+            return null;
+        }
+        try {
+            return MAPPER.writeValueAsString(options);
+        } catch (Exception e) {
+            logger.warn("Ignoring unserializable codex_type_field.options: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**

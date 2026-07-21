@@ -3,6 +3,7 @@ package com.richardsand.novelkms.resource.codex;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -13,9 +14,11 @@ import com.richardsand.novelkms.dao.chapter.ChapterDao;
 import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
 import com.richardsand.novelkms.dao.codex.CodexDao;
 import com.richardsand.novelkms.dao.codex.CodexTypeDao;
+import com.richardsand.novelkms.dao.codex.CodexTypeFieldDao;
 import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.model.codex.Codex;
 import com.richardsand.novelkms.model.codex.CodexCategory;
+import com.richardsand.novelkms.model.codex.CodexField;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -36,26 +39,40 @@ import jakarta.ws.rs.core.Response;
  * for example, are created with the standard POST /chapters/{id}/scenes.
  *
  * Ownership is enforced by TenantAuthorizationFilter on the path UUIDs
- * (projects/{id}, books/{id}, codex/{id}), so the handlers here do not re-check
- * the current user.
+ * (projects/{id}, books/{id}, codex/{id}, and codex/types/{typeId} where typeId
+ * is a category chapter id mapped to ownsChapter), so the handlers here do not
+ * re-check the current user.
+ *
+ * <p>The Extensible Codex type-editor write path (E4) lives here rather than in
+ * a dedicated resource: this class is {@code @Path("/")} and already owns
+ * {@code GET /codex/types/{typeId}} (E2), so a separate {@code @Path("/codex/types")}
+ * resource would claim that prefix and shadow the existing method (Jersey
+ * resolves the class-level prefix first). Field identity in these endpoints is
+ * the immutable {@code field_key}, which is what the client already holds and is
+ * unique within a Type.
  */
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class CodexResource {
     private static final Logger    logger = LoggerFactory.getLogger(CodexResource.class);
-    private final CodexDao         codexDao;
-    private final CodexCategoryDao codexCategoryDao;
-    private final ChapterDao       chapterDao;
-    private final CodexTypeDao     codexTypeDao;
+
+    private static final Set<String> INPUT_TYPES = Set.of("SHORT_TEXT", "LONG_TEXT", "SELECT");
+
+    private final CodexDao          codexDao;
+    private final CodexCategoryDao  codexCategoryDao;
+    private final ChapterDao        chapterDao;
+    private final CodexTypeDao      codexTypeDao;
+    private final CodexTypeFieldDao codexTypeFieldDao;
 
     @Inject
     public CodexResource(CodexDao codexDao, CodexCategoryDao codexCategoryDao, ChapterDao chapterDao,
-            CodexTypeDao codexTypeDao) {
+            CodexTypeDao codexTypeDao, CodexTypeFieldDao codexTypeFieldDao) {
         this.codexDao = codexDao;
         this.codexCategoryDao = codexCategoryDao;
         this.chapterDao = chapterDao;
         this.codexTypeDao = codexTypeDao;
+        this.codexTypeFieldDao = codexTypeFieldDao;
     }
 
     // -------------------------------------------------------------------------
@@ -79,8 +96,47 @@ public class CodexResource {
         public List<UUID> ids;
     }
 
+    /** Create an author-defined Type (E4). */
+    public static class CreateTypeRequest {
+        @JsonProperty
+        public String name;
+        @JsonProperty
+        public String description;
+    }
+
+    /** Rename a Type and/or edit its description (E4). */
+    public static class UpdateTypeRequest {
+        @JsonProperty
+        public String name;
+        @JsonProperty
+        public String description;
+    }
+
+    /**
+     * Add or update a field (E4). Boxed {@code feedsAi} so an omitted value can
+     * default to TRUE rather than silently becoming false.
+     */
+    public static class FieldRequest {
+        @JsonProperty
+        public String       label;
+        @JsonProperty
+        public String       inputType;
+        @JsonProperty
+        public List<String> options;
+        @JsonProperty
+        public String       help;
+        @JsonProperty
+        public Boolean      feedsAi;
+    }
+
+    /** Reorder a Type's fields by their immutable keys (E4). */
+    public static class FieldOrderRequest {
+        @JsonProperty
+        public List<String> fieldKeys;
+    }
+
     // -------------------------------------------------------------------------
-    // Category lookup (drives dropdowns)
+    // Category lookup (drives dropdowns; seed + AI-promotion mapping source)
     // -------------------------------------------------------------------------
 
     @GET
@@ -101,12 +157,8 @@ public class CodexResource {
     // typeId is a category chapter id. Ownership is enforced by
     // TenantAuthorizationFilter, which maps the "types" path segment to
     // ownsChapter (a codex chapter resolves ownership through its codex's
-    // project/book). The header read is guarded to live codex chapters, so a
+    // project/book). Reads and writes are guarded to live codex Types, so a
     // manuscript chapter, a trashed Type, or an unknown id yields 404.
-    //
-    // This is the read side of the Extensible Codex feature. In E3 the entry
-    // form and AI fill resolve their schema here instead of matching the global
-    // /codex/categories lookup by key.
     // -------------------------------------------------------------------------
 
     @GET
@@ -116,7 +168,99 @@ public class CodexResource {
         try {
             return codexTypeDao.findType(typeId)
                     .map(type -> Response.ok(type).build())
-                    .orElse(Response.status(Response.Status.NOT_FOUND).build());
+                    .orElse(notFound());
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    @PUT
+    @Path("/codex/types/{typeId}")
+    public Response updateCodexType(@PathParam("typeId") UUID typeId, UpdateTypeRequest req) {
+        logger.info("CodexResource.updateCodexType invoked: typeId={}", typeId);
+        if (req == null || req.name == null || req.name.isBlank()) {
+            return badRequest("name is required");
+        }
+        try {
+            return codexTypeDao.updateHeader(typeId, req.name.trim(), blankToNull(req.description))
+                    .map(type -> Response.ok(type).build())
+                    .orElse(notFound());
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    @POST
+    @Path("/codex/{codexId}/types")
+    public Response createCodexType(@PathParam("codexId") UUID codexId, CreateTypeRequest req) {
+        logger.info("CodexResource.createCodexType invoked: codexId={}", codexId);
+        if (req == null || req.name == null || req.name.isBlank()) {
+            return badRequest("name is required");
+        }
+        try {
+            if (codexDao.findById(codexId).isEmpty()) {
+                return badRequest("Codex not found");
+            }
+            var type = codexTypeDao.createType(codexId, req.name.trim(), blankToNull(req.description));
+            return Response.status(Response.Status.CREATED).entity(type).build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    @POST
+    @Path("/codex/types/{typeId}/fields")
+    public Response addTypeField(@PathParam("typeId") UUID typeId, FieldRequest req) {
+        logger.info("CodexResource.addTypeField invoked: typeId={}", typeId);
+        Response invalid = validateField(req);
+        if (invalid != null) {
+            return invalid;
+        }
+        try {
+            if (codexTypeDao.findType(typeId).isEmpty()) {
+                return notFound();
+            }
+            CodexField field = codexTypeFieldDao.addField(typeId, req.label.trim(), req.inputType,
+                    req.options, blankToNull(req.help), feedsAiOrDefault(req));
+            return Response.status(Response.Status.CREATED).entity(field).build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    @PUT
+    @Path("/codex/types/{typeId}/fields/{fieldKey}")
+    public Response updateTypeField(@PathParam("typeId") UUID typeId,
+            @PathParam("fieldKey") String fieldKey, FieldRequest req) {
+        logger.info("CodexResource.updateTypeField invoked: typeId={}, fieldKey={}", typeId, fieldKey);
+        Response invalid = validateField(req);
+        if (invalid != null) {
+            return invalid;
+        }
+        try {
+            return codexTypeFieldDao.updateField(typeId, fieldKey, req.label.trim(), req.inputType,
+                    req.options, blankToNull(req.help), feedsAiOrDefault(req))
+                    .map(field -> Response.ok(field).build())
+                    .orElse(notFound());
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    @PUT
+    @Path("/codex/types/{typeId}/fields/order")
+    public Response reorderTypeFields(@PathParam("typeId") UUID typeId, FieldOrderRequest req) {
+        logger.info("CodexResource.reorderTypeFields invoked: typeId={}, count={}",
+                typeId, req == null || req.fieldKeys == null ? 0 : req.fieldKeys.size());
+        if (req == null || req.fieldKeys == null || req.fieldKeys.isEmpty()) {
+            return badRequest("fieldKeys is required");
+        }
+        try {
+            if (codexTypeDao.findType(typeId).isEmpty()) {
+                return notFound();
+            }
+            codexTypeFieldDao.reorderFields(typeId, req.fieldKeys);
+            return Response.noContent().build();
         } catch (SQLException e) {
             return serverError(e);
         }
@@ -283,6 +427,37 @@ public class CodexResource {
         for (CodexCategory category : codexCategoryDao.findDefaults()) {
             chapterDao.createCodexChapter(codexId, category.getCategoryKey(), category.getLabel());
         }
+    }
+
+    /**
+     * Shared validation for add/update field: label required; input type must be
+     * one of the three supported styles. Returns a 400 Response to short-circuit,
+     * or null when the request is valid.
+     */
+    private Response validateField(FieldRequest req) {
+        if (req == null || req.label == null || req.label.isBlank()) {
+            return badRequest("label is required");
+        }
+        if (req.inputType == null || !INPUT_TYPES.contains(req.inputType)) {
+            return badRequest("inputType must be one of SHORT_TEXT, LONG_TEXT, SELECT");
+        }
+        return null;
+    }
+
+    private static boolean feedsAiOrDefault(FieldRequest req) {
+        return req.feedsAi == null || req.feedsAi;
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s;
+    }
+
+    private static Response badRequest(String message) {
+        return Response.status(Response.Status.BAD_REQUEST).entity(message).build();
+    }
+
+    private static Response notFound() {
+        return Response.status(Response.Status.NOT_FOUND).build();
     }
 
     private Response serverError(SQLException sqle) {

@@ -2,6 +2,7 @@ package com.richardsand.novelkms.resource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
@@ -31,6 +32,7 @@ import com.richardsand.novelkms.resource.codex.CodexResource;
 
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
+import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
@@ -52,14 +54,15 @@ class CodexResourceTest extends NovelKmsTestBase {
     private static final CodexDao          codexDao          = new CodexDao(ds);
     private static final CodexCategoryDao  codexCategoryDao  = new CodexCategoryDao(ds);
     private static final CodexTypeFieldDao codexTypeFieldDao = new CodexTypeFieldDao(ds);
-    private static final CodexTypeDao      codexTypeDao      = new CodexTypeDao(ds, codexTypeFieldDao);
+    private static final CodexTypeDao      codexTypeDao      = new CodexTypeDao(ds, chapterDao, codexTypeFieldDao);
 
     static final ResourceExtension RESOURCES = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter())
-            .addResource(new CodexResource(codexDao, codexCategoryDao, chapterDao, codexTypeDao))
+            .addResource(new CodexResource(codexDao, codexCategoryDao, chapterDao, codexTypeDao, codexTypeFieldDao))
             .setMapper(createMapper())
             .build();
 
+    private UUID codexId;
     private UUID typeId;
 
     @BeforeEach
@@ -67,6 +70,7 @@ class CodexResourceTest extends NovelKmsTestBase {
         truncateAll();
         Project project = createTestProject("Test Project", null);
         Codex   codex   = codexDao.createForProject(project.getId(), "Codex");
+        codexId = codex.getId();
         Chapter type    = chapterDao.createCodexChapter(codex.getId(), "CHARACTER", "Characters");
         typeId = type.getId();
 
@@ -114,6 +118,147 @@ class CodexResourceTest extends NovelKmsTestBase {
     void getType_unknownId_returns404() {
         Response r = RESOURCES.target("/codex/types/" + UUID.randomUUID()).request().get();
         assertEquals(Status.NOT_FOUND.getStatusCode(), r.getStatus());
+    }
+
+    // -------------------------------------------------------------------------
+    // E4 write path: create/update Type
+    // -------------------------------------------------------------------------
+
+    @Test
+    void createType_returns201WithFieldlessAuthorType() {
+        Response r = RESOURCES.target("/codex/" + codexId + "/types").request()
+                .post(Entity.json(Map.of("name", "Dragons", "description", "The scaly cast.")));
+        assertEquals(Status.CREATED.getStatusCode(), r.getStatus());
+
+        Map<String, Object> body = r.readEntity(new GenericType<Map<String, Object>>() {});
+        assertNotNull(body.get("id"));
+        assertEquals("Dragons", body.get("name"));
+        assertEquals("The scaly cast.", body.get("description"));
+        assertNull(body.get("systemKey"), "author-created type has no system key");
+        assertTrue(((List<?>) body.get("fields")).isEmpty(), "a new type starts field-less");
+    }
+
+    @Test
+    void createType_blankName_returns400() {
+        Response r = RESOURCES.target("/codex/" + codexId + "/types").request()
+                .post(Entity.json(Map.of("name", "  ")));
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
+    }
+
+    @Test
+    void updateType_renamesAndEditsDescription() {
+        Response r = RESOURCES.target("/codex/types/" + typeId).request()
+                .put(Entity.json(Map.of("name", "People", "description", "Everyone who matters.")));
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
+
+        Map<String, Object> body = r.readEntity(new GenericType<Map<String, Object>>() {});
+        assertEquals("People", body.get("name"));
+        assertEquals("Everyone who matters.", body.get("description"));
+        assertEquals("CHARACTER", body.get("systemKey"), "rename must not touch the system key");
+    }
+
+    @Test
+    void updateType_unknownId_returns404() {
+        Response r = RESOURCES.target("/codex/types/" + UUID.randomUUID()).request()
+                .put(Entity.json(Map.of("name", "Nope")));
+        assertEquals(Status.NOT_FOUND.getStatusCode(), r.getStatus());
+    }
+
+    // -------------------------------------------------------------------------
+    // E4 write path: add / update / reorder fields
+    // -------------------------------------------------------------------------
+
+    @Test
+    void addField_generatesSlugHexKeyAndReturnsField() {
+        Response r = RESOURCES.target("/codex/types/" + typeId + "/fields").request()
+                .post(Entity.json(Map.of(
+                        "label", "Wing Span",
+                        "inputType", "SHORT_TEXT",
+                        "feedsAi", true)));
+        assertEquals(Status.CREATED.getStatusCode(), r.getStatus());
+
+        Map<String, Object> body = r.readEntity(new GenericType<Map<String, Object>>() {});
+        String key = (String) body.get("key");
+        assertTrue(key.matches("wingspan_[0-9a-f]{4}"), "unexpected generated key: " + key);
+        assertEquals("Wing Span", body.get("label"));
+        assertEquals("SHORT_TEXT", body.get("type"));
+        assertTrue((Boolean) body.get("feedsAi"));
+    }
+
+    @Test
+    void addField_selectRoundTripsOptions() {
+        Response r = RESOURCES.target("/codex/types/" + typeId + "/fields").request()
+                .post(Entity.json(Map.of(
+                        "label", "Alignment",
+                        "inputType", "SELECT",
+                        "options", List.of("Lawful", "Neutral", "Chaotic"))));
+        assertEquals(Status.CREATED.getStatusCode(), r.getStatus());
+
+        Map<String, Object> body = r.readEntity(new GenericType<Map<String, Object>>() {});
+        assertEquals("SELECT", body.get("type"));
+        assertEquals(List.of("Lawful", "Neutral", "Chaotic"), body.get("options"));
+    }
+
+    @Test
+    void addField_missingInputType_returns400() {
+        Response r = RESOURCES.target("/codex/types/" + typeId + "/fields").request()
+                .post(Entity.json(Map.of("label", "Orphan")));
+        assertEquals(Status.BAD_REQUEST.getStatusCode(), r.getStatus());
+    }
+
+    @Test
+    void addField_manuscriptChapter_returns404() throws SQLException {
+        Project project = createTestProject("Manuscript Project", null);
+        Book    book    = bookDao.create(project.getId(), "Book", null, null, null);
+        Chapter ms      = chapterDao.create(book.getId(), null, "Chapter One", null, null);
+
+        Response r = RESOURCES.target("/codex/types/" + ms.getId() + "/fields").request()
+                .post(Entity.json(Map.of("label", "Nope", "inputType", "SHORT_TEXT")));
+        assertEquals(Status.NOT_FOUND.getStatusCode(), r.getStatus());
+    }
+
+    @Test
+    void updateField_keyStableAcrossRenameAndTypeChange() {
+        // Add a SELECT field, then rename + switch it to LONG_TEXT.
+        Map<String, Object> created = RESOURCES.target("/codex/types/" + typeId + "/fields").request()
+                .post(Entity.json(Map.of(
+                        "label", "Faction",
+                        "inputType", "SELECT",
+                        "options", List.of("Rebels", "Empire"))))
+                .readEntity(new GenericType<Map<String, Object>>() {});
+        String key = (String) created.get("key");
+
+        Response r = RESOURCES.target("/codex/types/" + typeId + "/fields/" + key).request()
+                .put(Entity.json(Map.of("label", "Allegiance", "inputType", "LONG_TEXT")));
+        assertEquals(Status.OK.getStatusCode(), r.getStatus());
+
+        Map<String, Object> body = r.readEntity(new GenericType<Map<String, Object>>() {});
+        assertEquals(key, body.get("key"), "the immutable key must never change on edit");
+        assertEquals("Allegiance", body.get("label"));
+        assertEquals("LONG_TEXT", body.get("type"));
+        assertNull(body.get("options"), "switching away from SELECT clears options");
+    }
+
+    @Test
+    void updateField_unknownKey_returns404() {
+        Response r = RESOURCES.target("/codex/types/" + typeId + "/fields/does_not_exist").request()
+                .put(Entity.json(Map.of("label", "X", "inputType", "SHORT_TEXT")));
+        assertEquals(Status.NOT_FOUND.getStatusCode(), r.getStatus());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void reorderFields_reordersActiveFieldsByKey() {
+        // Existing active fields are role (0), age (1). Reverse them.
+        Response reorder = RESOURCES.target("/codex/types/" + typeId + "/fields/order").request()
+                .put(Entity.json(Map.of("fieldKeys", List.of("age", "role"))));
+        assertEquals(Status.NO_CONTENT.getStatusCode(), reorder.getStatus());
+
+        Map<String, Object> type = RESOURCES.target("/codex/types/" + typeId).request()
+                .get(new GenericType<Map<String, Object>>() {});
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) type.get("fields");
+        assertEquals("age", fields.get(0).get("key"));
+        assertEquals("role", fields.get(1).get("key"));
     }
 
     // -------------------------------------------------------------------------

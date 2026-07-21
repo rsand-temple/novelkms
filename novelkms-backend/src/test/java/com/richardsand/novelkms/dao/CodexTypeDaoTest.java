@@ -41,7 +41,7 @@ import com.richardsand.novelkms.model.codex.CodexType;
 class CodexTypeDaoTest extends NovelKmsTestBase {
 
     private static final CodexTypeFieldDao fieldDao = new CodexTypeFieldDao(ds);
-    private static final CodexTypeDao      typeDao  = new CodexTypeDao(ds, fieldDao);
+    private static final CodexTypeDao      typeDao  = new CodexTypeDao(ds, chapterDao, fieldDao);
     private static final CodexDao          codexDao = new CodexDao(ds);
 
     private Project project;

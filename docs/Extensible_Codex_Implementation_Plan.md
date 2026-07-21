@@ -36,7 +36,7 @@ Repo: `https://github.com/rsand-temple/novelkms`, branch `master`. Next free mig
 | E1 | Migration V42: `codex_type_field` table + `chapter.codex_type_description`; backfill fields from seeded schemas | Backend (SQL only) | **Done** |
 | E2 | `CodexTypeFieldDao` + `CodexType` DTO + `GET /codex/types/{typeId}` (read-only) | Backend | **Done** |
 | E3 | Cutover: entry form + AI fill read the per-instance Type schema; `/codex/categories` becomes seed/promotion-only | Backend + Frontend | **Done** |
-| E4 | Type-editor write path: create/edit type, add/rename/reorder/change-style fields; immutable-key generator | Backend | Not started |
+| E4 | Type-editor write path: create/edit type, add/rename/reorder/change-style fields; immutable-key generator | Backend | **Done** |
 | E5 | Type-editor UI: Manage Types surface, type editor, field editor, entry-create type picker | Frontend | Not started |
 | E6 | Field soft-remove / restore (non-destructive), removed-fields area, entry-count warning | Backend + Frontend | Not started |
 | E7 | New-codex seeding stamps per-instance fields; type→Trash carries fields+entries; restore together | Backend | Not started |
@@ -410,3 +410,44 @@ surprises, and anything the next phase must know._
     tenant filter. `CodexAiServiceTest` (fake AiProvider) deferred to E4.
   - **Next:** E4 — the Type editor (create/rename Type, edit description; write path
     to `chapter.codex_type_description` + `codex_type_field`).
+- **2026-07-20 — E4 done (backend, type-editor write path).** Author can now
+  create/rename types, edit descriptions, and add/update/reorder fields via API.
+  - **New `util/CodexFieldKeys`:** immutable key = `slug(label) + '_' + 4-hex`
+    (slug = lowercased `[a-z0-9]` squeeze, ≤60 chars, `field` fallback),
+    regenerated-on-collision against ALL of a Type's keys incl. soft-removed
+    (the unique index spans deleted rows). Existing V42 keys untouched.
+  - **`CodexTypeFieldDao` writes:** `addField` (generates key, appends after
+    MAX(display_order) over all rows), `updateField` (label/inputType/options/
+    help/feedsAi; **key never in the SET clause**; SELECT-only options, cleared
+    on switch to text; refuses soft-removed rows), `reorderFields` (batch 0..n-1),
+    `findField`. Every write guarded `WHERE chapter_id = ?` — a foreign key
+    matches nothing (same isolation as `reorderInCodex`'s codex_id guard).
+  - **`CodexTypeDao` writes:** `createType` (author type, `codex_category` NULL,
+    reuses `ChapterDao.createCodexChapter` for row + codex-scoped display_order,
+    then stamps description) and `updateHeader` (title + codex_type_description,
+    guarded to `codex_id IS NOT NULL AND deleted_at IS NULL`, never touches
+    codex_category). `CodexTypeDao` ctor now takes `ChapterDao` (DI + 2 tests
+    updated).
+  - **Endpoints on `CodexResource`** (NOT a new `CodexTypeResource` — the class is
+    `@Path("/")` and already owns `GET /codex/types/{typeId}`, so a
+    `@Path("/codex/types")` resource would shadow it via Jersey prefix
+    resolution): `POST /codex/{codexId}/types`, `PUT /codex/types/{typeId}`,
+    `POST /codex/types/{typeId}/fields`, `PUT /codex/types/{typeId}/fields/{fieldKey}`,
+    `PUT /codex/types/{typeId}/fields/order`. `CodexResource` ctor gains
+    `CodexTypeFieldDao` (already bound; `CodexResourceTest` builder updated).
+  - **Decision refinement:** field identity in the write API is the immutable
+    `field_key`, not the row id — it's what the client already holds
+    (`CodexField.key`), unique-per-type, and keeps `CodexField` unchanged.
+    Reorder uses `/fields/order` (not `/reorder`) so `authorizeSensitiveJsonBody`
+    doesn't reject field keys as un-owned entity UUIDs.
+  - **Validation:** name/label blank → 400; inputType ∉ {SHORT_TEXT,LONG_TEXT,
+    SELECT} → 400; SELECT with empty options allowed; type/field not a live codex
+    Type → 404, never 403; `feedsAi` omitted → TRUE.
+  - **Verification:** Java brace/package static checks; SQLite simulation of the
+    write-SQL guards (cross-type isolation, soft-removed non-editable, options
+    clearing, key-uniqueness across deleted rows, reorder isolation, header
+    guard); DAO signatures + codex_category nullability confirmed vs master. No
+    in-thread H2/Maven — run `mvn test` locally before deploy.
+  - **Next:** E5 — Type-editor UI (Manage Types, type/field editors, dnd-kit
+    reorder by key, entry-create type picker) wired to these endpoints.    
+

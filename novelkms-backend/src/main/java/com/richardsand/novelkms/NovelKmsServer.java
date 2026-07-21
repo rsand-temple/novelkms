@@ -230,7 +230,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         CodexDao              codexDao              = new CodexDao(ds);
         CodexCategoryDao      codexCategoryDao      = new CodexCategoryDao(ds);
         CodexTypeFieldDao     codexTypeFieldDao     = new CodexTypeFieldDao(ds);
-        CodexTypeDao          codexTypeDao          = new CodexTypeDao(ds, codexTypeFieldDao);
+        CodexTypeDao          codexTypeDao          = new CodexTypeDao(ds, chapterDao, codexTypeFieldDao);
         EditorSettingsDao     editorSettingsDao     = new EditorSettingsDao(ds);
         ArchiveDao            archiveDao            = new ArchiveDao(ds);
         ArtifactNodeDao       artifactNodeDao       = new ArtifactNodeDao(ds);
