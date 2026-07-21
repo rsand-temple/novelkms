@@ -25,12 +25,16 @@ const FIELD_LABELS = {
     NOTES:     'Note Title',
 }
 
-export default function AddCodexEntryDialog({ open, onClose, chapterId, codexCategory }) {
+export default function AddCodexEntryDialog({ open, onClose, chapterId, codexCategory, typeName }) {
     const [title, setTitle] = useState('')
     const createScene = useCreateScene()
 
-    const dialogTitle = DIALOG_TITLES[codexCategory] ?? 'New Entry'
-    const fieldLabel  = FIELD_LABELS[codexCategory]  ?? 'Entry Title'
+    // Seeded categories get their bespoke labels; author-created types (no
+    // codex_category) fall back to the Type's own name so the dialog still reads
+    // naturally, e.g. "New Dragon".
+    const cleanType   = typeName?.trim()
+    const dialogTitle = DIALOG_TITLES[codexCategory] ?? (cleanType ? `New ${cleanType}` : 'New Entry')
+    const fieldLabel  = FIELD_LABELS[codexCategory]  ?? (cleanType ? `${cleanType} Name` : 'Entry Title')
 
     const handleSubmit = () => {
         if (!title.trim()) return

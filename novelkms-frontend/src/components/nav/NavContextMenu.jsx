@@ -26,6 +26,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import CloseIcon from '@mui/icons-material/Close'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined'
+import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 
 import AddBookDialog from './dialogs/AddBookDialog'
 import AddChapterDialog from './dialogs/AddChapterDialog'
@@ -43,6 +44,8 @@ import BookSummaryDialog from '../ai/BookSummaryDialog'
 import ManageAiContextDialog from '../ai/ManageAiContextDialog'
 import ChapterReviewHistoryDialog from '../ai/ChapterReviewHistoryDialog'
 import ReviewRequestDialog from '../community/ReviewRequestDialog'
+import ManageCodexTypesDialog from '../codex/ManageCodexTypesDialog'
+import CodexTypeEditorDialog from '../codex/CodexTypeEditorDialog'
 
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
 import { useChapters, useDeleteChapter } from '../../hooks/useChapters'
@@ -257,6 +260,14 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const { mutate: setCategoryPinned } = useSetCategoryPinned()
 	const [manageContextCodexId, setManageContextCodexId] = useState(null)
 	const [manageContextTitle, setManageContextTitle] = useState('')
+
+	// ── Codex Type management (E5) ─────────────────────────────────────────────
+	// Manage Types opens from the codex container; Edit Type opens directly on a
+	// single type (a codex-category chapter). Targets are captured before
+	// closeMenu() (which keeps menuNode alive but which we don't want to depend
+	// on for dialog props).
+	const [manageTypesTarget, setManageTypesTarget] = useState(null) // { codexId, title } | null
+	const [editTypeTarget, setEditTypeTarget] = useState(null)       // { typeId, codexId } | null
 
 	// Chapter memory document (nav "Generate / Clear memory document").
 	const { mutate: generateMemory, isPending: generatingMemory } = useGenerateChapterMemory()
@@ -899,6 +910,21 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 
 				{menuNode?.type === 'codex-category' && <Divider />}
 				{menuNode?.type === 'codex-category' && (
+					<MenuItem
+						dense
+						onClick={() => {
+							const target = { typeId: menuNode.id, codexId: menuNode.codexId }
+							closeMenu()
+							setEditTypeTarget(target)
+						}}
+					>
+						<ListItemIcon><TuneOutlinedIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Edit Type…</ListItemText>
+					</MenuItem>
+				)}
+
+				{menuNode?.type === 'codex-category' && <Divider />}
+				{menuNode?.type === 'codex-category' && (
 					<MenuItem dense onClick={() => handleCategoryPin(true)}>
 						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Include all in AI context</ListItemText>
@@ -916,6 +942,19 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					<MenuItem dense onClick={openManageContext}>
 						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Manage AI Context…</ListItemText>
+					</MenuItem>
+				)}
+				{menuNode?.type === 'codex' && (
+					<MenuItem
+						dense
+						onClick={() => {
+							const target = { codexId: menuNode.id, title: menuNode.title || 'Codex' }
+							closeMenu()
+							setManageTypesTarget(target)
+						}}
+					>
+						<ListItemIcon><TuneOutlinedIcon fontSize="small" /></ListItemIcon>
+						<ListItemText>Manage Codex Types…</ListItemText>
 					</MenuItem>
 				)}
 
@@ -1168,6 +1207,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				onClose={() => setEntryDialogOpen(false)}
 				chapterId={menuNode?.type === 'codex-category' ? menuNode.id : null}
 				codexCategory={menuNode?.codexCategory ?? null}
+				typeName={menuNode?.type === 'codex-category' ? menuNode.title : null}
 			/>
 
 			{/* ── AI Review confirmation ─────────────────────────────────────── */}
@@ -1296,6 +1336,20 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				onClose={() => setManageContextCodexId(null)}
 				codexId={manageContextCodexId}
 				title={manageContextTitle}
+			/>
+
+			{/* ── Codex Type management (E5) ──────────────────────────────── */}
+			<ManageCodexTypesDialog
+				open={!!manageTypesTarget}
+				onClose={() => setManageTypesTarget(null)}
+				codexId={manageTypesTarget?.codexId}
+				codexTitle={manageTypesTarget?.title}
+			/>
+			<CodexTypeEditorDialog
+				open={!!editTypeTarget}
+				onClose={() => setEditTypeTarget(null)}
+				typeId={editTypeTarget?.typeId}
+				codexId={editTypeTarget?.codexId}
 			/>
 
 			<Snackbar

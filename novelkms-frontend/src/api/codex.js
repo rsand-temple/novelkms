@@ -9,6 +9,19 @@ export const codexApi = {
     // promotion mapping.
     getType:          (typeId)          => client.get(`/codex/types/${typeId}`).then(r => r.data),
 
+    // ── Type-editor write path (E4 endpoints) ─────────────────────────────────
+    // A "Type" is a category chapter row; typeId is that chapter id. Author
+    // types are created with codex_category NULL. Field identity in the write
+    // API is the immutable field key (server-generated on add), never the row
+    // id — so rename/reorder never disturb stored entry values. Field write
+    // bodies use { label, inputType, options, help, feedsAi }; reorder uses a
+    // flat { fieldKeys } array.
+    createType:       (codexId, data)   => client.post(`/codex/${codexId}/types`, data).then(r => r.data),
+    updateType:       (typeId, data)    => client.put(`/codex/types/${typeId}`, data).then(r => r.data),
+    addField:         (typeId, data)    => client.post(`/codex/types/${typeId}/fields`, data).then(r => r.data),
+    updateField:      (typeId, key, d)  => client.put(`/codex/types/${typeId}/fields/${encodeURIComponent(key)}`, d).then(r => r.data),
+    reorderFields:    (typeId, keys)    => client.put(`/codex/types/${typeId}/fields/order`, { fieldKeys: keys }).then(r => r.data),
+
     getByProject:     (projectId)       => client.get(`/projects/${projectId}/codex`).then(r => r.data),
     createForProject: (projectId, data) => client.post(`/projects/${projectId}/codex`, data ?? {}).then(r => r.data),
 

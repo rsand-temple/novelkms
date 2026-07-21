@@ -37,7 +37,7 @@ Repo: `https://github.com/rsand-temple/novelkms`, branch `master`. Next free mig
 | E2 | `CodexTypeFieldDao` + `CodexType` DTO + `GET /codex/types/{typeId}` (read-only) | Backend | **Done** |
 | E3 | Cutover: entry form + AI fill read the per-instance Type schema; `/codex/categories` becomes seed/promotion-only | Backend + Frontend | **Done** |
 | E4 | Type-editor write path: create/edit type, add/rename/reorder/change-style fields; immutable-key generator | Backend | **Done** |
-| E5 | Type-editor UI: Manage Types surface, type editor, field editor, entry-create type picker | Frontend | Not started |
+| E5 | Type-editor UI: Manage Types surface, type editor, field editor, entry-create type picker | Frontend | **Done** |
 | E6 | Field soft-remove / restore (non-destructive), removed-fields area, entry-count warning | Backend + Frontend | Not started |
 | E7 | New-codex seeding stamps per-instance fields; type→Trash carries fields+entries; restore together | Backend | Not started |
 | E8 | DOCX round-trip + AI promotion against per-instance types (`system_key` mapping + author picks type) | Backend + small Frontend | Not started |
@@ -449,5 +449,42 @@ surprises, and anything the next phase must know._
     guard); DAO signatures + codex_category nullability confirmed vs master. No
     in-thread H2/Maven — run `mvn test` locally before deploy.
   - **Next:** E5 — Type-editor UI (Manage Types, type/field editors, dnd-kit
-    reorder by key, entry-create type picker) wired to these endpoints.    
+    reorder by key, entry-create type picker) wired to these endpoints.
+- **2026-07-20 — E5 done (frontend, type-editor UI).** Authors can create/rename
+  types, edit descriptions, and add/edit/reorder fields entirely from the UI.
+  - **API (`api/codex.js`):** added `createType`, `updateType`, `addField`,
+    `updateField` (key percent-encoded), `reorderFields` ({ fieldKeys }). Field
+    write bodies use `inputType` (mapped from `CodexField.type`); reads keep
+    `type`.
+  - **Hooks (`hooks/useCodex.js`):** `useCreateCodexType`, `useUpdateCodexType`
+    (invalidates the type read model + owning codex chapter list, since name is
+    chapter.title on the nav row), `useAddCodexTypeField`,
+    `useUpdateCodexTypeField`, and `useReorderCodexTypeFields` (optimistic
+    reorder of the cached `type.fields` by key, rollback on error, invalidate on
+    settle — component stays a pure function of the query).
+  - **Components:** `ManageCodexTypesDialog` (lists types via `useCodexChapters`,
+    per-type field counts via `useQueries` on `CODEX_KEYS.type` so open types
+    cost no extra request; New Type → create → chain into editor),
+    `CodexTypeEditorDialog` (name+description saved together via header PUT;
+    fields in a self-contained dnd-kit `DndContext` separate from the nav tree;
+    string IDs = field keys), `CodexFieldEditorDialog` (Label, Input style →
+    SHORT_TEXT/LONG_TEXT/SELECT, Choices for SELECT, Help, feeds-AI switch —
+    Help+feedsAi round-tripped so editing seeded fields never blanks them).
+  - **Nav wiring (`NavContextMenu.jsx`):** "Manage Codex Types…" on the codex
+    node, "Edit Type…" on a codex-category node; both capture their target
+    before `closeMenu()`. `AddCodexEntryDialog` now takes `typeName` so author
+    types read "New {TypeName}".
+  - **Scope held to E5:** no field-delete control (soft-remove is E6); no type
+    reorder / type-Trash surface (nav + Codex Trash / E7); per-type entry counts
+    deferred. Decision-8 "Type" wording used on new surfaces; full sweep is E9.
+  - **Icons:** only repo-proven icons (`TuneOutlined`, `EditOutlined`, `Add`);
+    drag handle is a grip glyph, no new icon dependency. No React Compiler in
+    this project, so manual hooks are used normally.
+  - **Verification:** esbuild JSX transform on all 7 files; hook/API export vs.
+    consumer cross-check; menuNode payload confirmed against CodexItem /
+    CodexCategoryItem. Frontend-only — no Maven/H2 in-thread; run a build and
+    walk the create-type→add-entry→fill flow before deploy.
+  - **Next:** E6 — field soft-remove/restore (backend `deleted_at` + restore;
+    "Removed fields" area in the type editor; entry-count warning). The editor's
+    FieldRow is where the per-field Delete/Restore affordance lands.
 
