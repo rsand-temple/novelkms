@@ -39,7 +39,7 @@ Repo: `https://github.com/rsand-temple/novelkms`, branch `master`. Next free mig
 | E4 | Type-editor write path: create/edit type, add/rename/reorder/change-style fields; immutable-key generator | Backend | **Done** |
 | E5 | Type-editor UI: Manage Types surface, type editor, field editor, entry-create type picker | Frontend | **Done** |
 | E6 | Field soft-remove / restore (non-destructive), removed-fields area, entry-count warning | Backend + Frontend | **Done** |
-| E7 | New-codex seeding stamps per-instance fields; type→Trash carries fields+entries; restore together | Backend | Not started |
+| E7 | New-codex seeding stamps per-instance fields; type→Trash carries fields+entries; restore together | Backend | **Done** |
 | E8 | DOCX round-trip + AI promotion against per-instance types (`system_key` mapping + author picks type) | Backend + small Frontend | Not started |
 | E9 | Terminology sweep (UI "Category"→"Type") + full DELIVERED living-doc pass | Frontend + docs | Not started |
 
@@ -542,4 +542,33 @@ surprises, and anything the next phase must know._
     endpoint tests (204/404 remove, restore reappears in slot, usage counts).
     Static: Java brace/package check, esbuild JSX transform. Maven/H2 not run
     in the authoring environment.
-
+- **2026-07-21 — E7 done (backend, seeding + type Trash).** New codexes now seed
+  per-instance field rows, and the Type Trash carry contract is locked in.
+  - **Seeding (`CodexTypeFieldDao.seedFields` + `CodexResource.seedDefaultChapters`):**
+    creating a project/book codex stamps each seeded default Type with its own
+    `codex_type_field` rows, copied VERBATIM from the `codex_category` master
+    schema — keys (`role`, `age`, …), labels, input types, SELECT options, help,
+    `feeds_ai`, and array order all preserved, `display_order` = array index. So a
+    brand-new CHARACTER type owns the same 12-key set as the V42-backfilled
+    instances (VOICE 10); the five schema-less defaults (PLOT/WORLD/TIMELINE/
+    CANON/NOTES) seed no field rows. `seedFields` uses verbatim keys, NOT the
+    author path's `slug_4hex` generator — this shared key set is what E8 AI-
+    promotion mapping and Decision 3 depend on. One batched, transactional insert
+    per Type; null/empty field list is a no-op. `addField` unchanged.
+  - **Type Trash — no production code change, confirmed by design.** `trashChapter`
+    stamps only the chapter root's `deleted_at`; it never touches
+    `codex_type_field`, so a trashed Type keeps its field rows and its entry
+    scenes (entries hidden transitively, not deleted). `restoreChapter` clears the
+    flag and fields + entries go live together. `purgeChapter` hard-deletes the
+    chapter, and only then does the V42 `ON DELETE CASCADE` FK remove the field
+    rows (and the entry scenes). This is exactly the handoff-note contract: fields
+    survive Trash, cascade only on hard purge.
+  - **Tests:** `CodexResourceTest.createProjectCodex_seedsTypesWithVerbatimPerInstanceFields`
+    (7 seeded types; CHARACTER 12 / VOICE 10 verbatim keys in order; schema-less
+    five own 0). New `CodexTypeTrashDaoTest` (trash leaves fields+entry; restore
+    brings both back; purge cascades both). `NovelKmsServer` DI unchanged.
+  - **Verification:** Java brace/package static checks on all four files; DAO/
+    getter signatures cross-checked. No migration → no H2 replay. Maven/H2 not run
+    in-thread — run `mvn test` locally before deploy.
+  - **Next:** E8 — DOCX round-trip + AI promotion against per-instance types
+    (`system_key` mapping + author picks type).

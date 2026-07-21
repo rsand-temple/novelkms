@@ -19,6 +19,7 @@ import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.model.codex.Codex;
 import com.richardsand.novelkms.model.codex.CodexCategory;
 import com.richardsand.novelkms.model.codex.CodexField;
+import com.richardsand.novelkms.model.codex.CodexSchema;
 import com.richardsand.novelkms.service.CodexFieldUsageService;
 
 import jakarta.inject.Inject;
@@ -478,11 +479,21 @@ public class CodexResource {
 
     /**
      * Seeds one category chapter per default codex_category, titled with the
-     * category label, so a new codex opens with a sensible structure.
+     * category label, so a new codex opens with a sensible structure. Each
+     * seeded Type also gets its own per-instance field rows (E7), copied verbatim
+     * from the category's master schema — so a brand-new codex owns its schema in
+     * {@code codex_type_field} exactly as the V42-backfilled instances do, rather
+     * than borrowing the system-global schema that the E3 cutover retired.
+     * Schema-less default categories (PLOT, WORLD, TIMELINE, CANON, NOTES) seed
+     * no field rows and remain plain title-plus-body types.
      */
     private void seedDefaultChapters(UUID codexId) throws SQLException {
         for (CodexCategory category : codexCategoryDao.findDefaults()) {
-            chapterDao.createCodexChapter(codexId, category.getCategoryKey(), category.getLabel());
+            Chapter type = chapterDao.createCodexChapter(codexId, category.getCategoryKey(), category.getLabel());
+            CodexSchema schema = category.getSchema();
+            if (schema != null && schema.getFields() != null && !schema.getFields().isEmpty()) {
+                codexTypeFieldDao.seedFields(type.getId(), schema.getFields());
+            }
         }
     }
 

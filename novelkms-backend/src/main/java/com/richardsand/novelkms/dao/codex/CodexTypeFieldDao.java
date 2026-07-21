@@ -323,6 +323,70 @@ public class CodexTypeFieldDao {
     }
 
     // -------------------------------------------------------------------------
+    // Seeding (E7)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Stamps a freshly-created seeded Type with its own copy of a default
+     * category's field set, taken verbatim from the {@code codex_category}
+     * master schema. Unlike {@link #addField} (the author path, which generates a
+     * fresh {@code slug_4hex} key), the keys here are copied <b>exactly</b> from
+     * the source schema ({@code role}, {@code age}, …) so every instance of a
+     * seeded type — the V42-backfilled ones and every newly-created codex —
+     * shares one key set. That shared key set is what AI-promotion mapping (E8)
+     * and Decision 3's immutable-key rule depend on, and it means a CHARACTER
+     * entry authored in one project resolves its {@code structured_data} against
+     * a CHARACTER type in any other.
+     *
+     * <p>{@code display_order} is the field's index in {@code fields}, mirroring
+     * the array order the migration preserved from V33. {@code options} is
+     * serialized only for SELECT fields (text fields store NULL). All rows for
+     * the Type are inserted in one batched statement inside a single
+     * transaction, so a Type's schema is stamped all-or-nothing.
+     *
+     * <p>This is a seed-time operation: it assumes {@code chapterId} is a
+     * brand-new Type with no existing fields, so it neither checks for key
+     * collisions nor consults the current max order. A null or empty field list
+     * is a no-op (schema-less default categories seed no field rows).
+     */
+    public void seedFields(UUID chapterId, List<CodexField> fields) throws SQLException {
+        if (fields == null || fields.isEmpty()) {
+            return;
+        }
+        String insert = "INSERT INTO codex_type_field "
+                + "(id, chapter_id, field_key, label, input_type, options, help, feeds_ai, display_order, created_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (Connection c = ds.getConnection()) {
+            c.setAutoCommit(false);
+            try (PreparedStatement ps = c.prepareStatement(insert)) {
+                Instant now = Instant.now();
+                for (int i = 0; i < fields.size(); i++) {
+                    CodexField f = fields.get(i);
+                    ps.setObject(1, UUID.randomUUID());
+                    ps.setObject(2, chapterId);
+                    ps.setString(3, f.getKey());
+                    ps.setString(4, f.getLabel());
+                    ps.setString(5, f.getType());
+                    ps.setString(6, optionsJson(f.getType(), f.getOptions()));
+                    ps.setString(7, f.getHelp());
+                    ps.setBoolean(8, f.isFeedsAi());
+                    ps.setInt(9, i);
+                    ps.setTimestamp(10, Timestamp.from(now));
+                    ps.setTimestamp(11, Timestamp.from(now));
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 

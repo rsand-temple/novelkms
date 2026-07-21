@@ -1,6 +1,7 @@
 package com.richardsand.novelkms.resource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,6 +29,7 @@ import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.book.Book;
 import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.model.codex.Codex;
+import com.richardsand.novelkms.model.codex.CodexField;
 import com.richardsand.novelkms.resource.codex.CodexResource;
 import com.richardsand.novelkms.service.CodexFieldUsageService;
 
@@ -345,6 +347,59 @@ class CodexResourceTest extends NovelKmsTestBase {
         Response r = RESOURCES.target("/codex/types/" + UUID.randomUUID() + "/fields/usage")
                 .request().get();
         assertEquals(Status.NOT_FOUND.getStatusCode(), r.getStatus());
+    }
+
+    // -------------------------------------------------------------------------
+    // E7: new-codex seeding stamps per-instance field rows
+    // -------------------------------------------------------------------------
+
+    @Test
+    void createProjectCodex_seedsTypesWithVerbatimPerInstanceFields() throws SQLException {
+        Project project = createTestProject("Seeded Project", null);
+
+        Response r = RESOURCES.target("/projects/" + project.getId() + "/codex").request()
+                .post(Entity.json(Map.of("title", "World")));
+        assertEquals(Status.CREATED.getStatusCode(), r.getStatus());
+        UUID seededCodexId = UUID.fromString(
+                (String) r.readEntity(new GenericType<Map<String, Object>>() {}).get("id"));
+
+        List<Chapter> types = chapterDao.findByCodexId(seededCodexId);
+        assertEquals(7, types.size(), "all seven default categories are seeded");
+
+        // CHARACTER: 12 fields, keys copied verbatim from the master schema in
+        // V33 order (not the author path's generated slug_4hex keys).
+        Chapter          character       = typeByCategory(types, "CHARACTER");
+        List<CodexField> characterFields = codexTypeFieldDao.findActiveByType(character.getId());
+        assertEquals(
+                List.of("role", "age", "summary", "want", "need", "conflict", "arc",
+                        "appearance", "voice", "relationships", "secrets", "authorNotes"),
+                characterFields.stream().map(CodexField::getKey).toList(),
+                "seeded CHARACTER keys match the master schema verbatim and in order");
+        assertEquals("SELECT", characterFields.get(0).getType());
+        assertEquals(9, characterFields.get(0).getOptions().size(), "role keeps its nine options");
+        assertFalse(characterFields.get(11).isFeedsAi(), "authorNotes stays private (feeds_ai=false)");
+
+        // VOICE: 10 fields, verbatim keys in V33 order.
+        Chapter          voice       = typeByCategory(types, "VOICE");
+        List<CodexField> voiceFields = codexTypeFieldDao.findActiveByType(voice.getId());
+        assertEquals(
+                List.of("appliesTo", "register", "diction", "rhythm", "tics", "dialect",
+                        "dos", "donts", "samples", "authorNotes"),
+                voiceFields.stream().map(CodexField::getKey).toList());
+        assertEquals("SELECT", voiceFields.get(1).getType(), "register is a SELECT");
+
+        // The five schema-less default categories seed no field rows.
+        for (String key : List.of("PLOT", "WORLD", "TIMELINE", "CANON", "NOTES")) {
+            assertTrue(codexTypeFieldDao.findActiveByType(typeByCategory(types, key).getId()).isEmpty(),
+                    key + " is a plain title-plus-body type with no seeded fields");
+        }
+    }
+
+    private static Chapter typeByCategory(List<Chapter> types, String categoryKey) {
+        return types.stream()
+                .filter(t -> categoryKey.equals(t.getCodexCategory()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no seeded type for category " + categoryKey));
     }
 
     // -------------------------------------------------------------------------
