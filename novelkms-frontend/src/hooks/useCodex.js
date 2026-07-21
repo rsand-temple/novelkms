@@ -7,6 +7,7 @@ import { chaptersApi } from '../api/chapters'
 export const CODEX_KEYS = {
     categories: ()          => ['codex', 'categories'],
     type:       (typeId)    => ['codex', 'type', typeId],
+    usage:      (typeId)    => ['codex', 'type', typeId, 'usage'],
     byProject:  (projectId) => ['codex', 'byProject', projectId],
     byBook:     (bookId)    => ['codex', 'byBook', bookId],
     detail:     (id)        => ['codex', id],
@@ -44,6 +45,19 @@ export function useCodexType(typeId) {
         queryFn:  () => codexApi.getType(typeId),
         enabled:  !!typeId,
         staleTime: 5 * 60 * 1000,
+    })
+}
+
+// Type-editor field-usage view: every field of a Type (active and soft-removed)
+// with a `removed` flag and an `entryCount`. Powers the "Removed fields" area
+// and the count shown in the pre-removal warning, so it must not serve stale
+// counts — staleTime 0 refetches whenever the editor opens or the fields change.
+export function useCodexFieldUsage(typeId) {
+    return useQuery({
+        queryKey: CODEX_KEYS.usage(typeId),
+        queryFn:  () => codexApi.getFieldUsage(typeId),
+        enabled:  !!typeId,
+        staleTime: 0,
     })
 }
 
@@ -209,5 +223,34 @@ export function useReorderCodexTypeFields() {
         },
         onSettled: (_d, _e, { typeId }) =>
             qc.invalidateQueries({ queryKey: CODEX_KEYS.type(typeId) }),
+    })
+}
+
+// ── Field soft-remove / restore (E6) ──────────────────────────────────────────
+//
+// Removal is non-destructive: the field leaves the active set (so the Type read
+// model changes) but its stored values are preserved. Both mutations refresh the
+// Type (active fields, consumed by the entry form and editor) and the usage view
+// (removed list + counts).
+
+export function useRemoveCodexTypeField() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: ({ typeId, fieldKey }) => codexApi.removeField(typeId, fieldKey),
+        onSuccess:  (_r, { typeId }) => {
+            qc.invalidateQueries({ queryKey: CODEX_KEYS.type(typeId) })
+            qc.invalidateQueries({ queryKey: CODEX_KEYS.usage(typeId) })
+        },
+    })
+}
+
+export function useRestoreCodexTypeField() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: ({ typeId, fieldKey }) => codexApi.restoreField(typeId, fieldKey),
+        onSuccess:  (_r, { typeId }) => {
+            qc.invalidateQueries({ queryKey: CODEX_KEYS.type(typeId) })
+            qc.invalidateQueries({ queryKey: CODEX_KEYS.usage(typeId) })
+        },
     })
 }

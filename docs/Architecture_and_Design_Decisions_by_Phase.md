@@ -403,8 +403,6 @@ stays faithful, and safety is enforced at the render boundary where the trust
 transition actually happens. Queue uses `useInfiniteQuery` (offset paging); filters
 commit on Apply for transparency (§12); 409 → claim-a-handle prompt.
 
-## Phase 1 / Slice 1D — Human review write path
-
 ### Slice 1D — Human review write path
 
 **Jersey path-specificity fix.** `ReviewRequestResource` was `@Path("/")` with method
@@ -521,3 +519,18 @@ list, queue, received, writing). The admin surface is a self-contained
 matching the console rather than introducing react-query there); one `{reason, note}`
 dialog drives every moderation action, and profile suspension is keyed by handle because
 `ContentReportView` carries a target id but not a target handle.
+
+## Extensible Codex E6 — non-destructive field removal.
+- Soft-remove via codex_type_field.deleted_at (existing since V42); active reads
+  already exclude removed rows. restoreField preserves original display_order.
+- Entry counts computed in Java over scene.structured_data, never via a
+  dialect-specific JSON operator (H2 DEFAULT mode has no reliable JSON path).
+  "Contains information" = non-null, non-blank-after-trim.
+- New read model CodexFieldUsage kept separate from CodexField/CodexType so the
+  entry-form and AI contracts stay narrow (active-only, no editor fields).
+- Endpoints hang off the tenant-authorized types segment; bodyless DELETE +
+  restore POST avoid authorizeSensitiveJsonBody. GET .../fields/usage relies on
+  JAX-RS literal-over-template precedence (same as E4's /fields/order).
+- Counting lives in a small service (CodexFieldUsageService), not inlined in the
+  resource, to keep the resource free of SceneDao/JSON parsing and give the
+  count logic a Flyway-backed unit-test seam.

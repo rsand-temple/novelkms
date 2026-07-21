@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.richardsand.novelkms.model.codex.CodexField;
+import com.richardsand.novelkms.model.codex.CodexFieldUsage;
 import com.richardsand.novelkms.util.CodexFieldKeys;
 
 /**
@@ -48,9 +49,13 @@ import com.richardsand.novelkms.util.CodexFieldKeys;
  * tenant-authorized path segment.
  *
  * <p>Write methods here (add / update / reorder) are the E4 type-editor write
- * path. Soft-remove / restore ({@code deleted_at}) is E6 and is deliberately not
- * exposed yet — {@link #updateField} refuses to touch an already soft-removed
- * row.
+ * path. Non-destructive soft-remove / restore ({@code deleted_at}) is E6:
+ * {@link #softRemoveField} hides a field from the form while its stored values
+ * survive in {@code structured_data}, and {@link #restoreField} re-shows it in
+ * its original slot. {@link #updateField} still refuses to touch a soft-removed
+ * row (it must be restored first), and {@link #findUsage} exposes every field
+ * (active and removed) with its removed state for the editor's "Removed fields"
+ * area.
  */
 public class CodexTypeFieldDao {
 
@@ -110,6 +115,40 @@ public class CodexTypeFieldDao {
                 return rs.next() ? Optional.of(map(rs)) : Optional.empty();
             }
         }
+    }
+
+    /**
+     * All fields of a Type (active and soft-removed) in display order, each as a
+     * {@link CodexFieldUsage} carrying its {@code removed} state; {@code
+     * entryCount} is left 0 here — the usage service overlays the scene-derived
+     * counts. Backs the type editor's "Removed fields" area and the pre-removal
+     * warning (E6).
+     */
+    public List<CodexFieldUsage> findUsage(UUID chapterId) throws SQLException {
+        String sql = "SELECT field_key, label, input_type, options, help, feeds_ai, "
+                + "display_order, deleted_at "
+                + "FROM codex_type_field WHERE chapter_id = ? "
+                + "ORDER BY display_order, field_key";
+        List<CodexFieldUsage> result = new ArrayList<>();
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(CodexFieldUsage.builder()
+                            .key(rs.getString("field_key"))
+                            .label(rs.getString("label"))
+                            .type(rs.getString("input_type"))
+                            .options(parseOptions(rs.getString("options")))
+                            .help(rs.getString("help"))
+                            .feedsAi(rs.getBoolean("feeds_ai"))
+                            .removed(rs.getTimestamp("deleted_at") != null)
+                            .entryCount(0)
+                            .build());
+                }
+            }
+        }
+        return result;
     }
 
     // -------------------------------------------------------------------------
@@ -230,6 +269,57 @@ public class CodexTypeFieldDao {
                 c.setAutoCommit(true);
             }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Soft-remove / restore (E6)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Soft-removes an active field: stamps {@code deleted_at} so the field drops
+     * off the entry form while its stored {@code structured_data} values are left
+     * completely untouched and can be restored later. The {@code deleted_at IS
+     * NULL} guard makes this a no-op on an already-removed field (and, with the
+     * {@code chapter_id} guard, on a key belonging to another Type). Returns true
+     * when a row was removed, false otherwise (the resource maps false to 404).
+     */
+    public boolean softRemoveField(UUID chapterId, String fieldKey) throws SQLException {
+        String sql = "UPDATE codex_type_field SET deleted_at = ?, updated_at = ? "
+                + "WHERE chapter_id = ? AND field_key = ? AND deleted_at IS NULL";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            Instant now = Instant.now();
+            ps.setTimestamp(1, Timestamp.from(now));
+            ps.setTimestamp(2, Timestamp.from(now));
+            ps.setObject(3, chapterId);
+            ps.setString(4, fieldKey);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Restores a soft-removed field by clearing {@code deleted_at}. Its original
+     * {@code display_order} is preserved, so it re-appears in its former slot
+     * among the active fields, and its stored values become visible again with
+     * it. The {@code deleted_at IS NOT NULL} guard means restoring an already
+     * active (or unknown) field matches nothing → empty (→ 404). Returns the now
+     * active field. A key collision on restore is impossible: {@link #addField}
+     * generates new keys against the Type's full key set including removed rows,
+     * so a removed key can never be re-issued while it waits to be restored.
+     */
+    public Optional<CodexField> restoreField(UUID chapterId, String fieldKey) throws SQLException {
+        String sql = "UPDATE codex_type_field SET deleted_at = NULL, updated_at = ? "
+                + "WHERE chapter_id = ? AND field_key = ? AND deleted_at IS NOT NULL";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setTimestamp(1, Timestamp.from(Instant.now()));
+            ps.setObject(2, chapterId);
+            ps.setString(3, fieldKey);
+            if (ps.executeUpdate() == 0) {
+                return Optional.empty();
+            }
+        }
+        return findField(chapterId, fieldKey);
     }
 
     // -------------------------------------------------------------------------

@@ -122,6 +122,7 @@ import com.richardsand.novelkms.service.ArtifactStorage;
 import com.richardsand.novelkms.service.BillingService;
 import com.richardsand.novelkms.service.CodexAiService;
 import com.richardsand.novelkms.service.CodexExportService;
+import com.richardsand.novelkms.service.CodexFieldUsageService;
 import com.richardsand.novelkms.service.EpubExportService;
 import com.richardsand.novelkms.service.ExportService;
 import com.richardsand.novelkms.service.ImportService;
@@ -330,6 +331,8 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
         CodexAiService     codexAiService     = new CodexAiService(
                 sceneDao, chapterDao, bookDao, codexDao, codexTypeFieldDao,
                 aiCredentialDao, chapterSummaryDao, aiProviderRegistry.getAiProviderMap());
+        CodexFieldUsageService codexFieldUsageService = new CodexFieldUsageService(
+                codexTypeFieldDao, sceneDao);
 
         // Author utility tools
         CalendarToolsService calendarToolsService = new CalendarToolsService();
@@ -433,6 +436,7 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 bind(codexTypeFieldDao).to(CodexTypeFieldDao.class);
                 bind(codexTypeDao).to(CodexTypeDao.class);
                 bind(codexExportService).to(CodexExportService.class);
+                bind(codexFieldUsageService).to(CodexFieldUsageService.class);
                 bind(config).to(NovelKmsConfig.class);
                 bind(editorSettingsDao).to(EditorSettingsDao.class);
                 bind(epubExportService).to(EpubExportService.class);

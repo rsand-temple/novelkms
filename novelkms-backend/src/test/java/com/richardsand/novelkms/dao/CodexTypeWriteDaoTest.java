@@ -13,6 +13,7 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ import com.richardsand.novelkms.dao.codex.CodexTypeFieldDao;
 import com.richardsand.novelkms.model.Project;
 import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.model.codex.CodexField;
+import com.richardsand.novelkms.model.codex.CodexFieldUsage;
 import com.richardsand.novelkms.model.codex.CodexType;
 
 /**
@@ -210,8 +212,92 @@ class CodexTypeWriteDaoTest extends NovelKmsTestBase {
     }
 
     // -------------------------------------------------------------------------
+    // CodexTypeFieldDao: soft-remove / restore (E6)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void softRemoveField_hidesFromActive_butRowSurvives() throws SQLException {
+        assertTrue(fieldDao.softRemoveField(characterTypeId, "age"));
+
+        List<CodexField> active = fieldDao.findActiveByType(characterTypeId);
+        assertEquals(1, active.size(), "removed field must not appear in the active set");
+        assertEquals("role", active.get(0).getKey());
+
+        // The row still exists (soft delete) and is reported as removed by usage.
+        CodexFieldUsage age = usageFor(characterTypeId, "age");
+        assertNotNull(age, "soft-removed field must still be present in the usage view");
+        assertTrue(age.isRemoved());
+    }
+
+    @Test
+    void softRemoveField_alreadyRemoved_isFalse() throws SQLException {
+        insertField(characterTypeId, "gone_1a2b", "Gone", "SHORT_TEXT", null, null, true, 9, true);
+        assertFalse(fieldDao.softRemoveField(characterTypeId, "gone_1a2b"),
+                "removing an already soft-removed field is a no-op");
+    }
+
+    @Test
+    void softRemoveField_foreignType_isFalse() throws SQLException {
+        Chapter other = chapterDao.createCodexChapter(codexId, "VOICE", "Voices");
+        // "age" belongs to characterType; guarded out of the other Type.
+        assertFalse(fieldDao.softRemoveField(other.getId(), "age"));
+        assertEquals(2, fieldDao.findActiveByType(characterTypeId).size(),
+                "characterType's fields must be untouched");
+    }
+
+    @Test
+    void restoreField_reappearsInOriginalOrder_withValuesIntact() throws SQLException {
+        // role is order 0. Remove it, then restore — it must return to the front.
+        assertTrue(fieldDao.softRemoveField(characterTypeId, "role"));
+        assertEquals(1, fieldDao.findActiveByType(characterTypeId).size());
+
+        Optional<CodexField> restored = fieldDao.restoreField(characterTypeId, "role");
+        assertTrue(restored.isPresent());
+        assertEquals("role", restored.get().getKey());
+
+        List<CodexField> active = fieldDao.findActiveByType(characterTypeId);
+        assertEquals(2, active.size());
+        assertEquals("role", active.get(0).getKey(), "restore preserves original display order");
+        assertEquals("age", active.get(1).getKey());
+    }
+
+    @Test
+    void restoreField_activeField_isEmpty() throws SQLException {
+        assertTrue(fieldDao.restoreField(characterTypeId, "age").isEmpty(),
+                "restoring a field that is already active matches nothing");
+    }
+
+    @Test
+    void restoreField_unknownKey_isEmpty() throws SQLException {
+        assertTrue(fieldDao.restoreField(characterTypeId, "nope_0000").isEmpty());
+    }
+
+    @Test
+    void findUsage_returnsAllFieldsInOrder_withRemovedFlags() throws SQLException {
+        insertField(characterTypeId, "gone_1a2b", "Gone", "SHORT_TEXT", null, null, true, 2, true);
+
+        List<CodexFieldUsage> usage = fieldDao.findUsage(characterTypeId);
+        assertEquals(3, usage.size(), "usage includes active and soft-removed fields");
+        assertEquals("role", usage.get(0).getKey());
+        assertFalse(usage.get(0).isRemoved());
+        assertEquals("age", usage.get(1).getKey());
+        assertFalse(usage.get(1).isRemoved());
+        assertEquals("gone_1a2b", usage.get(2).getKey());
+        assertTrue(usage.get(2).isRemoved());
+        // entryCount is filled by the usage service, not the DAO.
+        assertEquals(0, usage.get(2).getEntryCount());
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private CodexFieldUsage usageFor(UUID typeId, String key) throws SQLException {
+        return fieldDao.findUsage(typeId).stream()
+                .filter(u -> key.equals(u.getKey()))
+                .findFirst()
+                .orElse(null);
+    }
 
     private void insertField(UUID chapterId, String key, String label, String inputType,
             String optionsJson, String help, boolean feedsAi, int order, boolean deleted)

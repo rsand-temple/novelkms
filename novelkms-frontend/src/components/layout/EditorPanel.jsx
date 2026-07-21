@@ -69,6 +69,7 @@ import PartPagePreview from '../editor/PartPagePreview';
 import ProjectShelf from '../editor/ProjectShelf';
 import CodexEntryFields from '../codex/CodexEntryFields';
 import { generateDefaultSceneTitle } from '../../utils/sceneTitles';
+import { alpha } from '@mui/material/styles'
 
 const AUTOSAVE_DELAY_MS = 1500;
 
@@ -736,9 +737,9 @@ export default function EditorPanel({
 	const activeScenesRef = useRef([]);
 
 	// A codex entry is a scene (single-scene mode) whose parent chapter is a
-	// codex category — ground-truthed via chapterData.codexCategory rather than
-	// selection.codexId (see the mode comment above the component for why).
-	const isCodexEntry = singleSceneMode && !!chapterData?.codexCategory;
+	// codex entry — ground-truthed via chapterData.codexId (set on all codex
+	// type chapters, both system-seeded and author-created).
+	const isCodexEntry = singleSceneMode && !!chapterData?.codexId;
 	const codexEntryHeadingTitle = isCodexEntry
 		? (singleScene?.title?.trim() || 'Untitled Entry')
 		: null;
@@ -1755,7 +1756,18 @@ export default function EditorPanel({
 										>
 											Description
 										</Typography>
-										<EditorContent editor={editor} />
+										<Box
+										    sx={{
+										        border: '1px solid',
+										        borderColor: 'divider',
+										        borderRadius: 1,
+										        p: 1.5,
+										        minHeight: 120,
+										        bgcolor: alpha('#FFFFFF', 0.55),
+										    }}
+										>
+										    <EditorContent editor={editor} />
+										</Box>
 									</Box>
 								) : (
 									<EditorContent editor={editor} />

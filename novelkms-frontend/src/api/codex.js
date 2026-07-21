@@ -22,6 +22,16 @@ export const codexApi = {
     updateField:      (typeId, key, d)  => client.put(`/codex/types/${typeId}/fields/${encodeURIComponent(key)}`, d).then(r => r.data),
     reorderFields:    (typeId, keys)    => client.put(`/codex/types/${typeId}/fields/order`, { fieldKeys: keys }).then(r => r.data),
 
+    // ── Field soft-remove / restore / usage (E6 endpoints) ────────────────────
+    // Removal is non-destructive: the field drops off the entry form but its
+    // stored values survive in structured_data and can be restored. `usage`
+    // returns every field (active and removed) with a `removed` flag and an
+    // `entryCount` (how many entries hold a value for it) — it drives the
+    // "Removed fields" area and the pre-removal warning.
+    removeField:      (typeId, key)     => client.delete(`/codex/types/${typeId}/fields/${encodeURIComponent(key)}`).then(r => r.data),
+    restoreField:     (typeId, key)     => client.post(`/codex/types/${typeId}/fields/${encodeURIComponent(key)}/restore`, {}).then(r => r.data),
+    getFieldUsage:    (typeId)          => client.get(`/codex/types/${typeId}/fields/usage`).then(r => r.data),
+
     getByProject:     (projectId)       => client.get(`/projects/${projectId}/codex`).then(r => r.data),
     createForProject: (projectId, data) => client.post(`/projects/${projectId}/codex`, data ?? {}).then(r => r.data),
 

@@ -38,7 +38,7 @@ Repo: `https://github.com/rsand-temple/novelkms`, branch `master`. Next free mig
 | E3 | Cutover: entry form + AI fill read the per-instance Type schema; `/codex/categories` becomes seed/promotion-only | Backend + Frontend | **Done** |
 | E4 | Type-editor write path: create/edit type, add/rename/reorder/change-style fields; immutable-key generator | Backend | **Done** |
 | E5 | Type-editor UI: Manage Types surface, type editor, field editor, entry-create type picker | Frontend | **Done** |
-| E6 | Field soft-remove / restore (non-destructive), removed-fields area, entry-count warning | Backend + Frontend | Not started |
+| E6 | Field soft-remove / restore (non-destructive), removed-fields area, entry-count warning | Backend + Frontend | **Done** |
 | E7 | New-codex seeding stamps per-instance fields; type→Trash carries fields+entries; restore together | Backend | Not started |
 | E8 | DOCX round-trip + AI promotion against per-instance types (`system_key` mapping + author picks type) | Backend + small Frontend | Not started |
 | E9 | Terminology sweep (UI "Category"→"Type") + full DELIVERED living-doc pass | Frontend + docs | Not started |
@@ -487,4 +487,59 @@ surprises, and anything the next phase must know._
   - **Next:** E6 — field soft-remove/restore (backend `deleted_at` + restore;
     "Removed fields" area in the type editor; entry-count warning). The editor's
     FieldRow is where the per-field Delete/Restore affordance lands.
+- **2026-07-21 — E6 done (backend + frontend, non-destructive field removal).**
+  Authors can remove a Type field without losing data and restore it later; the
+  type editor gained a "Removed fields" area and a data-aware removal warning.
+  No migration — `deleted_at` already exists on `codex_type_field` from V42.
+  - **DAO (`CodexTypeFieldDao`):** `softRemoveField` (stamps `deleted_at`,
+    guarded `deleted_at IS NULL` so re-removing / a foreign key is a no-op),
+    `restoreField` (clears `deleted_at`, guarded `IS NOT NULL`, returns the
+    field; original `display_order` preserved so it slots back into place —
+    key collision on restore is impossible because `addField` generates keys
+    against the full key set including removed rows), and `findUsage` (every
+    field, active and removed, with a `removed` flag; `entryCount` left 0 for
+    the service to fill).
+  - **DTO (`CodexFieldUsage`):** flat `{ key, label, type, options, help,
+    feedsAi, removed, entryCount }`. Deliberately separate from `CodexField` /
+    `CodexType` so the entry-form and AI-reference contracts keep seeing only
+    active fields with no editor-only noise.
+  - **Service (`CodexFieldUsageService`):** overlays scene-derived counts onto
+    `findUsage`. Counting runs in Java over each entry's `structured_data`
+    (portable across H2 DEFAULT mode and PostgreSQL — no dialect JSON
+    operator). "Contains information" = key present with a non-null value that
+    is non-blank after trim (empty string / whitespace / missing key → not
+    counted); a malformed blob is skipped, not fatal. Values under a removed
+    field are still counted, proving they survive removal.
+  - **Endpoints (`CodexResource`):** `DELETE /codex/types/{typeId}/fields/{fieldKey}`
+    (204 / 404), `POST .../fields/{fieldKey}/restore` (200 field / 404),
+    `GET .../fields/usage` (200 list; 404 when the Type isn't live). All hang
+    off the tenant-authorized `types` segment (`ownsChapter`); the bodyless
+    DELETE and restore POST never trip `authorizeSensitiveJsonBody`. `usage`
+    resolves ahead of `{fieldKey}` by the same literal-over-template precedence
+    E4 relies on for `/fields/order`. Constructor gains the service; wired +
+    bound in `NovelKmsServer`.
+  - **API (`api/codex.js`):** `removeField`, `restoreField` (empty-body POST),
+    `getFieldUsage`.
+  - **Hooks (`hooks/useCodex.js`):** `useCodexFieldUsage` (new `usage` query
+    key; `staleTime: 0` so counts are never stale when the editor opens),
+    `useRemoveCodexTypeField`, `useRestoreCodexTypeField` (both invalidate the
+    Type read model + the usage view).
+  - **Component (`CodexTypeEditorDialog`):** per-row Delete affordance; removal
+    warning quoting the entry count (§10.5 wording, singular/plural, and a
+    defensive generic variant when usage hasn't loaded); a dashed "Removed
+    fields" area showing "N entries" + Restore. Active editable list still
+    sourced from `useCodexType().fields`, so E5's optimistic reorder is
+    undisturbed.
+  - **Scope held to E6:** soft-remove/restore only — no permanent value purge
+    (§10.7/Decision 9 deferred); type-level Trash is E7. Icons: only
+    repo-proven (`Delete`, plus E5's `Add`/`EditOutlined`); Restore is a text
+    button (no restore icon in the repo).
+  - **Verification:** `CodexTypeWriteDaoTest` extended (hide-but-survive,
+    no-op re-remove / foreign key, restore-in-order, active/unknown restore
+    empty, `findUsage` flags); new `CodexFieldUsageServiceTest` (per-key
+    counts incl. values under removed fields, whitespace/empty excluded,
+    malformed skipped, field-less type empty); `CodexResourceTest` builder +
+    endpoint tests (204/404 remove, restore reappears in slot, usage counts).
+    Static: Java brace/package check, esbuild JSX transform. Maven/H2 not run
+    in the authoring environment.
 

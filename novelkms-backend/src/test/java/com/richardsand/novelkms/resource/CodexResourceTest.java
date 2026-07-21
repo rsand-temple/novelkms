@@ -29,6 +29,7 @@ import com.richardsand.novelkms.model.book.Book;
 import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.model.codex.Codex;
 import com.richardsand.novelkms.resource.codex.CodexResource;
+import com.richardsand.novelkms.service.CodexFieldUsageService;
 
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
@@ -55,10 +56,13 @@ class CodexResourceTest extends NovelKmsTestBase {
     private static final CodexCategoryDao  codexCategoryDao  = new CodexCategoryDao(ds);
     private static final CodexTypeFieldDao codexTypeFieldDao = new CodexTypeFieldDao(ds);
     private static final CodexTypeDao      codexTypeDao      = new CodexTypeDao(ds, chapterDao, codexTypeFieldDao);
+    private static final CodexFieldUsageService codexFieldUsageService =
+            new CodexFieldUsageService(codexTypeFieldDao, sceneDao);
 
     static final ResourceExtension RESOURCES = ResourceExtension.builder()
             .addProvider(testAuthenticationFilter())
-            .addResource(new CodexResource(codexDao, codexCategoryDao, chapterDao, codexTypeDao, codexTypeFieldDao))
+            .addResource(new CodexResource(codexDao, codexCategoryDao, chapterDao, codexTypeDao,
+                    codexTypeFieldDao, codexFieldUsageService))
             .setMapper(createMapper())
             .build();
 
@@ -259,6 +263,88 @@ class CodexResourceTest extends NovelKmsTestBase {
         List<Map<String, Object>> fields = (List<Map<String, Object>>) type.get("fields");
         assertEquals("age", fields.get(0).get("key"));
         assertEquals("role", fields.get(1).get("key"));
+    }
+
+    // -------------------------------------------------------------------------
+    // E6: soft-remove / restore / usage
+    // -------------------------------------------------------------------------
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void removeField_activeField_returns204_andDropsFromActiveForm() {
+        Response del = RESOURCES.target("/codex/types/" + typeId + "/fields/age").request().delete();
+        assertEquals(Status.NO_CONTENT.getStatusCode(), del.getStatus());
+
+        Map<String, Object> type = RESOURCES.target("/codex/types/" + typeId).request()
+                .get(new GenericType<Map<String, Object>>() {});
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) type.get("fields");
+        assertEquals(1, fields.size(), "removed field must drop off the entry form");
+        assertEquals("role", fields.get(0).get("key"));
+    }
+
+    @Test
+    void removeField_alreadyRemoved_returns404() {
+        // "removed" was seeded soft-deleted; removing it again matches no active row.
+        Response del = RESOURCES.target("/codex/types/" + typeId + "/fields/removed").request().delete();
+        assertEquals(Status.NOT_FOUND.getStatusCode(), del.getStatus());
+    }
+
+    @Test
+    void removeField_unknownKey_returns404() {
+        Response del = RESOURCES.target("/codex/types/" + typeId + "/fields/does_not_exist")
+                .request().delete();
+        assertEquals(Status.NOT_FOUND.getStatusCode(), del.getStatus());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void restoreField_returns200_andReappearsInOriginalSlot() {
+        Response restore = RESOURCES.target("/codex/types/" + typeId + "/fields/removed/restore")
+                .request().post(Entity.json(Map.of()));
+        assertEquals(Status.OK.getStatusCode(), restore.getStatus());
+        Map<String, Object> body = restore.readEntity(new GenericType<Map<String, Object>>() {});
+        assertEquals("removed", body.get("key"));
+
+        Map<String, Object> type = RESOURCES.target("/codex/types/" + typeId).request()
+                .get(new GenericType<Map<String, Object>>() {});
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) type.get("fields");
+        // display_order was 2, so it slots back after role (0) and age (1).
+        assertEquals(3, fields.size());
+        assertEquals("removed", fields.get(2).get("key"));
+    }
+
+    @Test
+    void restoreField_activeField_returns404() {
+        Response restore = RESOURCES.target("/codex/types/" + typeId + "/fields/role/restore")
+                .request().post(Entity.json(Map.of()));
+        assertEquals(Status.NOT_FOUND.getStatusCode(), restore.getStatus());
+    }
+
+    @Test
+    void fieldUsage_listsActiveAndRemovedWithEntryCounts() throws SQLException {
+        // One entry with a value for role and a blank (whitespace) age.
+        var entry = sceneDao.create(typeId, "Frodo", null);
+        sceneDao.saveStructuredData(entry.getId(), "{\"role\":\"Protagonist\",\"age\":\"  \"}");
+
+        List<Map<String, Object>> usage = RESOURCES.target("/codex/types/" + typeId + "/fields/usage")
+                .request().get(new GenericType<List<Map<String, Object>>>() {});
+
+        assertEquals(3, usage.size(), "usage lists active and removed fields");
+        assertEquals("role", usage.get(0).get("key"));
+        assertEquals(Boolean.FALSE, usage.get(0).get("removed"));
+        assertEquals(1, ((Number) usage.get(0).get("entryCount")).intValue());
+        assertEquals("age", usage.get(1).get("key"));
+        assertEquals(0, ((Number) usage.get(1).get("entryCount")).intValue(),
+                "a whitespace-only value does not count as information");
+        assertEquals("removed", usage.get(2).get("key"));
+        assertEquals(Boolean.TRUE, usage.get(2).get("removed"));
+    }
+
+    @Test
+    void fieldUsage_unknownType_returns404() {
+        Response r = RESOURCES.target("/codex/types/" + UUID.randomUUID() + "/fields/usage")
+                .request().get();
+        assertEquals(Status.NOT_FOUND.getStatusCode(), r.getStatus());
     }
 
     // -------------------------------------------------------------------------

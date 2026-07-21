@@ -19,6 +19,7 @@ import com.richardsand.novelkms.model.chapter.Chapter;
 import com.richardsand.novelkms.model.codex.Codex;
 import com.richardsand.novelkms.model.codex.CodexCategory;
 import com.richardsand.novelkms.model.codex.CodexField;
+import com.richardsand.novelkms.service.CodexFieldUsageService;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -59,20 +60,23 @@ public class CodexResource {
 
     private static final Set<String> INPUT_TYPES = Set.of("SHORT_TEXT", "LONG_TEXT", "SELECT");
 
-    private final CodexDao          codexDao;
-    private final CodexCategoryDao  codexCategoryDao;
-    private final ChapterDao        chapterDao;
-    private final CodexTypeDao      codexTypeDao;
-    private final CodexTypeFieldDao codexTypeFieldDao;
+    private final CodexDao                codexDao;
+    private final CodexCategoryDao        codexCategoryDao;
+    private final ChapterDao              chapterDao;
+    private final CodexTypeDao            codexTypeDao;
+    private final CodexTypeFieldDao       codexTypeFieldDao;
+    private final CodexFieldUsageService  codexFieldUsageService;
 
     @Inject
     public CodexResource(CodexDao codexDao, CodexCategoryDao codexCategoryDao, ChapterDao chapterDao,
-            CodexTypeDao codexTypeDao, CodexTypeFieldDao codexTypeFieldDao) {
+            CodexTypeDao codexTypeDao, CodexTypeFieldDao codexTypeFieldDao,
+            CodexFieldUsageService codexFieldUsageService) {
         this.codexDao = codexDao;
         this.codexCategoryDao = codexCategoryDao;
         this.chapterDao = chapterDao;
         this.codexTypeDao = codexTypeDao;
         this.codexTypeFieldDao = codexTypeFieldDao;
+        this.codexFieldUsageService = codexFieldUsageService;
     }
 
     // -------------------------------------------------------------------------
@@ -261,6 +265,59 @@ public class CodexResource {
             }
             codexTypeFieldDao.reorderFields(typeId, req.fieldKeys);
             return Response.noContent().build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Type field soft-remove / restore / usage (E6). Field identity is the
+    // immutable field key. Soft-remove hides a field from the form without
+    // touching stored entry values; restore re-shows it in its original slot.
+    // The usage read lists every field (active and removed) with its entry
+    // count so the editor can warn before removal and drive the "Removed
+    // fields" area. All three hang off the tenant-authorized /codex/types/{id}
+    // segment; the bodyless DELETE and restore POST do not trip the sensitive-
+    // body inspector.
+    // -------------------------------------------------------------------------
+
+    @DELETE
+    @Path("/codex/types/{typeId}/fields/{fieldKey}")
+    public Response removeTypeField(@PathParam("typeId") UUID typeId,
+            @PathParam("fieldKey") String fieldKey) {
+        logger.info("CodexResource.removeTypeField invoked: typeId={}, fieldKey={}", typeId, fieldKey);
+        try {
+            return codexTypeFieldDao.softRemoveField(typeId, fieldKey)
+                    ? Response.noContent().build()
+                    : notFound();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    @POST
+    @Path("/codex/types/{typeId}/fields/{fieldKey}/restore")
+    public Response restoreTypeField(@PathParam("typeId") UUID typeId,
+            @PathParam("fieldKey") String fieldKey) {
+        logger.info("CodexResource.restoreTypeField invoked: typeId={}, fieldKey={}", typeId, fieldKey);
+        try {
+            return codexTypeFieldDao.restoreField(typeId, fieldKey)
+                    .map(field -> Response.ok(field).build())
+                    .orElse(notFound());
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
+    @GET
+    @Path("/codex/types/{typeId}/fields/usage")
+    public Response getTypeFieldUsage(@PathParam("typeId") UUID typeId) {
+        logger.debug("CodexResource.getTypeFieldUsage invoked: typeId={}", typeId);
+        try {
+            if (codexTypeDao.findType(typeId).isEmpty()) {
+                return notFound();
+            }
+            return Response.ok(codexFieldUsageService.usage(typeId)).build();
         } catch (SQLException e) {
             return serverError(e);
         }
