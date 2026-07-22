@@ -16,7 +16,11 @@ import { shouldSkipDeleteConfirm } from '../../utils/deleteConfirmPrefs'
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
 import { useChapters, useDeleteChapter } from '../../hooks/useChapters'
 import { useDeleteBook } from '../../hooks/useBooks'
-import { useDeleteCodex, useProjectCodex, useBookCodex, useCreateProjectCodex, useCreateBookCodex, useCodexChapters } from '../../hooks/useCodex'
+import {
+	useDeleteCodex, useProjectCodex, useBookCodex,
+	useCreateProjectCodex, useCreateBookCodex,
+	useCodexChapters, useDeleteCodexChapter, useReorderCodexChapters,
+} from '../../hooks/useCodex'
 import {
 	useParts, usePartChapters,
 	useReorderPartChapters,
@@ -66,7 +70,9 @@ const CODEX_ENTRY_LABELS = {
 	NOTES: 'Note',
 }
 
-function getDeleteContext(selection) {
+// `typeName` is the selected Codex Type's title, used only for the Type
+// confirm-dialog copy.
+function getDeleteContext(selection, typeName) {
 	if (selection.sceneId) {
 		const itemType = selection.codexId
 			? (CODEX_ENTRY_LABELS[selection.codexCategory] ?? 'Entry')
@@ -80,8 +86,12 @@ function getDeleteContext(selection) {
 	}
 
 	if (selection.chapterId) {
-		// A Codex Type is trashed from the Codex Trash flow, not the nav toolbar.
-		if (selection.codexId) return null
+		if (selection.codexId) return {
+			level: 'codex-category',
+			label: 'Delete Type',
+			itemType: 'Type',
+			detail: `“${typeName?.trim() || 'This type'}” goes to Trash together with its fields and all of its entries. Restoring it from Trash brings them all back.`,
+		}
 		return {
 			level: 'chapter',
 			label: 'Delete Chapter',
@@ -128,7 +138,12 @@ export default function NavToolbar({ selection, setSelection }) {
 
 	// ── selection context flags ───────────────────────────────────────────────
 	const isSceneContext = !!selection.sceneId
-	const isChapterContext = !selection.sceneId && !!selection.chapterId
+	// A selected Codex Type is a chapter row, but it is not a manuscript
+	// chapter: its siblings are the codex's other Types, not the book outline.
+	// Excluding it from isChapterContext keeps it out of the outline queries
+	// entirely rather than letting them run and return a list it isn't in.
+	const isCodexTypeContext = !selection.sceneId && !!selection.codexId && !!selection.chapterId
+	const isChapterContext = !selection.sceneId && !!selection.chapterId && !selection.codexId
 	const isChapterInPartContext = isChapterContext && !!selection.partId
 	const isDirectChapterContext = isChapterContext && !selection.partId
 	const isPartContext = !selection.chapterId && !!selection.partId
@@ -173,15 +188,17 @@ export default function NavToolbar({ selection, setSelection }) {
 	const { mutate: reorderScenes } = useReorderScenes()
 	const { mutate: reorderPartChapters } = useReorderPartChapters()
 	const { mutate: reorderOutline } = useReorderOutline()
+	const { mutate: reorderCodexChapters } = useReorderCodexChapters()
 
 	// Resolve active sibling list and the selected item's index within it
 	const siblings = isSceneContext ? scenes
 		: isChapterInPartContext ? partChapters
-			: isOutlineContext ? outlineSiblings
-				: null
+			: isCodexTypeContext ? codexTypes
+				: isOutlineContext ? outlineSiblings
+					: null
 
 	const selectedId = isSceneContext ? selection.sceneId
-		: isChapterContext ? selection.chapterId
+		: (isChapterContext || isCodexTypeContext) ? selection.chapterId
 			: isPartContext ? selection.partId
 				: null
 
@@ -190,18 +207,21 @@ export default function NavToolbar({ selection, setSelection }) {
 	const isFirst = !canReorder || index === 0
 	const isLast = !canReorder || index === siblings.length - 1
 	const itemLabel = isSceneContext ? 'scene'
-		: isChapterContext ? 'chapter'
-			: isPartContext ? 'part'
-				: 'item'
+		: isCodexTypeContext ? 'type'
+			: isChapterContext ? 'chapter'
+				: isPartContext ? 'part'
+					: 'item'
 
-	const deleteCtx = getDeleteContext(selection)
+	const deleteCtx = getDeleteContext(selection, selectedTypeName)
 
 	const { mutate: deleteScene, isPending: deletingScene } = useDeleteScene()
 	const { mutate: deleteChapter, isPending: deletingChapter } = useDeleteChapter()
 	const { mutate: deletePart, isPending: deletingPart } = useDeletePart()
 	const { mutate: deleteBook, isPending: deletingBook } = useDeleteBook()
 	const { mutate: deleteCodex, isPending: deletingCodex } = useDeleteCodex()
-	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook || deletingCodex
+	const { mutate: deleteCodexType, isPending: deletingCodexType } = useDeleteCodexChapter()
+	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook
+		|| deletingCodex || deletingCodexType
 
 	// ── reorder handlers ──────────────────────────────────────────────────────
 
@@ -212,6 +232,8 @@ export default function NavToolbar({ selection, setSelection }) {
 			reorderScenes({ chapterId: selection.chapterId, ids: ordered.map(o => o.id) })
 		} else if (isChapterInPartContext) {
 			reorderPartChapters({ partId: selection.partId, ids: ordered.map(o => o.id) })
+		} else if (isCodexTypeContext) {
+			reorderCodexChapters({ codexId: selection.codexId, ids: ordered.map(o => o.id) })
 		} else if (isOutlineContext) {
 			reorderOutline({ bookId: selection.bookId, items: toOutlineRefs(ordered) })
 		}
@@ -266,6 +288,13 @@ export default function NavToolbar({ selection, setSelection }) {
 				{ id: selection.bookId, projectId: selection.projectId },
 				{ onSuccess: () => { setSelection(s => ({ ...s, bookId: null, partId: null, chapterId: null, sceneId: null })); setDeleteDialogOpen(false) } }
 			)
+		} else if (level === 'codex-category') {
+			// Soft-delete: the Type's fields and entries travel with it into
+			// Trash and return together on restore. Keep the codex selected.
+			deleteCodexType(
+				{ id: selection.chapterId, codexId: selection.codexId },
+				{ onSuccess: () => { setSelection(s => ({ ...s, chapterId: null, sceneId: null, codexCategory: null })); setDeleteDialogOpen(false) } }
+			)
 		} else if (level === 'codex') {
 			deleteCodex(
 				{ id: selection.codexId },
@@ -310,7 +339,7 @@ export default function NavToolbar({ selection, setSelection }) {
 					</span>
 				</Tooltip>
 
-				<Tooltip title={deleteCtx?.label ?? 'Select a scene, chapter, part, or book to delete'}>
+				<Tooltip title={deleteCtx?.label ?? 'Select an item to delete'}>
 					<span>
 						<IconButton
 							size="small"

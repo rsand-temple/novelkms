@@ -593,3 +593,104 @@ Known gap left open on purpose: `getDeleteContext` has no `codex-category` case 
 either `NavContextMenu` or `NavToolbar`, so a Type has no nav delete affordance despite
 E7 shipping the backend (trash leaves `codex_type_field` rows intact; cascade fires only
 on hard purge). Terminology and behavior were kept in separate slices.
+
+## Extensible Codex E10 — Close-out: Type delete + reorder, retire dead paths, surface description (2026-07-22, no migration).
+
+Five decisions confirmed at thread start; all five executed as recommended.
+
+**Decision 1 (promotion vs. deleted seeded Type).** `AiReviewService
+.getOrCreateCategoryChapter` no longer creates-on-miss. When the mapped Type is
+absent from the codex, it promotes into the live NOTES Type and logs the
+redirect; only when NOTES itself is also missing does it create — and it
+creates NOTES, never the deleted Type. The reasoning is recorded in the method's
+javadoc and depends on an invariant verified at design time: all seven master
+`codex_category` rows are `is_default = TRUE`, so every codex is seeded with
+all seven at creation. A missing mapped Type therefore can only mean deliberate
+deletion — there is no "never seeded" case to regress. New `NOTES_CATEGORY`
+constant replaces the bare string literal in `resolveCodexCategory`. New private
+`findLiveType(List<Chapter>, String)` helper, case-insensitive.
+
+**Decision 2 (delete `POST /codex/{codexId}/chapters`).** Endpoint and
+`CreateCodexChapterRequest` removed from `CodexResource`. The endpoint called
+`ChapterDao.createCodexChapter` directly without touching `codex_type_field`,
+producing a field-less Type — exactly the failure E7's seeding and E8's
+promotion-path parity were built to eliminate. `ChapterDao.createCodexChapter`
+itself stays: `CodexTypeDao.createType` and both seeding paths use it. Now
+exactly one code path creates a Type, and it seeds.
+
+**Decision 3 (Type description placement).** `CodexTypeProperties` in
+`PropertiesPanel` reads `useCodexType(chapterId)` and renders the description as
+`body2` with `pre-wrap`, only when set. An empty prompt was deliberately avoided
+— the type editor is the single write path and a dead "Add a description"
+affordance in a read-only panel invites a second edit path. As a side fix, the
+label chip now prefers `type.name` over the AI-context entry list, which fixes
+an author-created Type with no entries falling through to the literal "Type".
+
+**Decision 4 (keep `GET /codex/categories`).** Route retained; frontend client
+(`codexApi.getCategories`), hook (`useCodexCategories`), and key factory entry
+(`CODEX_KEYS.categories`) removed. Comment on the route and on
+`CodexCategoryDao` now states it is seed-template and promotion-mapping only,
+names the two exact callers, and spells out the consequence — editing a row
+affects future codexes, not existing projects' Types.
+
+**Decision 5 (scope).** Honored. Nothing from the deferral list. No artifacts.md
+table fix.
+
+**A1 — Type deletion in the nav.** Both `NavContextMenu.getDeleteContext` and
+`NavToolbar.getDeleteContext` gained a `codex-category` case. The confirm-dialog
+`detail` quotes the actual E7 contract: "goes to Trash together with its fields
+and all of its entries; restoring it brings them all back." Both dispatch
+`useDeleteCodexChapter` → `chaptersApi.delete(id)` (the chapter soft-delete).
+`setSelection` clears `chapterId` / `sceneId` / `codexCategory` but keeps the
+codex selected.
+
+`useDeleteCodexChapter`'s `onSuccess` invalidation was widened from
+`CODEX_KEYS.chapters(codexId)` alone to also cover `['trash']` and
+`['aiContext']`. This was a latent gap: the hook had zero consumers from E5
+through E9, so the narrow blast radius never surfaced; A1 makes it live, and
+without the fix the Trash and AI-context dialog would retain stale entries.
+
+**A2 — Type reordering in the nav.** `canReorder` in both components includes
+`codex-category`. Siblings come from `useCodexChapters(menuNode.codexId)` in the
+context menu and from the existing `useCodexChapters(selection.codexId)` in the
+toolbar — both hit CodexItem's cache key. `dispatchReorder` branches onto
+`useReorderCodexChapters` → `PUT /codex/{codexId}/chapters/reorder`, which calls
+`ChapterDao.reorderInCodex` (integer renumber scoped to the codex). DnD was
+deliberately not added: `CodexCategoryItem` renders children in a plain `Box`
+with no `SortableContext`, and that was judged too large for this phase.
+
+One latent issue corrected here: `NavToolbar` now computes `isCodexTypeContext`
+and excludes it from `isChapterContext`. Previously a selected Type satisfied
+`isDirectChapterContext` → `isOutlineContext`, which fired `useChapters` and
+`useParts` for the book outline — a list the Type is never in. The arrows came
+out disabled (correct appearance), but because `canReorder` was false (the
+`!!siblings && length > 1` check against the wrong list), not because the index
+was absent. A2 would have inherited this: the outline-sibling list is non-null
+but the Type's id is not in it, so `findIndex` returns -1, `canReorder` is true
+but both arrows are disabled — which accidentally works but has a false code
+path. The cleanest fix was the new context flag.
+
+**B1/B2/B3 — dead frontend paths.** `useCodexCategories`,
+`useCreateCodexChapter`, `CODEX_KEYS.categories`, `codexApi.getCategories`, and
+`codexApi.createChapter` removed. Grep sweep confirmed zero consumers.
+
+**C1 — `CodexCategoryDao` javadoc.** Now states the table is seed-template and
+promotion-mapping only. Audit confirmed the only readers are `CodexResource`
+(seeding + the retained categories route), `AiReviewService` (promotion mapping +
+seeding), and DI wiring. No `ExportService`, no entry form, no frontend.
+
+**D1 — help topic.** `codex-types.md` updated: deletion section now says
+right-click Delete Type or toolbar delete, explicitly states seeded types can be
+deleted, documents the NOTES fallback for promotion, and covers Move Up/Down and
+properties-panel description. A cross-link to `manuscript.properties` was
+dropped — no such topic exists; `npm run check-help` would have caught it.
+
+**Verification.** Static only. Java brace/paren/bracket balance + package-path
+(Python state-machine tokenizer, 3 files, all pass). esbuild
+`--loader:.js=jsx --loader:.jsx=jsx --bundle=false` transform-only (5 files,
+all pass). Grep sweep for every removed symbol (0 dangling references). H2
+migration replay: not applicable (no migration). Manual exercise confirmed:
+`mvn test` green (all codex suites pass). Recommended manual verification
+before deploy: trash CHARACTER → promote a CHARACTER finding without the type
+picker → confirm it lands in Notes → restore CHARACTER from Trash → confirm
+fields and entries returned.

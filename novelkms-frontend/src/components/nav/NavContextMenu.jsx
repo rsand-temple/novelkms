@@ -51,7 +51,11 @@ import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScen
 import { useChapters, useDeleteChapter } from '../../hooks/useChapters'
 import { useBooks, useDeleteBook } from '../../hooks/useBooks'
 import { useDeleteProject } from '../../hooks/useProjects'
-import { useDeleteCodex, useProjectCodex, useBookCodex, useCreateProjectCodex, useCreateBookCodex } from '../../hooks/useCodex'
+import {
+	useDeleteCodex, useProjectCodex, useBookCodex,
+	useCreateProjectCodex, useCreateBookCodex,
+	useCodexChapters, useDeleteCodexChapter, useReorderCodexChapters,
+} from '../../hooks/useCodex'
 import {
 	useParts, usePartChapters,
 	useReorderPartChapters,
@@ -111,6 +115,12 @@ function getDeleteContext(type, title, codexCategory) {
 			label: 'Delete Part',
 			itemType: 'Part',
 			detail: 'The part will be removed and its chapters will be moved directly under the book. This cannot be undone.',
+		}
+		case 'codex-category': return {
+			level: 'codex-category',
+			label: 'Delete Type',
+			itemType: 'Type',
+			detail: `“${title?.trim() || 'This type'}” goes to Trash together with its fields and all of its entries. Restoring it from Trash brings them all back.`,
 		}
 		case 'book': return {
 			level: 'book',
@@ -199,6 +209,13 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const { data: outlineParts } = useParts(isOutlineNode ? menuNode.bookId : null)
 	const { data: outlineChapters } = useChapters(isOutlineNode ? menuNode.bookId : null)
 
+	// A Codex Type's siblings are the other Types of the same codex, in the
+	// order CodexItem renders them. Shares CodexItem's cache key, so no extra
+	// request.
+	const { data: typeSiblings } = useCodexChapters(
+		menuNode?.type === 'codex-category' ? menuNode.codexId : null
+	)
+
 	// Merged on displayOrder, exactly as BookItem renders it — the menu and the
 	// tree must agree about what "the next one down" is.
 	const outlineSiblings = isOutlineNode
@@ -211,25 +228,30 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const siblings =
 		menuNode?.type === 'scene' ? sceneSiblings
 			: menuNode?.type === 'chapter' && menuNode.partId ? partChapSiblings
-				: isOutlineNode ? outlineSiblings
-					: null
+				: menuNode?.type === 'codex-category' ? typeSiblings
+					: isOutlineNode ? outlineSiblings
+						: null
 
 	const siblingIndex = siblings?.findIndex(s => String(s.id) === String(menuNode?.id)) ?? -1
 	const isFirst = siblingIndex <= 0
 	const isLast = !siblings || siblingIndex < 0 || siblingIndex >= siblings.length - 1
-	const canReorder = menuNode?.type === 'scene' || menuNode?.type === 'chapter' || menuNode?.type === 'part'
+	const canReorder = menuNode?.type === 'scene' || menuNode?.type === 'chapter'
+		|| menuNode?.type === 'part' || menuNode?.type === 'codex-category'
 
 	// ── Mutations ─────────────────────────────────────────────────────────────
 	const { mutate: reorderScenes } = useReorderScenes()
 	const { mutate: reorderPartChapters } = useReorderPartChapters()
 	const { mutate: reorderOutline } = useReorderOutline()
+	const { mutate: reorderCodexChapters } = useReorderCodexChapters()
 	const { mutate: deleteScene, isPending: deletingScene } = useDeleteScene()
 	const { mutate: deleteChapter, isPending: deletingChapter } = useDeleteChapter()
 	const { mutate: deletePart, isPending: deletingPart } = useDeletePart()
 	const { mutate: deleteBook, isPending: deletingBook } = useDeleteBook()
 	const { mutate: deleteCodex, isPending: deletingCodex } = useDeleteCodex()
+	const { mutate: deleteCodexType, isPending: deletingCodexType } = useDeleteCodexChapter()
 	const { mutate: deleteProject, isPending: deletingProject } = useDeleteProject()
-	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook || deletingCodex
+	const isDeleting = deletingScene || deletingChapter || deletingPart || deletingBook
+		|| deletingCodex || deletingCodexType
 
 	// ── Project delete confirmation ──────────────────────────────────────────
 	const [deleteProjectDialogOpen, setDeleteProjectDialogOpen] = useState(false)
@@ -572,11 +594,13 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	// path needs each entry's type to know which table the server should renumber.
 	const dispatchReorder = (ordered) => {
 		if (!menuNode) return
-		const { type, chapterId, partId, bookId } = menuNode
+		const { type, chapterId, partId, bookId, codexId } = menuNode
 		if (type === 'scene') {
 			reorderScenes({ chapterId, ids: ordered.map(o => o.id) })
 		} else if (type === 'chapter' && partId) {
 			reorderPartChapters({ partId, ids: ordered.map(o => o.id) })
+		} else if (type === 'codex-category') {
+			reorderCodexChapters({ codexId, ids: ordered.map(o => o.id) })
 		} else if (isOutlineNode) {
 			reorderOutline({ bookId, items: toOutlineRefs(ordered) })
 		}
@@ -618,7 +642,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 
 	const handleConfirmDelete = () => {
 		if (!menuNode || !deleteCtx) return
-		const { id, chapterId, bookId, projectId } = menuNode
+		const { id, chapterId, bookId, projectId, codexId } = menuNode
 
 		if (deleteCtx.level === 'scene') {
 			deleteScene(
@@ -656,6 +680,19 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				{
 					onSuccess: () => {
 						setSelection(s => ({ ...s, bookId: null, partId: null, chapterId: null, sceneId: null }))
+						setDeleteDialogOpen(false)
+					}
+				},
+			)
+		} else if (deleteCtx.level === 'codex-category') {
+			// The Type is a chapter row; deleting it soft-deletes, carrying its
+			// fields and entry scenes into Trash with it. Clear chapter/scene
+			// from the selection but keep the codex selected.
+			deleteCodexType(
+				{ id, codexId },
+				{
+					onSuccess: () => {
+						setSelection(s => ({ ...s, chapterId: null, sceneId: null, codexCategory: null }))
 						setDeleteDialogOpen(false)
 					}
 				},

@@ -42,7 +42,7 @@ Repo: `https://github.com/rsand-temple/novelkms`, branch `master`. Next free mig
 | E7 | New-codex seeding stamps per-instance fields; type→Trash carries fields+entries; restore together | Backend | **Done** |
 | E8 | DOCX round-trip + AI promotion against per-instance types (`system_key` mapping + author picks type) | Backend + small Frontend | **Done** |
 | E9 | Terminology sweep (UI "Category"→"Type") + full DELIVERED living-doc pass | Frontend + docs | **Done** |
-| E10 | Close-out: wire Type delete + reorder, retire dead/duplicate paths, surface Type description | Backend + Frontend + docs | Not started |
+| E10 | Close-out: wire Type delete + reorder, retire dead/duplicate paths, surface Type description | Backend + Frontend + docs | **Done** |
 
 Legend: **Not started** → **In progress** → **Done**. Record commit note in the Changelog when a phase reaches Done.
 
@@ -484,7 +484,7 @@ confirm fields and entries returned.
   §17 Trash, §18 privacy, §24 principal decisions** → adopted as written.
 - **§19 copy, §20 type library, §10.7 entry type-change, §21 new field types** → deferred
   (Decision 9).
-- **Feature complete 2026-07-22 (E1–E9).** The two deliberate overrides stand as shipped:
+- **Feature complete 2026-07-22 (E1–E10).** The two deliberate overrides stand as shipped:
   conceptual §8's standalone `codex_type` table (the category chapter row is the Type
   instead) and conceptual §3/§21's two-type field boundary (the live SHORT_TEXT /
   LONG_TEXT / SELECT set with `options` / `help` / `feedsAi` was kept). Still deferred
@@ -821,3 +821,59 @@ surprises, and anything the next phase must know._
     grep sweep confirming no dangling `CODEX_CATEGORY_LABELS` / `CATEGORY_ICONS` /
     `CodexCategoryProperties` references and no residual user-facing "Category" string.
     No migration → no H2 replay. Run `mvn package` before deploy.
+- **2026-07-22 — E10 done (backend + frontend + docs; no migration). Extensible Codex CLOSE-OUT.**
+  Five decisions confirmed and executed. E10 is the last phase; the Extensible Codex
+  feature is complete.
+  - **Decision 1 — promotion vs. deleted seeded Type.** Option (b): fall back to
+    live NOTES when the mapped Type is absent; create NOTES as the terminal fallback.
+    Reasoning pinned to an invariant verified at decision time: all seven master rows
+    are `is_default`, so every codex seeds all seven — missing = deliberately deleted.
+    New `NOTES_CATEGORY` constant + `findLiveType` helper in `AiReviewService`.
+  - **Decision 2 — delete `POST /codex/{codexId}/chapters`.** Endpoint + DTO removed.
+    It called `chapterDao.createCodexChapter` directly with no field seeding — exactly
+    the failure E7/E8 were built to prevent. `ChapterDao.createCodexChapter` itself
+    stays (called by `CodexTypeDao.createType` and both seeding paths). Now exactly one
+    code path creates a Type and it seeds.
+  - **Decision 3 — Type description in `CodexTypeProperties`.** Read-only, `body2`,
+    `pre-wrap`, rendered only when set. Label chip now prefers `type.name` over the
+    AI-context list, fixing author-created Types with no entries falling through to
+    the literal "Type".
+  - **Decision 4 — keep `GET /codex/categories`, delete the frontend client.** Route
+    retained as the sole external view of the seed template. `codexApi.getCategories`,
+    `useCodexCategories`, and `CODEX_KEYS.categories` removed.
+  - **Decision 5 — scope discipline.** Honored. Nothing from the deferral list.
+  - **A1 — Type deletion.** `getDeleteContext` gained a `codex-category` case in both
+    `NavContextMenu` and `NavToolbar`. Confirm dialog states the E7 contract (Type,
+    fields, and entries go to Trash; restore brings them all back). Both dispatch
+    `useDeleteCodexChapter`. `useDeleteCodexChapter.onSuccess` invalidation widened
+    to `['trash']` + `['aiContext']` — was latently too narrow because the hook had
+    zero consumers from E5 through E9.
+  - **A2 — Type reordering.** `canReorder` includes `codex-category`. Siblings from
+    `useCodexChapters`, reorder dispatches `useReorderCodexChapters`. No DnD
+    (CodexCategoryItem renders children in a plain Box, no SortableContext).
+    `NavToolbar` gained `isCodexTypeContext` — without it, a selected Type satisfied
+    `isDirectChapterContext` → `isOutlineContext`, firing outline queries the Type
+    is never in.
+  - **A3 — Type description surface.** `CodexTypeProperties` reads
+    `useCodexType(chapterId)` and renders description when set.
+  - **B1/B2/B3 — dead paths removed.** `useCodexCategories`,
+    `useCreateCodexChapter`, `CODEX_KEYS.categories`, `codexApi.getCategories`,
+    `codexApi.createChapter` — zero consumers confirmed by grep.
+  - **C1 — `CodexCategoryDao` javadoc.** Now states the table is seed-template and
+    promotion-mapping only, names both callers, states the consequence (editing a row
+    affects future codexes, not existing projects' Types).
+  - **D1 — help topic.** `codex-types.md` updated for deletion (including seeded types
+    and the NOTES fallback), reordering (Move Up / Move Down and toolbar arrows), and
+    properties-panel description surface.
+  - **Verification.** Static: Java brace balance (3 files), esbuild transform (5 files),
+    grep sweep (0 dangling refs). `mvn test` green (run by author). Recommended manual:
+    trash CHARACTER → promote CHARACTER finding without picker → confirm NOTES → restore
+    → confirm fields + entries back.
+  - **Files touched.** Backend: `CodexResource.java`, `AiReviewService.java`,
+    `CodexCategoryDao.java`. Frontend: `useCodex.js`, `codex.js` (API),
+    `NavContextMenu.jsx`, `NavToolbar.jsx`, `PropertiesPanel.jsx`,
+    `codex-types.md` (help).
+  - **Done-when checklist:** ✅ Type can be created, renamed, reordered, trashed, and
+    restored from the UI with fields + entries following. ✅ No exported hook in
+    `useCodex.js` lacks a consumer. ✅ Exactly one code path creates a Type and it
+    seeds. ✅ Type description visible in the properties panel.

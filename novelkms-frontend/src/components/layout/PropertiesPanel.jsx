@@ -28,6 +28,7 @@ import { useChapterEditorialVariants } from '../../hooks/useEditorial';
 import { useAiCredentials } from '../../hooks/useAiCredentials';
 import { providerLabel } from '../ai/aiProviders';
 import { useCodexAiContext, useSetScenePinned, useSetCategoryPinned } from '../../hooks/useAiContext';
+import { useCodexType } from '../../hooks/useCodex';
 import { stateColor as memoryStateColor, stateExplanation as memoryStateExplanation, stateLabel as memoryStateLabel, formatTime as formatMemoryTime } from '../ai/memoryStatus';
 import { stateColor as summaryStateColor, stateExplanation as summaryStateExplanation, stateLabel as summaryStateLabel } from '../ai/summaryStatus';
 
@@ -226,25 +227,35 @@ function ChapterProperties({ chapterId, bookId }) {
 
 /**
  * Properties for a codex Type. Unlike a manuscript chapter, a Type shows its
- * read-only name (no "Chapter N", no title/subtitle/notes) plus a bulk
- * AI-context toggle that shares (or unshares) every entry of that Type — the
- * same meaning as the nav "Include/Exclude all in AI context". The Type's name,
- * description, and field set are edited in the Type editor (nav context menu →
- * "Edit Type…", or the codex's "Manage Codex Types…" dialog), not here.
+ * read-only name and description (no "Chapter N", no title/subtitle/notes) plus
+ * a bulk AI-context toggle that shares (or unshares) every entry of that Type —
+ * the same meaning as the nav "Include/Exclude all in AI context". The Type's
+ * name, description, and field set are edited in the Type editor (nav context
+ * menu → "Edit Type…", or the codex's "Manage Codex Types…" dialog), not here.
+ *
+ * The description is the author's own answer to "what belongs in this type",
+ * written once in the editor and otherwise invisible; this panel is where it
+ * gets read. It renders only when set — an empty prompt here would imply a
+ * second place to edit it, and there is deliberately only one.
  *
  * `codexCategory` is the Type's system key — NULL for author-created Types,
  * which fall back to the Type's own title.
  */
 function CodexTypeProperties({ chapterId, codexId, codexCategory }) {
 	const { data: ctx, isLoading } = useCodexAiContext(codexId);
+	const { data: type } = useCodexType(chapterId);
 	const { mutate: setCategoryPinned } = useSetCategoryPinned();
 
 	const items = (ctx?.entries ?? []).filter(e => e.chapterId === chapterId);
 	const total = items.length;
 	const pinned = items.filter(e => e.pinned).length;
-	const label = items[0]?.categoryTitle?.trim()
+	// The Type's own name first: it is correct for an author-created Type with
+	// no entries yet, where the AI-context list has nothing to report.
+	const label = type?.name?.trim()
+		|| items[0]?.categoryTitle?.trim()
 		|| CODEX_TYPE_LABELS[codexCategory]
 		|| 'Type';
+	const description = type?.description?.trim();
 
 	return (
 		<Stack spacing={2} sx={{ p: 2 }}>
@@ -254,6 +265,12 @@ function CodexTypeProperties({ chapterId, codexId, codexCategory }) {
 				size="small" variant="outlined"
 				sx={{ alignSelf: 'flex-start', fontWeight: 500, color: 'text.secondary', borderColor: 'divider' }}
 			/>
+
+			{description && (
+				<Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+					{description}
+				</Typography>
+			)}
 
 			{isLoading ? (
 				<CircularProgress size={18} />

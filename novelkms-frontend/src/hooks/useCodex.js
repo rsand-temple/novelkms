@@ -4,8 +4,11 @@ import { chaptersApi } from '../api/chapters'
 
 // ── Query key factory ─────────────────────────────────────────────────────────
 
+// No `categories` key: the master category list is seed-template and
+// AI-promotion-mapping data only, read server-side. Since the E3 cutover the
+// client resolves an entry's schema from its own Type (`type`), never from the
+// global list, and E10 removed the last frontend consumer.
 export const CODEX_KEYS = {
-    categories: ()          => ['codex', 'categories'],
     type:       (typeId)    => ['codex', 'type', typeId],
     usage:      (typeId)    => ['codex', 'type', typeId, 'usage'],
     byProject:  (projectId) => ['codex', 'byProject', projectId],
@@ -26,14 +29,6 @@ async function getOrNull(promise) {
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
-
-export function useCodexCategories() {
-    return useQuery({
-        queryKey:  CODEX_KEYS.categories(),
-        queryFn:   () => codexApi.getCategories(),
-        staleTime: 5 * 60 * 1000,
-    })
-}
 
 // Resolves a codex entry's form schema from its own Type instance (the parent
 // category chapter) rather than matching the global categories list by key.
@@ -119,23 +114,24 @@ export function useDeleteCodex() {
     })
 }
 
-export function useCreateCodexChapter() {
-    const qc = useQueryClient()
-    return useMutation({
-        mutationFn: ({ codexId, data }) => codexApi.createChapter(codexId, data),
-        onSuccess:  (_c, { codexId }) =>
-            qc.invalidateQueries({ queryKey: CODEX_KEYS.chapters(codexId) }),
-    })
-}
-
+// Trashes a Type. A Type is a chapter row, so this goes through the chapter
+// delete endpoint, which soft-deletes: the Type's field rows and all of its
+// entry scenes stay put and become visible again together when the Type is
+// restored from Trash (E7). Only a hard purge cascades them away.
 export function useDeleteCodexChapter() {
     const qc = useQueryClient()
     return useMutation({
-        // A codex category is a chapter row — delete via the chapter endpoint,
-        // then refresh the codex's category list.
         mutationFn: ({ id }) => chaptersApi.delete(id),
-        onSuccess:  (_d, { codexId }) =>
-            qc.invalidateQueries({ queryKey: CODEX_KEYS.chapters(codexId) }),
+        onSuccess:  (_d, { codexId }) => {
+            // Blast radius: the nav tree loses the Type, Trash gains it, and
+            // every entry underneath drops out of the AI-context views. The
+            // manuscript chapter delete hook invalidates the same three areas —
+            // this one used to invalidate only the first, which went unnoticed
+            // while nothing called it (E10 A1 made it live).
+            qc.invalidateQueries({ queryKey: CODEX_KEYS.chapters(codexId) })
+            qc.invalidateQueries({ queryKey: ['trash'] })
+            qc.invalidateQueries({ queryKey: ['aiContext'] })
+        },
     })
 }
 

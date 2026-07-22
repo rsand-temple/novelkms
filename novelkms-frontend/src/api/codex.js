@@ -1,12 +1,11 @@
 import client from './client'
 
 export const codexApi = {
-    getCategories:    ()                => client.get('/codex/categories').then(r => r.data),
-
     // Per-instance Codex Type (category chapter + its own active field set).
     // typeId is the category chapter id. Source of truth for a codex entry's
-    // form schema; the global categories list is now only for seeding + AI
-    // promotion mapping.
+    // form schema. There is deliberately no client for GET /codex/categories:
+    // the master list is the seed template and the AI-promotion system_key map,
+    // both consumed server-side (E10 Decision 4).
     getType:          (typeId)          => client.get(`/codex/types/${typeId}`).then(r => r.data),
 
     // ── Type-editor write path (E4 endpoints) ─────────────────────────────────
@@ -41,7 +40,9 @@ export const codexApi = {
     getById:          (id)              => client.get(`/codex/${id}`).then(r => r.data),
     delete:           (id)              => client.delete(`/codex/${id}`).then(r => r.data),
 
+    // Type creation is createType above (POST /codex/{id}/types), which seeds
+    // the new Type's fields. The former createChapter → POST /codex/{id}/chapters
+    // was removed with its endpoint in E10: it produced a Type with no fields.
     getChapters:      (codexId)         => client.get(`/codex/${codexId}/chapters`).then(r => r.data),
-    createChapter:    (codexId, data)   => client.post(`/codex/${codexId}/chapters`, data).then(r => r.data),
     reorderChapters:  (codexId, ids)    => client.put(`/codex/${codexId}/chapters/reorder`, { ids }).then(r => r.data),
 }

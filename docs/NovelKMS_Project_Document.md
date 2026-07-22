@@ -250,33 +250,34 @@ report bodies stay plain text; no new render boundary.
 
 ### Extensible Codex
 
-E6 shipped (2026-07-21). Type-editor field removal is now
-non-destructive — removing a field hides it from the entry form while its
-values are preserved in structured_data, with a "Removed fields" area and
-Restore. Endpoints: DELETE/POST .../fields/{key}[/restore], GET .../fields/usage
-(all fields + entry counts). Remaining Extensible Codex phases: E7 (per-instance
-seeding + type→Trash), E8 (DOCX/AI-promotion against per-instance types),
-E9 (terminology sweep + full living-doc pass).
+E10 shipped (2026-07-22). The Extensible Codex is complete. A Type can be
+created, renamed, reordered, trashed, and restored entirely from the UI, with
+its fields and all of its entries following it in both directions. The Type
+description now surfaces in the properties panel when viewing a Type.
 
-E8 shipped (2026-07-21). DOCX round-trip and AI-promotion now
-honor per-instance Types. Export/import resolve fields from the entry's own Type
-(codex_type_field), not the retired global schema. Promotion accepts an optional
-codexTypeId so the author can promote into any project Type (including
-author-created ones); without it, the AI's broad category maps to the seeded Type
-by system_key. The promotion path now seeds per-instance fields when it creates a
-Type (E7 parity). No migration. Remaining: E9 (terminology sweep + full living-doc
-pass).
+Backend: the field-less `POST /codex/{codexId}/chapters` endpoint and its
+`CreateCodexChapterRequest` DTO are removed — `POST /codex/{codexId}/types` is
+now the sole creation path and it seeds fields (E4 + E7). AI promotion no
+longer resurrects a deliberately deleted seeded Type: it falls back to the
+live NOTES Type (or creates NOTES as the terminal fallback) so the author's
+deletion is respected. `CodexCategoryDao`'s class javadoc now states
+that `field_schema` is seed-template and promotion-mapping data only, naming
+the two exact callers.
 
-E9 shipped (2026-07-22). Feature complete. UI wording is now "Type"
-throughout — nav, properties panel, Trash, AI-context dialog, and help —
-while every code identifier, column, route, and cache key keeps its historic
-`codex_category` name (Decision 8). Stale comments claiming Codex categories are
-fixed/hardcoded were corrected. The nav toolbar's Add button and entry dialog
-now read an author-created Type's own name ("Add Dragon" / "New Dragon"),
-matching what the context menu already did. New help topic `codex.types` covers
-the type editor, field input styles, and the non-destructive field
-remove/restore contract; `codex.overview` and `ai.promotion` were rewritten to
-match. No migration. Extensible Codex E1–E9 are all Done.
+Frontend: `NavContextMenu` and `NavToolbar` both resolve a `codex-category`
+delete context (confirm-dialog copy names the E7 contract) and dispatch
+`useDeleteCodexChapter`. `canReorder` includes `codex-category`; siblings come
+from `useCodexChapters`; reorder dispatches `useReorderCodexChapters`.
+`CodexTypeProperties` reads `useCodexType(chapterId)` and renders the Type's
+description when set. Dead hooks (`useCodexCategories`, `useCreateCodexChapter`,
+`useReorderCodexChapters` — zero consumers since E3/E5), the `codexApi`
+`getCategories` and `createChapter` methods, and the `CODEX_KEYS.categories`
+key factory entry are removed. `useDeleteCodexChapter`'s invalidation scope
+now covers `['trash']` and `['aiContext']` in addition to the codex chapter
+list — the hook was dead until E10 and the narrow invalidation went unnoticed.
+`NavToolbar.isChapterContext` now excludes `selection.codexId`, fixing a latent
+issue where a selected Type fired outline-sibling queries it was never in.
+Help topic `codex-types.md` updated for deletion and reordering. No migration.
 
 ## Known issues / watchlist
 
@@ -301,9 +302,9 @@ match. No migration. Extensible Codex E1–E9 are all Done.
   capture-time sanitization once a safelist can be validated against real TipTap markup.
 - Review network: §30.2 Q5 participant-read of paused/closed packages still not wired —
   `ReviewAccessService.authorizeRead` requires OPEN+PUBLIC for non-authors. Own slice.
-- Codex Types: a Type can be created (E5) and trashed by the backend (E7), but there is
-  no nav affordance to trash one — `getDeleteContext` returns null for a codex-category
-  node in both `NavContextMenu` and `NavToolbar`. Needs its own slice.
+- Codex Types: deferred by design — cross-project type copy, a shared type library,
+  changing an existing entry's Type, field types beyond the three, permanent purge of
+  soft-removed field values, and "AI prompt includes the project's actual types".
 - Help: `miniMarkdown.js` has no table syntax, but `artifacts.md` uses a Markdown table,
   so it renders as literal pipe text. Either add table support or rewrite that topic.
 - Codex Types: deferred by design — cross-project type copy, a shared type library,
@@ -313,12 +314,11 @@ match. No migration. Extensible Codex E1–E9 are all Done.
 ## Near-term next actions
 
 1. Admin billing: revoke-family semantics, plan mapping, webhook diagnostics.
-2. Codex Type deletion in the nav (context menu + toolbar), closing the E5/E7 gap.
-3. Frontend Phase 2 cleanup.
-4. ePub export repair.
-5. Deferred AI findings view.
-6. Style-editor UI.
-7. Provider-variants Phase 3: provider-aware coverage/staleness, review-history grouping, fallback note.
+2. Frontend Phase 2 cleanup.
+3. ePub export repair.
+4. Deferred AI findings view.
+5. Style-editor UI.
+6. Provider-variants Phase 3: provider-aware coverage/staleness, review-history grouping, fallback note.
 
 ## Documentation maintenance rule
 

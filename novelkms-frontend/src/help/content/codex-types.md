@@ -16,6 +16,10 @@ Right-click a Codex in the [navigation tree](#help:manuscript.nav-tree) and choo
 
 To jump straight to one type's editor, right-click the type itself and choose **Edit Type…**.
 
+Right-clicking a type also offers **Move Up** and **Move Down**, which set the order the types appear in under the Codex. The reorder arrows in the navigation toolbar do the same thing for whichever type is selected. The order is the Codex's own — it does not affect entries, fields, or anything the AI sees.
+
+Selecting a type shows its name and description in the properties panel. That is where a type's description is read; the type editor is where it is written.
+
 ## The type editor
 
 The type editor holds the type's name, an optional description, and its field list. From here you can:
@@ -44,7 +48,11 @@ Removed fields collect in a **Removed fields** area at the bottom of the type ed
 
 ## Deleting a type
 
-A type can be moved to [Trash](#help:manuscript.trash) through the normal Codex delete flow. Its fields and all of its entries go with it and come back together when you restore it.
+Right-click a type and choose **Delete Type**, or select it and use the delete button in the navigation toolbar.
+
+Deleting a type moves it to [Trash](#help:manuscript.trash). Its fields and all of its entries travel with it and come back together when you restore it — nothing is lost until you empty the Trash.
+
+You can delete the types NovelKMS seeded your Codex with, not only the ones you created. If you delete a seeded type and later [promote an AI review finding](#help:ai.promotion) that would have belonged to it, the finding lands in **Notes** rather than quietly recreating the type you deleted. To send it somewhere specific, pick the type yourself in the promotion dialog.
 
 ## Types, DOCX, and the AI
 
