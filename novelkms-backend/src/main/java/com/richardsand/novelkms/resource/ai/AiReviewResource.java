@@ -94,6 +94,15 @@ public class AiReviewResource {
 	}
 
 	public static class PromoteRequest {
+		/**
+		 * Optional target Type chosen by the author in the promotion dialog (the
+		 * category chapter id of a project Type). When present it takes precedence
+		 * over {@link #codexCategory} and lets the author promote into any project
+		 * Type, including author-created ones with no system key (E8). When null the
+		 * service falls back to mapping {@link #codexCategory} by system key.
+		 */
+		@JsonProperty
+		public UUID codexTypeId;
 		@JsonProperty
 		public String codexCategory;
 		@JsonProperty
@@ -187,6 +196,7 @@ public class AiReviewResource {
 					userId,
 					reviewId,
 					recId,
+					body == null ? null : body.codexTypeId,
 					body == null ? null : body.codexCategory,
 					body == null ? null : body.codexTitle,
 					body == null ? null : body.codexNote);

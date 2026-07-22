@@ -34,6 +34,7 @@ import { useChapterMemoryStatus } from '../../hooks/useChapterMemory'
 import { useBookAiContextSummary } from '../../hooks/useAiContext'
 import { aiApi } from '../../api/ai'
 import { useScenes } from '../../hooks/useScenes'
+import { useProjectCodex, useCodexChapters } from '../../hooks/useCodex'
 import { useAiCredentials } from '../../hooks/useAiCredentials'
 import { useReview } from '../../review/ReviewContext'
 import {
@@ -51,6 +52,7 @@ import { HelpButton } from '../../help'
 
 const RAIL_WIDTH = 332
 const RAIL_COLLAPSED_WIDTH = 44
+const EMPTY_TYPES = []
 
 function errMessage(err) {
 	const data = err?.response?.data
@@ -88,9 +90,10 @@ function errMessage(err) {
  *   chapterId {string}        the (parent) chapter
  *   sceneId   {string|null}   the selected scene, when one is selected
  *   bookId    {string|null}   the parent book (for memory status and context)
+ *   projectId {string|null}   the parent project (for the promote Type picker)
  *   editor    TipTap editor instance (for scroll-to-passage highlights)
  */
-export default function ReviewRail({ chapterId, sceneId, bookId, editor, width = RAIL_WIDTH }) {
+export default function ReviewRail({ chapterId, sceneId, bookId, projectId, editor, width = RAIL_WIDTH }) {
 	const review = useReview()
 
 	const scope = sceneId ? 'SCENE' : 'CHAPTER'
@@ -105,6 +108,14 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, width =
 	const { data: credentials = [] } = useAiCredentials()
 	const { data: scenes = [] } = useScenes(chapterId)
 	const { data: reviews = [], isLoading: loadingReviews } = useChapterReviews(chapterId)
+
+	// Project Codex types drive the promotion Type picker. Promotion always
+	// targets the PROJECT codex (the service resolves it from the review's
+	// project), so the picker lists that codex's Types. An empty list (no codex
+	// yet) makes the card fall back to the broad seed categories.
+	const { data: projectCodex } = useProjectCodex(projectId)
+	const codexId = projectCodex?.id ?? null
+	const { data: codexTypes = EMPTY_TYPES } = useCodexChapters(codexId)
 
 	// Per-chapter memory status for the book — used to warn before a chapter
 	// review when a PRECEDING chapter's memory document is missing or behind.
@@ -271,12 +282,20 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, width =
 		setRecStatus({ reviewId, recId: rec.id, status: value ?? STATUS.OPEN, chapterId })
 	}
 
-	const handlePromote = (rec, codexCategory, codexTitle, codexNote) => {
+	const handlePromote = (rec, target, codexTitle, codexNote) => {
 		const reviewId = rec._reviewId
 		if (!reviewId) return
 		setPromotingId(rec.id)
 		promote(
-			{ reviewId, recId: rec.id, codexCategory, codexTitle, codexNote, chapterId },
+			{
+				reviewId,
+				recId: rec.id,
+				codexTypeId: target?.codexTypeId ?? null,
+				codexCategory: target?.codexCategory ?? null,
+				codexTitle,
+				codexNote,
+				chapterId,
+			},
 			{ onSettled: () => setPromotingId(null), onError: (e) => setRunError(errMessage(e)) },
 		)
 	}
@@ -338,6 +357,7 @@ export default function ReviewRail({ chapterId, sceneId, bookId, editor, width =
 					onPromote={handlePromote}
 					promoting={promotingId === rec.id}
 					onHighlight={handleHighlight}
+					codexTypes={codexTypes}
 				/>
 			</Box>
 		))

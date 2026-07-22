@@ -70,6 +70,13 @@ Collapsible right-side rail beside the editor. Review history selector, run cont
 
 Recommendations may include `codexCategory`/`codexTitle` suggestions. Promotion creates a Codex entry, records the target ID, and marks the recommendation `PROMOTED`. Categories: CHARACTER, VOICE, PLOT, WORLD, TIMELINE, CANON, NOTES. A draft/suggestion layer should be considered before AI findings become canonical automatically.
 
+Promotion targets a per-instance project Type (E8). The promote dialog lists the
+project codex's actual Types by id; the author's pick is sent as codexTypeId and the
+entry is created under that Type after server-side validation that it belongs to the
+review's project codex. When no type is chosen, the AI's broad category is mapped to
+the seeded Type by system_key (§14 compatibility). The codex-fill-v1 prompt is
+unchanged — including the project's Types in the prompt remains deferred.
+
 ## Prompt/versioning policy
 
 Every meaningful prompt behavior change bumps the version. Version tracks content, not transport. Shared across providers.

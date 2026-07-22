@@ -22,10 +22,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.richardsand.novelkms.dao.SceneDao;
 import com.richardsand.novelkms.dao.chapter.ChapterDao;
-import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
+import com.richardsand.novelkms.dao.codex.CodexTypeFieldDao;
 import com.richardsand.novelkms.model.Scene;
 import com.richardsand.novelkms.model.chapter.Chapter;
-import com.richardsand.novelkms.model.codex.CodexCategory;
 import com.richardsand.novelkms.model.codex.CodexField;
 import com.richardsand.novelkms.model.codex.CodexSchema;
 
@@ -73,13 +72,13 @@ public class CodexExportService {
 
     private final SceneDao           sceneDao;
     private final ChapterDao         chapterDao;
-    private final CodexCategoryDao   codexCategoryDao;
+    private final CodexTypeFieldDao  codexTypeFieldDao;
 
     public CodexExportService(SceneDao sceneDao, ChapterDao chapterDao,
-            CodexCategoryDao codexCategoryDao) {
-        this.sceneDao         = sceneDao;
-        this.chapterDao       = chapterDao;
-        this.codexCategoryDao = codexCategoryDao;
+            CodexTypeFieldDao codexTypeFieldDao) {
+        this.sceneDao          = sceneDao;
+        this.chapterDao        = chapterDao;
+        this.codexTypeFieldDao = codexTypeFieldDao;
     }
 
     // =========================================================================
@@ -115,7 +114,7 @@ public class CodexExportService {
         Scene   scene   = requireScene(sceneId);
         Chapter chapter = requireChapter(scene.getChapterId());
 
-        CodexSchema schema = resolveSchema(chapter.getCodexCategory());
+        CodexSchema schema = resolveSchema(chapter.getId());
 
         String entryTitle = scene.getTitle() == null || scene.getTitle().isBlank()
                 ? "Untitled" : scene.getTitle().trim();
@@ -181,7 +180,7 @@ public class CodexExportService {
     public Scene importEntry(UUID sceneId, InputStream stream) throws Exception {
         Scene   scene   = requireScene(sceneId);
         Chapter chapter = requireChapter(scene.getChapterId());
-        CodexSchema schema = resolveSchema(chapter.getCodexCategory());
+        CodexSchema schema = resolveSchema(chapter.getId());
 
         logger.info("Importing codex entry from DOCX: sceneId={}, categoryKey={}",
                 sceneId, chapter.getCodexCategory());
@@ -393,14 +392,20 @@ public class CodexExportService {
         return val == null ? "" : val.toString().trim();
     }
 
-    private CodexSchema resolveSchema(String categoryKey) throws SQLException {
-        if (categoryKey == null || categoryKey.isBlank()) return null;
-        for (CodexCategory cat : codexCategoryDao.findAll()) {
-            if (categoryKey.equals(cat.getCategoryKey())) {
-                return cat.getSchema();
-            }
-        }
-        return null;
+    /**
+     * Resolves the round-trip schema from the entry's own Type instance — the
+     * active {@code codex_type_field} rows of the parent category chapter (E8) —
+     * rather than the retired system-global {@code codex_category} schema. Each
+     * project owns its Type's fields, so a renamed or removed field affects only
+     * that project's DOCX round-trip. Returns {@code null} when the Type has no
+     * active fields, preserving the existing "plain title-plus-body" export/import
+     * branch for schema-less types.
+     */
+    private CodexSchema resolveSchema(UUID typeId) throws SQLException {
+        if (typeId == null) return null;
+        List<CodexField> fields = codexTypeFieldDao.findActiveByType(typeId);
+        if (fields == null || fields.isEmpty()) return null;
+        return CodexSchema.builder().fields(fields).build();
     }
 
     private Scene requireScene(UUID sceneId) throws SQLException {

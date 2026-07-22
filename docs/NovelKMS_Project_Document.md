@@ -215,14 +215,6 @@ zero for everyone. Frontend: Contribution stat block on My Profile (self only) v
 `useMyReviewProfileMetrics`; the cross-user endpoint ships backend-ready and tested but has no UI
 consumer until a public-profile page or queue click-through exists.
 
-Extensible Codex: E6 shipped (2026-07-21). Type-editor field removal is now
-non-destructive — removing a field hides it from the entry form while its
-values are preserved in structured_data, with a "Removed fields" area and
-Restore. Endpoints: DELETE/POST .../fields/{key}[/restore], GET .../fields/usage
-(all fields + entry counts). Remaining Extensible Codex phases: E7 (per-instance
-seeding + type→Trash), E8 (DOCX/AI-promotion against per-instance types),
-E9 (terminology sweep + full living-doc pass).
-
 ### Human Review Network — Phase 1F (blocking, reporting, admin removal)
 
 The final Phase 1 slice. No migration — V38 already froze `user_block` and
@@ -255,6 +247,25 @@ proven present; an absent icon fails the Rolldown build). My Profile gains a sel
 (`AdminModerationPanel`): a status-filtered report queue with resolve/dismiss and
 content removal, plus a handle-keyed profile suspend/reinstate tool. Received-review and
 report bodies stay plain text; no new render boundary.
+
+### Extensible Codex
+
+E6 shipped (2026-07-21). Type-editor field removal is now
+non-destructive — removing a field hides it from the entry form while its
+values are preserved in structured_data, with a "Removed fields" area and
+Restore. Endpoints: DELETE/POST .../fields/{key}[/restore], GET .../fields/usage
+(all fields + entry counts). Remaining Extensible Codex phases: E7 (per-instance
+seeding + type→Trash), E8 (DOCX/AI-promotion against per-instance types),
+E9 (terminology sweep + full living-doc pass).
+
+E8 shipped (2026-07-21). DOCX round-trip and AI-promotion now
+honor per-instance Types. Export/import resolve fields from the entry's own Type
+(codex_type_field), not the retired global schema. Promotion accepts an optional
+codexTypeId so the author can promote into any project Type (including
+author-created ones); without it, the AI's broad category maps to the seeded Type
+by system_key. The promotion path now seeds per-instance fields when it creates a
+Type (E7 parity). No migration. Remaining: E9 (terminology sweep + full living-doc
+pass).
 
 ## Known issues / watchlist
 

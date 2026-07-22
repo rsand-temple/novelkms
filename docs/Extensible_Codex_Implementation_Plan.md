@@ -40,7 +40,7 @@ Repo: `https://github.com/rsand-temple/novelkms`, branch `master`. Next free mig
 | E5 | Type-editor UI: Manage Types surface, type editor, field editor, entry-create type picker | Frontend | **Done** |
 | E6 | Field soft-remove / restore (non-destructive), removed-fields area, entry-count warning | Backend + Frontend | **Done** |
 | E7 | New-codex seeding stamps per-instance fields; type→Trash carries fields+entries; restore together | Backend | **Done** |
-| E8 | DOCX round-trip + AI promotion against per-instance types (`system_key` mapping + author picks type) | Backend + small Frontend | Not started |
+| E8 | DOCX round-trip + AI promotion against per-instance types (`system_key` mapping + author picks type) | Backend + small Frontend | **Done** |
 | E9 | Terminology sweep (UI "Category"→"Type") + full DELIVERED living-doc pass | Frontend + docs | Not started |
 
 Legend: **Not started** → **In progress** → **Done**. Record commit note in the Changelog when a phase reaches Done.
@@ -572,3 +572,41 @@ surprises, and anything the next phase must know._
     in-thread — run `mvn test` locally before deploy.
   - **Next:** E8 — DOCX round-trip + AI promotion against per-instance types
     (`system_key` mapping + author picks type).
+- **2026-07-21 — E8 done (backend + small frontend; no migration).** DOCX round-trip
+  and AI-promotion now honor per-instance Types.
+  - **DOCX (`CodexExportService`):** schema resolution moved off the retired global
+    `codex_category` master onto the entry's own Type — `codexTypeFieldDao
+    .findActiveByType(chapter.getId())` wrapped into a `CodexSchema` (null when the
+    Type has zero active fields, preserving the plain title+body branch). Dropped the
+    now-dead `codexCategoryDao` dependency (constructor + `NovelKmsServer` wiring).
+    So a renamed/removed field affects only that project's round-trip, and the
+    importer's case-insensitive H3-label match now resolves against the Type's active
+    fields (unknown labels still skipped).
+  - **Promotion (`AiReviewService` / `AiReviewResource`):** `PromoteRequest` gains
+    optional `codexTypeId`. Present → promote directly under that Type, validated via
+    `findTypeInCodex` to be a live chapter of the review's PROJECT codex (else
+    `400 type_not_in_project`, D4) — the only way to reach author-created Types (NULL
+    system_key). Absent → unchanged §14 system_key map (`resolveCodexCategory` →
+    `getOrCreateCategoryChapter`). E7-parity seeding added to this path:
+    `getOrCreateProjectCodex` and on-demand category-chapter creation now stamp
+    per-instance fields (`seedTypeFields` + `findDefaultCategory`, mirroring
+    `CodexResource.seedDefaultChapters`), so a first promotion into a fresh project
+    doesn't land under a field-less Type. `AiReviewService` now takes
+    `CodexTypeFieldDao`. `codex-fill-v1` prompt unchanged (prompt-includes-types still
+    deferred).
+  - **Frontend:** promote dialog lists the project's actual Types (label = title,
+    value = type id), resolved in `ReviewRail` via `useProjectCodex → useCodexChapters`
+    (project scope, matching the backend's `getOrCreateProjectCodex`) and passed to
+    `ReviewCard`. Pre-selects the Type whose `systemKey` matches the AI category; falls
+    back to the seven broad seed categories when the project has no codex yet (sends
+    `codexCategory`, backend seeds). New pure helpers `buildPromoteOptions` /
+    `defaultPromoteValue` / `promoteTarget` in `recommendationUtils.js`; `onPromote` now
+    carries `{ codexTypeId, codexCategory }`; picker relabeled "Codex type" (Decision 8).
+    `EMPTY_TYPES` hoisted for referential stability. `usePromoteRecommendation` +
+    `aiApi.promoteRecommendation` thread `codexTypeId`.
+  - **Verification:** static only (Maven/H2 blocked in-thread). Java brace-balance +
+    package-path (4 files); esbuild transform (5 files); no other callers of the changed
+    signatures. Recommend a build + manual DOCX round-trip of a custom Type and a
+    promotion into an author-created Type before deploy.
+  - **Next:** E9 — terminology sweep (UI "Category" → "Type") + full DELIVERED pass
+    across the three living docs and this dashboard.

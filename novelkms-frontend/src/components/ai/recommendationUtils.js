@@ -202,3 +202,51 @@ export function originLabel(review, scenes) {
 	const title = (list[idx]?.title ?? '').trim()
 	return title ? `Scene ${n}: ${title}` : `Scene ${n}`
 }
+
+// ── Promotion target picker (E8) ─────────────────────────────────────────────
+// Promotion targets a project Codex Type. When the project already has a codex,
+// the author picks a real Type by id (so any project Type is reachable,
+// including author-created ones with no system key). When the project has no
+// codex yet, we fall back to the seven broad seed categories keyed by system
+// key; the backend seeds the codex and maps the key to the matching seeded Type.
+
+// Build the dropdown options from the project's Codex types (each { id, title,
+// codexCategory }). Empty/absent list → the broad seed-category fallback.
+export function buildPromoteOptions(codexTypes) {
+	const types = Array.isArray(codexTypes) ? codexTypes : []
+	if (types.length > 0) {
+		return types.map(t => ({
+			kind: 'type',
+			value: t.id,
+			label: (t.title ?? '').trim() || 'Untitled type',
+			systemKey: (t.codexCategory ?? null),
+		}))
+	}
+	return CATEGORY_OPTIONS.map(o => ({
+		kind: 'category',
+		value: o.key,
+		label: o.label,
+		systemKey: o.key,
+	}))
+}
+
+// Initial selection for a recommendation: the option whose system key matches
+// the AI's broad category, else the first option. Returns an option value
+// (a Type id, or a category key in fallback mode).
+export function defaultPromoteValue(options, aiCategory) {
+	if (!options || options.length === 0) return ''
+	const want = normalizeCategory(aiCategory)
+	const match = options.find(o => (o.systemKey ?? '').toUpperCase() === want)
+	return (match ?? options[0]).value
+}
+
+// Resolve a chosen option value into the promote request payload. A real Type
+// sends codexTypeId; a fallback seed category sends codexCategory. The backend
+// prefers codexTypeId when present.
+export function promoteTarget(options, value) {
+	const opt = (options ?? []).find(o => o.value === value)
+	if (!opt) return { codexTypeId: null, codexCategory: null }
+	return opt.kind === 'type'
+		? { codexTypeId: opt.value, codexCategory: null }
+		: { codexTypeId: null, codexCategory: opt.value }
+}

@@ -16,11 +16,11 @@ import {
 	Typography,
 } from '@mui/material'
 import {
-	CATEGORY_OPTIONS,
-	codexLabel,
+	buildPromoteOptions,
+	defaultPromoteValue,
 	defaultTitle,
-	normalizeCategory,
 	normalizeStatus,
+	promoteTarget,
 	recommendationToText,
 	priorityChipStyles,
 	statusMeta,
@@ -46,7 +46,10 @@ import {
  * Props:
  *   rec                  recommendation record
  *   onSetStatus(rec, s)  set lifecycle status (OPEN|DONE|DISMISSED|DEFERRED)
- *   onPromote(rec, cat, title, note)  promote to codex
+ *   onPromote(rec, target, title, note)  promote to codex; target =
+ *                    { codexTypeId, codexCategory } from the Type picker
+ *   codexTypes           project Codex types for the promote picker (may be
+ *                    empty → the broad seed-category fallback is offered)
  *   promoting            boolean — this card's promote is in flight
  *   onHighlight(anchorText) — scroll the editor to the quoted passage
  */
@@ -56,16 +59,22 @@ export default function ReviewCard({
 	onPromote,
 	promoting,
 	onHighlight,
+	codexTypes,
 }) {
-	const initialCategory = useMemo(() => normalizeCategory(rec.codexCategory), [rec.codexCategory])
+	const options = useMemo(() => buildPromoteOptions(codexTypes), [codexTypes])
 
 	const [menuAnchor, setMenuAnchor] = useState(null)
 	const menuOpen = Boolean(menuAnchor)
 	const [addOpen, setAddOpen] = useState(false)
 	const [draftTitle, setDraftTitle] = useState(() => defaultTitle(rec))
-	const [draftCategory, setDraftCategory] = useState(initialCategory)
+	const [draftValue, setDraftValue] = useState('')
 	const [draftNote, setDraftNote] = useState('')
 	const [copied, setCopied] = useState(false)
+
+	const selectedLabel = useMemo(
+		() => options.find(o => o.value === draftValue)?.label ?? 'Codex',
+		[options, draftValue],
+	)
 
 	const status = normalizeStatus(rec.status)
 	const meta = statusMeta(status)
@@ -85,7 +94,7 @@ export default function ReviewCard({
 	const openAddDialog = () => {
 		closeMenu()
 		setDraftTitle(defaultTitle(rec))
-		setDraftCategory(initialCategory)
+		setDraftValue(defaultPromoteValue(options, rec.codexCategory))
 		setDraftNote(rec.recommendation ?? '')
 		setAddOpen(true)
 	}
@@ -94,7 +103,7 @@ export default function ReviewCard({
 		const title = draftTitle.trim() || defaultTitle(rec)
 		const note  = draftNote.trim()
 		setAddOpen(false)
-		onPromote(rec, draftCategory, title, note)
+		onPromote(rec, promoteTarget(options, draftValue), title, note)
 	}
 
 	const copyNote = async () => {
@@ -217,15 +226,15 @@ export default function ReviewCard({
 
 					<TextField
 						select
-						label="Category"
+						label="Codex type"
 						fullWidth
 						size="small"
-						value={draftCategory}
-						onChange={(e) => setDraftCategory(e.target.value)}
+						value={draftValue}
+						onChange={(e) => setDraftValue(e.target.value)}
 						sx={{ mb: 2 }}
 					>
-						{CATEGORY_OPTIONS.map(opt => (
-							<MenuItem key={opt.key} value={opt.key}>{opt.label}</MenuItem>
+						{options.map(opt => (
+							<MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
 						))}
 					</TextField>
 
@@ -243,7 +252,7 @@ export default function ReviewCard({
 				<DialogActions>
 					<Button onClick={() => setAddOpen(false)}>Cancel</Button>
 					<Button variant="contained" onClick={confirmAdd} disabled={promoting}>
-						Add to {codexLabel(draftCategory)}
+						Add to {selectedLabel}
 					</Button>
 				</DialogActions>
 			</Dialog>

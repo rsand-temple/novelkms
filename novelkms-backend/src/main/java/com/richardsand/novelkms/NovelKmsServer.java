@@ -323,11 +323,11 @@ public class NovelKmsServer extends Application<NovelKmsConfig> {
                 aiPromptTemplateDao,
                 chapterSummaryDao, bookSummaryDao,
                 chapterEditorialDao,
-                codexDao, codexCategoryDao, aiProviderRegistry.getAiProviderMap());
+                codexDao, codexCategoryDao, codexTypeFieldDao, aiProviderRegistry.getAiProviderMap());
 
         // Codex entry DOCX export/import and AI fill services
         CodexExportService codexExportService = new CodexExportService(
-                sceneDao, chapterDao, codexCategoryDao);
+                sceneDao, chapterDao, codexTypeFieldDao);
         CodexAiService     codexAiService     = new CodexAiService(
                 sceneDao, chapterDao, bookDao, codexDao, codexTypeFieldDao,
                 aiCredentialDao, chapterSummaryDao, aiProviderRegistry.getAiProviderMap());

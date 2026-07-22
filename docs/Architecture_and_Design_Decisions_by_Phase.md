@@ -534,3 +534,14 @@ dialog drives every moderation action, and profile suspension is keyed by handle
 - Counting lives in a small service (CodexFieldUsageService), not inlined in the
   resource, to keep the resource free of SceneDao/JSON parsing and give the
   count logic a Flyway-backed unit-test seam.
+
+## Extensible Codex E8 — DOCX + AI promotion against per-instance 
+Types (2026-07-21, no migration). CodexExportService resolves the round-trip schema from the entry's
+own Type (codex_type_field), returning null for zero active fields to keep the plain
+title+body branch. Promotion gains an optional codexTypeId (author-chosen project
+Type), guarded to a live chapter of the review's project codex (404-safe 400
+type_not_in_project); the fallback system_key map is retained. The promotion codex
+path now stamps per-instance fields on newly seeded Types (E7 parity), so promotion
+into a fresh project never yields a field-less Type. Invariant reaffirmed: /api/ai
+promotion is user-scoped via reviewDao.findByIdForUser, and cross-Type targeting is
+confined to the review's own project codex in the service layer.

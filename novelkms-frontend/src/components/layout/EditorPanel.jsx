@@ -1821,7 +1821,7 @@ export default function EditorPanel({
 								},
 							}}
 						/>
-						<ReviewRail key={chapterId} chapterId={chapterId} sceneId={sceneId} bookId={bookId} editor={editor} setSelection={setSelection} width={railWidth} />
+						<ReviewRail key={chapterId} chapterId={chapterId} sceneId={sceneId} bookId={bookId} projectId={projectId} editor={editor} setSelection={setSelection} width={railWidth} />
 					</>
 				)}
 			</Box>

@@ -43,6 +43,7 @@ import com.richardsand.novelkms.dao.chapter.ChapterMemoryDao;
 import com.richardsand.novelkms.dao.chapter.ChapterSummaryDao;
 import com.richardsand.novelkms.dao.codex.CodexCategoryDao;
 import com.richardsand.novelkms.dao.codex.CodexDao;
+import com.richardsand.novelkms.dao.codex.CodexTypeFieldDao;
 import com.richardsand.novelkms.model.Scene;
 import com.richardsand.novelkms.model.ai.AiCredential;
 import com.richardsand.novelkms.model.ai.AiReview;
@@ -105,6 +106,7 @@ public class AiReviewService {
     private final BookSummaryDao          bookSummaryDao;
     private final CodexDao                codexDao;
     private final CodexCategoryDao        codexCategoryDao;
+    private final CodexTypeFieldDao       codexTypeFieldDao;
     private final Map<String, AiProvider> providers;
 
     public AiReviewService(ChapterDao chapterDao, SceneDao sceneDao, BookDao bookDao,
@@ -115,6 +117,7 @@ public class AiReviewService {
             ChapterSummaryDao chapterSummaryDao, BookSummaryDao bookSummaryDao,
             ChapterEditorialDao chapterEditorialDao,
             CodexDao codexDao, CodexCategoryDao codexCategoryDao,
+            CodexTypeFieldDao codexTypeFieldDao,
             Map<String, AiProvider> providers) {
         this.chapterDao           = chapterDao;
         this.sceneDao             = sceneDao;
@@ -130,6 +133,7 @@ public class AiReviewService {
         this.bookSummaryDao       = bookSummaryDao;
         this.codexDao             = codexDao;
         this.codexCategoryDao     = codexCategoryDao;
+        this.codexTypeFieldDao    = codexTypeFieldDao;
         this.providers            = providers;
     }
 
@@ -926,6 +930,7 @@ public class AiReviewService {
     }
 
     public AiReview promoteRecommendation(UUID userId, UUID reviewId, UUID recId,
+            UUID   codexTypeIdOverride,
             String codexCategoryOverride,
             String codexTitleOverride,
             String codexNoteOverride) throws SQLException {
@@ -957,7 +962,6 @@ public class AiReviewService {
         // version; otherwise fall back to the stored recommendation text.
         String noteText  = (codexNoteOverride != null && !codexNoteOverride.isBlank())
                 ? codexNoteOverride.trim() : rec.getRecommendation();
-        String category = resolveCodexCategory(firstNonBlank(codexCategoryOverride, rec.getCodexCategory()));
         String title    = firstNonBlank(
                 codexTitleOverride,
                 rec.getCodexTitle(),
@@ -965,8 +969,23 @@ public class AiReviewService {
                 "Untitled");
         String content  = "<p>" + escapeHtml(noteText) + "</p>";
 
-        Codex   codex           = getOrCreateProjectCodex(projectId);
-        Chapter categoryChapter = getOrCreateCategoryChapter(codex.getId(), category);
+        Codex codex = getOrCreateProjectCodex(projectId);
+
+        // Target Type resolution (E8). When the author picked a specific project
+        // Type in the promotion dialog, honor it: the id must be a live category
+        // chapter of THIS project's codex, so promotion can never reach another
+        // codex. Otherwise fall back to the §14 compatibility map — the AI's
+        // broad category → the seeded Type whose system_key matches — creating
+        // and field-seeding that Type if the codex doesn't have it yet.
+        Chapter categoryChapter;
+        if (codexTypeIdOverride != null) {
+            categoryChapter = findTypeInCodex(codex.getId(), codexTypeIdOverride)
+                    .orElseThrow(() -> new ReviewException(Status.BAD_REQUEST, "type_not_in_project",
+                            "The chosen Codex type is not part of this project."));
+        } else {
+            String category = resolveCodexCategory(firstNonBlank(codexCategoryOverride, rec.getCodexCategory()));
+            categoryChapter = getOrCreateCategoryChapter(codex.getId(), category);
+        }
 
         Scene entry = sceneDao.create(categoryChapter.getId(), title, null);
         sceneDao.saveContent(entry.getId(), content, countWords(rec.getRecommendation()));
@@ -982,7 +1001,8 @@ public class AiReviewService {
             return existing.get();
         Codex codex = codexDao.createForProject(projectId, null);
         for (CodexCategory cat : codexCategoryDao.findDefaults()) {
-            chapterDao.createCodexChapter(codex.getId(), cat.getCategoryKey(), cat.getLabel());
+            Chapter type = chapterDao.createCodexChapter(codex.getId(), cat.getCategoryKey(), cat.getLabel());
+            seedTypeFields(type.getId(), cat);
         }
         return codex;
     }
@@ -992,7 +1012,57 @@ public class AiReviewService {
             if (categoryKey.equals(ch.getCodexCategory()))
                 return ch;
         }
-        return chapterDao.createCodexChapter(codexId, categoryKey, labelFor(categoryKey));
+        Chapter type = chapterDao.createCodexChapter(codexId, categoryKey, labelFor(categoryKey));
+        seedTypeFields(type.getId(), findDefaultCategory(categoryKey));
+        return type;
+    }
+
+    /**
+     * Finds a live Type (category chapter) by id within a codex, or empty if the
+     * id is not one of the codex's chapters. {@code findByCodexId} already
+     * excludes trashed chapters, so a Type sitting in Trash is not promotable.
+     * This confines an author-chosen {@code codexTypeId} to the review's own
+     * project codex (E8, D4).
+     */
+    private Optional<Chapter> findTypeInCodex(UUID codexId, UUID typeId) throws SQLException {
+        for (Chapter ch : chapterDao.findByCodexId(codexId)) {
+            if (ch.getId().equals(typeId))
+                return Optional.of(ch);
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Stamps a freshly-created seeded Type with its own per-instance field rows
+     * from the master category schema (E7 parity for the promotion path, so a
+     * first-ever promotion into a fresh project does not land under a field-less
+     * Type). Mirrors {@code CodexResource.seedDefaultChapters}: schema-less
+     * categories seed nothing and stay plain title-plus-body types, and a null
+     * category (unknown key) is a no-op.
+     */
+    private void seedTypeFields(UUID typeId, CodexCategory category) throws SQLException {
+        if (category == null)
+            return;
+        CodexSchema schema = category.getSchema();
+        if (schema != null && schema.getFields() != null && !schema.getFields().isEmpty()) {
+            codexTypeFieldDao.seedFields(typeId, schema.getFields());
+        }
+    }
+
+    /**
+     * Looks up the master {@link CodexCategory} for a category key (case
+     * insensitive), or null if none matches — used only to source a seeded
+     * Type's field schema. The key passed here comes from
+     * {@link #resolveCodexCategory}, so it is always a known master key or NOTES.
+     */
+    private CodexCategory findDefaultCategory(String categoryKey) throws SQLException {
+        if (categoryKey == null)
+            return null;
+        for (CodexCategory cat : codexCategoryDao.findAll()) {
+            if (cat.getCategoryKey().equalsIgnoreCase(categoryKey))
+                return cat;
+        }
+        return null;
     }
 
     private String resolveCodexCategory(String suggested) throws SQLException {

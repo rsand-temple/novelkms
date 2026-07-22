@@ -81,8 +81,9 @@ export function useSetRecommendationStatus() {
 export function usePromoteRecommendation() {
 	const qc = useQueryClient()
 	return useMutation({
-		mutationFn: ({ reviewId, recId, codexCategory, codexTitle, codexNote }) =>
+		mutationFn: ({ reviewId, recId, codexTypeId, codexCategory, codexTitle, codexNote }) =>
 			aiApi.promoteRecommendation(reviewId, recId, {
+				codexTypeId: codexTypeId ?? null,
 				codexCategory: codexCategory ?? null,
 				codexTitle: codexTitle ?? null,
 				codexNote: codexNote ?? null,
