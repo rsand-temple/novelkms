@@ -42,6 +42,7 @@ Repo: `https://github.com/rsand-temple/novelkms`, branch `master`. Next free mig
 | E7 | New-codex seeding stamps per-instance fields; type→Trash carries fields+entries; restore together | Backend | **Done** |
 | E8 | DOCX round-trip + AI promotion against per-instance types (`system_key` mapping + author picks type) | Backend + small Frontend | **Done** |
 | E9 | Terminology sweep (UI "Category"→"Type") + full DELIVERED living-doc pass | Frontend + docs | **Done** |
+| E10 | Close-out: wire Type delete + reorder, retire dead/duplicate paths, surface Type description | Backend + Frontend + docs | Not started |
 
 Legend: **Not started** → **In progress** → **Done**. Record commit note in the Changelog when a phase reaches Done.
 
@@ -313,7 +314,162 @@ Plus: `ALTER TABLE chapter ADD COLUMN codex_type_description TEXT;` (one ALTER p
   Status Dashboard → all Done. Note the conceptual-doc reconciliations (§3/§8 overridden).
 - **Done-when:** `npm run check-help` passes; docs consistent; dashboard all Done.
 
----
+### E10 — Close-out. Backend + Frontend + docs + help files.
+
+- **Goal:** the Extensible Codex has no half-wired surfaces and no second way to do
+  anything. E1–E9 shipped the model and the editor; E10 closes the gaps between what
+  the backend can do and what the UI offers, and deletes the paths the feature
+  superseded but never removed.
+
+- **Why this exists:** E9's sweep surfaced that several capabilities are fully built
+  server-side and hook-side but have no caller. This was verified by grep against
+  `master` @ `8cdca5c`, not inferred — four exported hooks in `useCodex.js` have **zero
+  consumers anywhere in `src/`**: `useDeleteCodexChapter`, `useReorderCodexChapters`,
+  `useCreateCodexChapter`, `useCodexCategories`. Each is a separate story below.
+
+#### Decisions to confirm at thread start
+
+1. **Does AI promotion resurrect a deliberately deleted seeded Type?** Today
+   `AiReviewService.getOrCreateCategoryChapter` creates the Type when the `system_key`
+   map finds no live match. Once A1 lets an author trash CHARACTER, the next promotion
+   with `category: CHARACTER` silently rebuilds it. Options: (a) resurrect, current
+   behavior, no code; (b) fall back to NOTES when the mapped Type is absent; (c) fall
+   back to the author's explicit `codexTypeId` only, and 400 otherwise.
+   *Recommend (b)* — it respects the author's deletion without failing the promotion,
+   and NOTES is already the documented safe fallback.
+
+2. **Keep or delete `POST /codex/{codexId}/chapters`?** See B3 — it is a live,
+   unauthenticated-by-the-feature second Type-creation path that does **not** seed
+   fields, so it produces exactly the field-less Type that E7 and E8 worked to prevent.
+   *Recommend delete the endpoint*, since the frontend hook that called it is also
+   dead. If any external caller is suspected, the fallback is to route it through the
+   E4 create-type path so it seeds.
+
+3. **Where does the Type description surface?** V42 added
+   `chapter.codex_type_description` and E4/E5 write it, but nothing reads it back to
+   the author. Options: Manage Types list secondary line; the entry form header; the
+   `CodexTypeProperties` panel. *Recommend all three are wrong to do at once — pick
+   `CodexTypeProperties`*, which is the panel that already exists for exactly "tell me
+   about this Type" and is currently a name chip plus one toggle.
+
+4. **Does `GET /codex/categories` stay?** After B1 removes the frontend consumer, the
+   route has no caller — seeding and promotion mapping both use `CodexCategoryDao`
+   directly in-process. *Recommend keep the route, remove the frontend client.* It is
+   harmless, read-only, and is the only external view of the seed template.
+
+5. **Scope discipline.** Everything under *Explicitly out of scope* below stays out,
+   including anything that looks like a two-line win. E10 is the last phase; it should
+   end with nothing half-done, not with a new deferral list.
+
+#### Track A — Close the E5/E7 UI gaps
+
+- **A1. Type deletion in the nav.** `getDeleteContext` has no `codex-category` case in
+  `NavContextMenu.jsx`, and `NavToolbar.jsx` returns null whenever `selection.codexId`
+  is set. So a Type can be created (E5) and is fully trashable server-side (E7) with no
+  way to ask for it. Add the case to both, wire `useDeleteCodexChapter`, and write the
+  confirm-dialog copy to state the actual E7 contract: the Type's fields and all of its
+  entries go to Trash with it and come back together on restore. Do **not** say "cannot
+  be undone" — that wording is already on the known-issues list for other dialogs and
+  would be newly wrong here.
+
+- **A2. Type reordering in the nav.** `PUT /codex/{codexId}/chapters/reorder` exists and
+  `useReorderCodexChapters` exists; nothing calls either. `canReorder` in
+  `NavContextMenu.jsx` is `type === 'scene' || 'chapter' || 'part'`. Add
+  `'codex-category'`, source siblings from `useCodexChapters(menuNode.codexId)`, and
+  dispatch the existing hook. `NavToolbar` needs the matching sibling/index wiring so
+  the arrows and the menu agree — they must, per the existing comment on
+  `outlineSiblings`. Move Up/Down only; **no DnD** — `CodexItem` renders its children in
+  a plain `Box` with no `SortableContext`, and adding one is a bigger change than this
+  phase wants.
+
+- **A3. Surface the Type description.** Per Decision 3. Read-only display; editing stays
+  in the Type editor where E4/E5 put it.
+
+#### Track B — Retire dead and duplicate paths
+
+- **B1. `useCodexCategories` + `codexApi.getCategories`.** Dead since the E3 cutover
+  moved schema resolution onto the per-instance Type. Remove both, plus the
+  `CODEX_KEYS.categories()` key factory entry if nothing else uses it. Backend route
+  per Decision 4.
+
+- **B2. `useCreateCodexChapter`.** Superseded by `useCreateCodexType` →
+  `POST /codex/{codexId}/types`, which is the path that seeds fields. Remove.
+
+- **B3. `POST /codex/{codexId}/chapters`.** Per Decision 2. This is the one with real
+  consequences: it calls `chapterDao.createCodexChapter` directly and never touches
+  `codex_type_field`, so anything reaching it creates a Type with no fields — the
+  precise failure E7's seeding and E8's promotion-path parity were built to eliminate.
+
+#### Track C — Verification and audit
+
+- **C1. Confirm `codex_category.field_schema` (V33) has no live reader** outside seeding
+  and promotion mapping. E3 demoted it from schema authority to seed template; E8
+  dropped `CodexExportService`'s dependency on it. Grep `CodexCategoryDao` callers and
+  add a class-level comment stating it is seed-template-and-promotion-mapping only, so a
+  future reader does not mistake it for the live schema again.
+
+- **C2. Run the suite.** `CodexTypeDaoTest`, `CodexTypeWriteDaoTest`,
+  `CodexTypeTrashDaoTest`, `CodexResourceTest`, `CodexFieldUsageServiceTest` all exist
+  and have never been run in-thread — Maven is blocked in the build environment. Run
+  `mvn test` locally first thing; do not write E10 code on top of an unverified E9 tree.
+
+- **C3. Tenant auth — already verified, do not re-litigate.**
+  `TenantAuthorizationFilter.authorizePathIds` has `case "types" -> access.ownsChapter(
+  userId, id)`, so `/codex/types/{typeId}` and everything nested under it is guarded by
+  chapter ownership. The E2 handoff note asking for this confirmation is discharged.
+  A1/A2 add no new path segments, so no filter change is needed — but if that stops
+  being true, remember the filter's `default -> true`.
+
+- **C4. Trash restore collision.** `TrashPanel` surfaces a 409 when a restore collides.
+  Check what happens restoring a Type whose title now matches a live Type in the same
+  codex, and that the message names the Type rather than saying "chapter".
+
+#### Track D — Docs
+
+- **D1.** Extend `help/content/codex-types.md` with reordering and deletion once A1/A2
+  land — the topic currently says deletion goes through "the normal Codex delete flow",
+  which becomes true only after A1.
+
+- **D2.** Not codex, logged here so it is not lost: `help/content/artifacts.md` uses a
+  Markdown table and `miniMarkdown.js` has no table syntax, so it renders as literal
+  pipe text. Either add table support to the renderer or rewrite that topic. Separate
+  change; do not bundle it into an E10 commit.
+
+#### Explicitly out of scope (Decision 9 deferrals — still deferred after E10)
+
+Cross-project type copy (§19); shared type library (§20); changing an existing entry's
+Type (§10.7); field types beyond SHORT_TEXT / LONG_TEXT / SELECT (§21); permanent purge
+of soft-removed field values; "AI prompt includes the project's actual types". None of
+these block calling the feature complete.
+
+#### Done-when
+
+- A Type can be created, renamed, reordered, trashed, and restored entirely from the UI,
+  with its fields and entries following it in both directions.
+- No exported hook in `useCodex.js` lacks a consumer.
+- Exactly one code path creates a Type, and it seeds fields.
+- The Type description the author typed is visible somewhere they did not type it.
+- `mvn test` green; `npm run check-help` green.
+
+#### Verification
+
+Static, per the standing constraint (Maven and H2 blocked in-thread): Python brace/paren
+balance plus package-path check on Java; `esbuild --bundle=false` transform on JSX;
+`node scripts/check-help.mjs`; grep sweep for consumers of every symbol removed in
+Track B. No migration is expected — if one becomes necessary, next free is **V43**.
+Run `mvn test` and `mvn package` locally before deploy, and manually exercise:
+create Type → add fields → add entry → reorder Types → trash Type → restore Type →
+confirm fields and entries returned.
+
+#### Handoff notes
+
+- A1 and Decision 1 are coupled. Do not ship Type deletion without deciding what
+  promotion does when the mapped seeded Type is gone, or the first author to delete
+  CHARACTER will watch it reappear on the next promote.
+- B3 is the only item with a live correctness consequence; the rest of Track B is
+  hygiene. If E10 has to be cut short, ship A1, A2, and B3.
+- E10 is the last phase. On completion, set every dashboard row to **Done**, append the
+  Changelog entry, and do the final DELIVERED pass across the three living docs.
 
 ## Reconciliation with `Extensible Codex Design.md` (conceptual)
 
