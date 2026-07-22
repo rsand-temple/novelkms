@@ -77,6 +77,20 @@ review's project codex. When no type is chosen, the AI's broad category is mappe
 the seeded Type by system_key (§14 compatibility). The codex-fill-v1 prompt is
 unchanged — including the project's Types in the prompt remains deferred.
 
+E9 (2026-07-22) closes the Extensible Codex feature. No prompt, contract, or provider
+behavior changed. The §14 compatibility layer is unchanged and is now the permanent
+Phase-1 arrangement: `codex-fill-v1` still receives the resolved per-instance Type
+schema (E3), the model still returns a broad category, and the backend still maps that
+category to the project's Type by `system_key` unless the author supplied an explicit
+`codexTypeId` (E8). "Prompt includes the project's actual types" remains deferred.
+
+User-facing wording in the AI surfaces was updated: the promote picker reads "Codex
+type" (E8), the AI-context dialog's group heading falls back to "Type" rather than
+"Category", and the bulk share/unshare snackbars say "type" rather than "category". The
+help topic `ai.promotion` now describes the real dialog — the author chooses the target
+Type from the project's actual Types, pre-selected to match the finding's category, with
+a Notes fallback — and cross-links the new `codex.types` topic.
+
 ## Prompt/versioning policy
 
 Every meaningful prompt behavior change bumps the version. Version tracks content, not transport. Shared across providers.

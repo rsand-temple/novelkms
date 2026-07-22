@@ -53,14 +53,14 @@ export default function ManageAiContextDialog({ open, onClose, codexId, title })
 		return { pinnedCount: c, pinnedWords: w }
 	}, [entries])
 
-	// Group entries by their category chapter, preserving server order.
+	// Group entries by their Type chapter, preserving server order.
 	const groups = useMemo(() => {
 		const byChapter = new Map()
 		for (const e of entries) {
 			if (!byChapter.has(e.chapterId)) {
 				byChapter.set(e.chapterId, {
 					chapterId: e.chapterId,
-					label: e.categoryTitle?.trim() || e.category || 'Category',
+					label: e.categoryTitle?.trim() || e.category || 'Type',
 					items: [],
 				})
 			}
@@ -85,7 +85,7 @@ export default function ManageAiContextDialog({ open, onClose, codexId, title })
 	}
 
 	const handleClearAll = () => {
-		// Bulk-unpin each category that currently has any pinned entry.
+		// Bulk-unpin each Type that currently has any pinned entry.
 		for (const g of groups) {
 			if (g.items.some(e => e.pinned)) {
 				setCategoryPinned({ chapterId: g.chapterId, codexId, pinned: false })

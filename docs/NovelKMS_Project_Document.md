@@ -267,6 +267,17 @@ by system_key. The promotion path now seeds per-instance fields when it creates 
 Type (E7 parity). No migration. Remaining: E9 (terminology sweep + full living-doc
 pass).
 
+E9 shipped (2026-07-22). Feature complete. UI wording is now "Type"
+throughout — nav, properties panel, Trash, AI-context dialog, and help —
+while every code identifier, column, route, and cache key keeps its historic
+`codex_category` name (Decision 8). Stale comments claiming Codex categories are
+fixed/hardcoded were corrected. The nav toolbar's Add button and entry dialog
+now read an author-created Type's own name ("Add Dragon" / "New Dragon"),
+matching what the context menu already did. New help topic `codex.types` covers
+the type editor, field input styles, and the non-destructive field
+remove/restore contract; `codex.overview` and `ai.promotion` were rewritten to
+match. No migration. Extensible Codex E1–E9 are all Done.
+
 ## Known issues / watchlist
 
 - Billing: extend trial, revoke-family semantics, plan mapping, webhook diagnostics, Stripe reconciliation.
@@ -290,15 +301,24 @@ pass).
   capture-time sanitization once a safelist can be validated against real TipTap markup.
 - Review network: §30.2 Q5 participant-read of paused/closed packages still not wired —
   `ReviewAccessService.authorizeRead` requires OPEN+PUBLIC for non-authors. Own slice.
-  
+- Codex Types: a Type can be created (E5) and trashed by the backend (E7), but there is
+  no nav affordance to trash one — `getDeleteContext` returns null for a codex-category
+  node in both `NavContextMenu` and `NavToolbar`. Needs its own slice.
+- Help: `miniMarkdown.js` has no table syntax, but `artifacts.md` uses a Markdown table,
+  so it renders as literal pipe text. Either add table support or rewrite that topic.
+- Codex Types: deferred by design — cross-project type copy, a shared type library,
+  changing an existing entry's Type, field types beyond the three, permanent purge of
+  soft-removed field values, and "AI prompt includes the project's actual types".
+
 ## Near-term next actions
 
 1. Admin billing: revoke-family semantics, plan mapping, webhook diagnostics.
-2. Frontend Phase 2 cleanup.
-3. ePub export repair.
-4. Deferred AI findings view.
-5. Style-editor UI.
-6. Provider-variants Phase 3: provider-aware coverage/staleness, review-history grouping, fallback note.
+2. Codex Type deletion in the nav (context menu + toolbar), closing the E5/E7 gap.
+3. Frontend Phase 2 cleanup.
+4. ePub export repair.
+5. Deferred AI findings view.
+6. Style-editor UI.
+7. Provider-variants Phase 3: provider-aware coverage/staleness, review-history grouping, fallback note.
 
 ## Documentation maintenance rule
 

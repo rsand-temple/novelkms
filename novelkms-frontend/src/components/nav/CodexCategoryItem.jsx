@@ -16,7 +16,10 @@ import { containerIds } from '../../dnd/dndUtils'
 import { useNavContextMenu } from './NavContextMenuContext'
 import SceneItem from './SceneItem'
 
-const CATEGORY_ICONS = {
+// Icons for the seven seeded Types, keyed by their system key
+// (chapter.codex_category). Author-created Types have a NULL key and get the
+// generic FolderSpecialIcon.
+const TYPE_ICONS = {
 	CHARACTER: PersonIcon,
 	VOICE: RecordVoiceOverIcon,
 	PLOT: TimelineIcon,
@@ -27,21 +30,30 @@ const CATEGORY_ICONS = {
 }
 
 /**
- * A codex category — a chapter row inside a codex. Categories are fixed
- * (hardcoded at codex creation); they cannot be added, deleted, or renamed.
- * Their entries are scenes rendered via SceneItem inside a scenes-{chapterId}
+ * A codex Type — a chapter row inside a codex (codex_id set, book_id NULL).
+ * Seven Types are seeded with a new codex and carry a system key in
+ * chapter.codex_category; authors can create their own, which have a NULL key.
+ * A Type owns its own field set (codex_type_field), edited via the Type editor.
+ *
+ * Entries are scenes rendered via SceneItem inside a scenes-{chapterId}
  * SortableContext, so all existing DnD handlers work unchanged.
  *
- * Right-click opens a context menu with "Add Entry" only (no rename, move,
- * delete). Inline action buttons are intentionally absent.
+ * Right-click opens a context menu with "Add Entry", "Edit Type…", and the
+ * AI-context bulk toggles. Renaming happens in the Type editor, not inline;
+ * Type deletion is not yet wired into the nav. Inline action buttons are
+ * intentionally absent.
+ *
+ * Naming note: the file, the `codex-category` node type, and the
+ * `codexCategory` field keep their historic names on purpose — only
+ * user-facing wording says "Type".
  */
 export default function CodexCategoryItem({ codex, chapter, basePl, selection, setSelection }) {
 	const [open, setOpen] = useState(false)
 	const { data: entries } = useScenes(open ? chapter.id : null)
 	const { openContextMenu } = useNavContextMenu()
 
-	const Icon = CATEGORY_ICONS[chapter.codexCategory] ?? FolderSpecialIcon
-	const label = chapter.title?.trim() ? chapter.title : 'Category'
+	const Icon = TYPE_ICONS[chapter.codexCategory] ?? FolderSpecialIcon
+	const label = chapter.title?.trim() ? chapter.title : 'Type'
 
 	const isSelected =
 		selection.codexId === codex.id &&

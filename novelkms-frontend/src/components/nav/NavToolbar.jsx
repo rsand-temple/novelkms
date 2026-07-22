@@ -16,7 +16,7 @@ import { shouldSkipDeleteConfirm } from '../../utils/deleteConfirmPrefs'
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
 import { useChapters, useDeleteChapter } from '../../hooks/useChapters'
 import { useDeleteBook } from '../../hooks/useBooks'
-import { useDeleteCodex, useProjectCodex, useBookCodex, useCreateProjectCodex, useCreateBookCodex } from '../../hooks/useCodex'
+import { useDeleteCodex, useProjectCodex, useBookCodex, useCreateProjectCodex, useCreateBookCodex, useCodexChapters } from '../../hooks/useCodex'
 import {
 	useParts, usePartChapters,
 	useReorderPartChapters,
@@ -37,9 +37,16 @@ const ADD_ENTRY_LABELS = {
 	NOTES: 'Add Note',
 }
 
-const getAddLabel = (selection) => {
-	if (selection.codexId && !selection.chapterId) return null   // codex container — categories are fixed
-	if (selection.codexId && selection.chapterId) return ADD_ENTRY_LABELS[selection.codexCategory] ?? 'Add Entry'
+// `typeName` is the selected Codex Type's title. Seeded Types get their bespoke
+// label from the map above; an author-created Type (NULL system key) reads from
+// its own name, e.g. "Add Dragon".
+const getAddLabel = (selection, typeName) => {
+	// Codex container — entries are added under a Type, not the codex itself.
+	if (selection.codexId && !selection.chapterId) return null
+	if (selection.codexId && selection.chapterId) {
+		const clean = typeName?.trim()
+		return ADD_ENTRY_LABELS[selection.codexCategory] ?? (clean ? `Add ${clean}` : 'Add Entry')
+	}
 	if (selection.chapterId) return 'Add Scene'
 	if (selection.partId) return 'Add Chapter'
 	if (selection.bookId) return 'Add\u2026'    // "Add…" — opens a menu
@@ -73,7 +80,7 @@ function getDeleteContext(selection) {
 	}
 
 	if (selection.chapterId) {
-		// Codex categories are hardcoded — cannot be deleted.
+		// A Codex Type is trashed from the Codex Trash flow, not the nav toolbar.
 		if (selection.codexId) return null
 		return {
 			level: 'chapter',
@@ -153,6 +160,13 @@ export default function NavToolbar({ selection, setSelection }) {
 	// ── Codex existence (for conditional "Add Codex" in the Add menu) ─────
 	const { data: projectCodex } = useProjectCodex(isProjectContext ? selection.projectId : null)
 	const { data: bookCodex } = useBookCodex(isBookContext ? selection.bookId : null)
+
+	// Selected Codex Type's title, for the Add-button label and the entry
+	// dialog. Shares CodexItem's cache key, so this costs no extra request.
+	const { data: codexTypes } = useCodexChapters(selection.codexId ?? null)
+	const selectedTypeName = (selection.codexId && selection.chapterId)
+		? (codexTypes ?? []).find(t => t.id === selection.chapterId)?.title ?? null
+		: null
 	const { mutate: createProjectCodex } = useCreateProjectCodex()
 	const { mutate: createBookCodex } = useCreateBookCodex()
 
@@ -262,7 +276,7 @@ export default function NavToolbar({ selection, setSelection }) {
 
 	// ── add handlers ─────────────────────────────────────────────────────────
 
-	const label = getAddLabel(selection)
+	const label = getAddLabel(selection, selectedTypeName)
 
 	const handleAdd = (e) => {
 		if (selection.codexId && selection.chapterId) setEntryDialogOpen(true)
@@ -365,7 +379,13 @@ export default function NavToolbar({ selection, setSelection }) {
 			<AddBookDialog open={bookDialogOpen} onClose={() => setBookDialogOpen(false)} projectId={selection.projectId} />
 			<AddChapterDialog open={chapterDialogOpen} onClose={() => setChapterDialogOpen(false)} bookId={selection.bookId} />
 			<AddSceneDialog open={sceneDialogOpen} onClose={() => setSceneDialogOpen(false)} chapterId={selection.chapterId} />
-			<AddCodexEntryDialog open={entryDialogOpen} onClose={() => setEntryDialogOpen(false)} chapterId={selection.chapterId} codexCategory={selection.codexCategory} />
+			<AddCodexEntryDialog
+				open={entryDialogOpen}
+				onClose={() => setEntryDialogOpen(false)}
+				chapterId={selection.chapterId}
+				codexCategory={selection.codexCategory}
+				typeName={selectedTypeName}
+			/>
 			<AddPartDialog
 				open={partDialogOpen}
 				onClose={() => setPartDialogOpen(false)}

@@ -545,3 +545,51 @@ path now stamps per-instance fields on newly seeded Types (E7 parity), so promot
 into a fresh project never yields a field-less Type. Invariant reaffirmed: /api/ai
 promotion is user-scoped via reviewDao.findByIdForUser, and cross-Type targeting is
 confined to the review's own project codex in the service layer.
+
+## Extensible Codex E9 — Terminology sweep + DELIVERED docs (2026-07-22, no migration).
+Decision 8 executed literally: only user-facing strings moved from "Category" to "Type";
+schema columns (`chapter.codex_category`), DTO fields (`codexCategory`), routes
+(`/codex/categories`), TanStack cache keys (`['codex','categories']`), the nav node type
+`'codex-category'`, the trash type string `CODEX_CATEGORY`, and the filename
+`CodexCategoryItem.jsx` are all unchanged. This keeps the sweep a zero-risk edit: no
+rename migration, no cache-key churn, no API surface change, and no chance of a
+half-renamed identifier reaching production.
+
+Two internal constant renames were made anyway because they are module-private and
+their old names actively misled readers about which model is live:
+`CODEX_CATEGORY_LABELS` → `CODEX_TYPE_LABELS` and `CodexCategoryProperties` →
+`CodexTypeProperties` in `PropertiesPanel`, `CATEGORY_ICONS` → `TYPE_ICONS` in
+`CodexCategoryItem`. Both maps are keyed by system key and both already fell back
+correctly for author-created Types (NULL key → `FolderSpecialIcon` / the Type's own
+title); only the names were wrong.
+
+Comment debt was the real finding. Three files still documented the pre-E4 world —
+"categories are fixed (hardcoded at codex creation); they cannot be added, deleted, or
+renamed", "Codex categories are hardcoded — cannot be deleted", "Rename — not available
+for codex categories (fixed)". Each is now an accurate statement of the live model, and
+the deletion comments say specifically that the affordance is missing rather than that
+the operation is impossible — the distinction the next slice needs.
+
+`NavToolbar` gained one derived value rather than new state:
+`useCodexChapters(selection.codexId ?? null)` (guarded by the hook's own
+`enabled: !!codexId`) resolves the selected Type's title from the same query key
+`CodexItem` already populates, so TanStack deduplication means no extra request. It
+feeds both `getAddLabel(selection, typeName)` and `AddCodexEntryDialog`'s `typeName`
+prop, bringing the toolbar to parity with the context menu, which had passed `typeName`
+since E5. Seeded Types still resolve from `ADD_ENTRY_LABELS` first; the Type's own name
+is the fallback, so a NULL-system-key Type reads "Add Dragon" / "New Dragon". No manual
+memoization was added (React Compiler is active).
+
+Help gained `codex.types`, the first documentation of the entire E4–E6 editor surface.
+It states the two contracts an author most needs to trust: renaming a Type or a field
+never loses data (each field keeps a permanent internal key that `structured_data` is
+stored against, so labels are free to change), and removing a field is non-destructive
+(values are preserved, the field collects in "Removed fields" with a live entry count,
+and Restore brings it back intact). The topic deliberately avoids Markdown tables —
+`miniMarkdown.js` supports headings, emphasis, code, links, lists, blockquotes, and
+rules, but not tables, which is a pre-existing latent bug in `artifacts.md`.
+
+Known gap left open on purpose: `getDeleteContext` has no `codex-category` case in
+either `NavContextMenu` or `NavToolbar`, so a Type has no nav delete affordance despite
+E7 shipping the backend (trash leaves `codex_type_field` rows intact; cascade fires only
+on hard purge). Terminology and behavior were kept in separate slices.

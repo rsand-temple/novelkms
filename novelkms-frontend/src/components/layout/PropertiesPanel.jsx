@@ -44,7 +44,10 @@ const PAGE_SIZE_PRESETS = [
 
 // ── Codex AI context ──────────────────────────────────────────────────────────
 
-const CODEX_CATEGORY_LABELS = {
+// Display names for the seven seeded Types, keyed by their system key
+// (chapter.codex_category). Author-created Types have a NULL key and fall back
+// to their own title. UI says "Type"; the column keeps its historic name.
+const CODEX_TYPE_LABELS = {
 	CHARACTER: 'Characters',
 	VOICE: 'Voices',
 	PLOT: 'Plot',
@@ -55,8 +58,8 @@ const CODEX_CATEGORY_LABELS = {
 };
 
 /**
- * Presentational AI-context toggle shared by the codex container, codex
- * category, and codex entry property panels. The checkbox shares its meaning
+ * Presentational AI-context toggle shared by the codex container, codex Type,
+ * and codex entry property panels. The checkbox shares its meaning
  * with the nav context-menu "Include in AI context" actions: a checked box
  * means the entry/entries are shared with the AI as reference context for
  * chapter/scene reviews.
@@ -219,15 +222,20 @@ function ChapterProperties({ chapterId, bookId }) {
 	return <ChapterForm key={`${chapter.id}:${chapter.title ?? ''}`} chapter={chapter} chapterId={chapterId} bookId={bookId} />;
 }
 
-// ── Codex category (a fixed chapter inside a codex) ───────────────────────────
+// ── Codex Type (a Type chapter inside a codex) ────────────────────────────────
 
 /**
- * Properties for a codex category. Unlike a manuscript chapter, a category is
- * fixed: it shows its read-only name (no "Chapter N", no title/subtitle/notes),
- * plus a bulk AI-context toggle that shares (or unshares) every entry in the
- * category — the same meaning as the nav "Include/Exclude all in AI context".
+ * Properties for a codex Type. Unlike a manuscript chapter, a Type shows its
+ * read-only name (no "Chapter N", no title/subtitle/notes) plus a bulk
+ * AI-context toggle that shares (or unshares) every entry of that Type — the
+ * same meaning as the nav "Include/Exclude all in AI context". The Type's name,
+ * description, and field set are edited in the Type editor (nav context menu →
+ * "Edit Type…", or the codex's "Manage Codex Types…" dialog), not here.
+ *
+ * `codexCategory` is the Type's system key — NULL for author-created Types,
+ * which fall back to the Type's own title.
  */
-function CodexCategoryProperties({ chapterId, codexId, codexCategory }) {
+function CodexTypeProperties({ chapterId, codexId, codexCategory }) {
 	const { data: ctx, isLoading } = useCodexAiContext(codexId);
 	const { mutate: setCategoryPinned } = useSetCategoryPinned();
 
@@ -235,12 +243,12 @@ function CodexCategoryProperties({ chapterId, codexId, codexCategory }) {
 	const total = items.length;
 	const pinned = items.filter(e => e.pinned).length;
 	const label = items[0]?.categoryTitle?.trim()
-		|| CODEX_CATEGORY_LABELS[codexCategory]
-		|| 'Category';
+		|| CODEX_TYPE_LABELS[codexCategory]
+		|| 'Type';
 
 	return (
 		<Stack spacing={2} sx={{ p: 2 }}>
-			<Typography variant="overline" color="text.secondary">Codex Category</Typography>
+			<Typography variant="overline" color="text.secondary">Codex Type</Typography>
 			<Chip
 				label={label}
 				size="small" variant="outlined"
@@ -257,7 +265,7 @@ function CodexCategoryProperties({ chapterId, codexId, codexCategory }) {
 					disabled={total === 0}
 					onChange={(checked) => setCategoryPinned({ chapterId, codexId, pinned: checked })}
 					summary={total === 0
-						? 'No entries in this category yet.'
+						? 'No entries of this type yet.'
 						: `${pinned} of ${total} ${total === 1 ? 'entry' : 'entries'} shared with the AI.`}
 				/>
 			)}
@@ -269,7 +277,7 @@ function CodexCategoryProperties({ chapterId, codexId, codexCategory }) {
 
 /**
  * Properties for the codex container. Shows a codex-wide AI-context toggle that
- * shares (or unshares) every entry across all categories — the same meaning as
+ * shares (or unshares) every entry across all Types — the same meaning as
  * the nav "Manage AI Context" dialog's Clear-all / select-all, surfaced as a
  * single checkbox.
  */
@@ -282,7 +290,7 @@ function CodexProperties({ codexId, title }) {
 	const pinned = entries.filter(e => e.pinned).length;
 
 	const setAll = (checked) => {
-		// Bulk-toggle each distinct category chapter, mirroring the Manage dialog.
+		// Bulk-toggle each distinct Type chapter, mirroring the Manage dialog.
 		const chapterIds = [...new Set(entries.map(e => e.chapterId))];
 		for (const cid of chapterIds) {
 			setCategoryPinned({ chapterId: cid, codexId, pinned: checked });
@@ -1000,7 +1008,7 @@ export default function PropertiesPanel({ selection, setSelection, selectTemplat
 		if (sceneId) {
 			body = <SceneProperties sceneId={sceneId} chapterId={chapterId} codexId={codexId} />;
 		} else if (chapterId) {
-			body = <CodexCategoryProperties chapterId={chapterId} codexId={codexId} codexCategory={codexCategory} />;
+			body = <CodexTypeProperties chapterId={chapterId} codexId={codexId} codexCategory={codexCategory} />;
 		} else {
 			body = <CodexProperties codexId={codexId} title={selection?.codexTitle} />;
 		}

@@ -41,7 +41,7 @@ Repo: `https://github.com/rsand-temple/novelkms`, branch `master`. Next free mig
 | E6 | Field soft-remove / restore (non-destructive), removed-fields area, entry-count warning | Backend + Frontend | **Done** |
 | E7 | New-codex seeding stamps per-instance fields; type→Trash carries fields+entries; restore together | Backend | **Done** |
 | E8 | DOCX round-trip + AI promotion against per-instance types (`system_key` mapping + author picks type) | Backend + small Frontend | **Done** |
-| E9 | Terminology sweep (UI "Category"→"Type") + full DELIVERED living-doc pass | Frontend + docs | Not started |
+| E9 | Terminology sweep (UI "Category"→"Type") + full DELIVERED living-doc pass | Frontend + docs | **Done** |
 
 Legend: **Not started** → **In progress** → **Done**. Record commit note in the Changelog when a phase reaches Done.
 
@@ -328,7 +328,14 @@ Plus: `ALTER TABLE chapter ADD COLUMN codex_type_description TEXT;` (one ALTER p
   §17 Trash, §18 privacy, §24 principal decisions** → adopted as written.
 - **§19 copy, §20 type library, §10.7 entry type-change, §21 new field types** → deferred
   (Decision 9).
-
+- **Feature complete 2026-07-22 (E1–E9).** The two deliberate overrides stand as shipped:
+  conceptual §8's standalone `codex_type` table (the category chapter row is the Type
+  instead) and conceptual §3/§21's two-type field boundary (the live SHORT_TEXT /
+  LONG_TEXT / SELECT set with `options` / `help` / `feedsAi` was kept). Still deferred
+  and unbuilt: §19 cross-project copy, §20 type library, §10.7 entry type-change, §21
+  new field types, permanent field-value purge, and "prompt includes the project's
+  actual types".
+  
 ---
 
 ## Changelog
@@ -610,3 +617,51 @@ surprises, and anything the next phase must know._
     promotion into an author-created Type before deploy.
   - **Next:** E9 — terminology sweep (UI "Category" → "Type") + full DELIVERED pass
     across the three living docs and this dashboard.
+- **2026-07-22 — E9 done (frontend + docs; no migration). Extensible Codex is COMPLETE.**
+  Decision 8 executed: user-facing wording now says "Type" everywhere; every code
+  identifier, column, route, cache key, node type, and filename keeps its historic
+  `codex_category` / `codex-category` / `codexCategory` name on purpose.
+  - **Wording changed (6 files):** `PropertiesPanel` (overline `Codex Category` →
+    `Codex Type`; label fallback `'Category'` → `'Type'`; empty state → "No entries of
+    this type yet."; internal `CODEX_CATEGORY_LABELS` → `CODEX_TYPE_LABELS`,
+    `CodexCategoryProperties` → `CodexTypeProperties`); `TrashPanel`
+    (`CODEX_CATEGORY.label` → `Codex Type`, while the backend trash `type` string stays
+    `CODEX_CATEGORY`); `ManageAiContextDialog` (group label fallback → `'Type'`);
+    `CodexCategoryItem` (nav label fallback → `'Type'`; `CATEGORY_ICONS` → `TYPE_ICONS`);
+    `NavContextMenu` (both AI-context snackbar fallbacks `'category'` → `'type'`);
+    `NavToolbar`.
+  - **Stale-comment correction.** Three files still asserted categories were fixed /
+    hardcoded / unrenameable — false since E4/E5. Comments now describe the live model:
+    seven seeded Types carry a system key, authors create Types with a NULL key, each
+    Type owns its own `codex_type_field` set, renaming happens in the Type editor, and
+    Type deletion is not yet wired into the nav.
+  - **`NavToolbar` Add-button + entry dialog (Decision 4).** `NavContextMenu` already
+    passed `typeName` to `AddCodexEntryDialog`, so a right-click on an author-created
+    "Dragon" Type read "New Dragon" while the toolbar's Add button read "Add Entry" and
+    its dialog read "New Entry". `NavToolbar` now resolves the selected Type's title via
+    `useCodexChapters(selection.codexId)` — the same cache key `CodexItem` already
+    populates, so no extra request — and threads it into both `getAddLabel(selection,
+    typeName)` and the dialog's `typeName` prop. Seeded Types still win from
+    `ADD_ENTRY_LABELS`; author Types fall back to `Add {name}` / `New {name}`.
+  - **Help (3 files).** `codex-overview.md` rewritten to say types, note the seven seeds
+    are only a starting point, and link the new topic. `ai-promotion.md` now describes
+    the real E8 promote dialog (author picks the Type, pre-selected from the finding)
+    rather than "suggests a category". New `codex-types.md` (`id: codex.types`, section
+    `codex`, order 20) — the first help for the entire E4–E6 surface: managing types,
+    the type editor, the three field input styles, help text and share-with-AI, the
+    non-destructive remove/restore contract, type Trash, and how types drive DOCX
+    round-trip and AI promotion. `npm run check-help` passes: 29 topics, 7 sections.
+  - **Deliberately NOT done — carried forward.** `NavContextMenu.getDeleteContext` has
+    no `codex-category` case and `NavToolbar.getDeleteContext` returns null when
+    `selection.codexId` is set, so a Type can be created (E5) and trashed by the backend
+    (E7) but there is no nav affordance to trash it. This is a behavior slice, not
+    terminology; E9 corrected the comments to say so and left the gap. **Next slice.**
+  - **Also noticed, pre-existing, out of scope:** `help/content/artifacts.md` uses a
+    Markdown table, which `miniMarkdown.js` does not support (no table syntax in the
+    renderer) — it renders as literal pipe text. Unrelated to the Codex; logged on the
+    watchlist.
+  - **Verification:** static only. esbuild transform-only on all 6 JSX files (pass);
+    `node scripts/check-help.mjs` against the merged tree (pass, 0 errors 0 warnings);
+    grep sweep confirming no dangling `CODEX_CATEGORY_LABELS` / `CATEGORY_ICONS` /
+    `CodexCategoryProperties` references and no residual user-facing "Category" string.
+    No migration → no H2 replay. Run `mvn package` before deploy.

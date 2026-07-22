@@ -336,8 +336,8 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 		)
 	}
 
-	// Bulk include/exclude every entry under one Codex category (type
-	// 'codex-category'; menuNode.id is the category chapter).
+	// Bulk include/exclude every entry under one Codex Type (node type
+	// 'codex-category'; menuNode.id is the Type chapter).
 	const handleCategoryPin = (pinned) => {
 		const node = menuNode
 		closeMenu()
@@ -348,8 +348,8 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				onSuccess: (data) => setMemorySnack({
 					severity: 'success',
 					message: pinned
-						? `Shared ${data?.updated ?? 0} ${node.title?.trim() || 'category'} entr${(data?.updated === 1) ? 'y' : 'ies'} with the AI.`
-						: `Stopped sharing ${node.title?.trim() || 'category'} entries with the AI.`,
+						? `Shared ${data?.updated ?? 0} ${node.title?.trim() || 'type'} entr${(data?.updated === 1) ? 'y' : 'ies'} with the AI.`
+						: `Stopped sharing ${node.title?.trim() || 'type'} entries with the AI.`,
 				}),
 				onError: (e) => setMemorySnack({ severity: 'error', message: e?.response?.data?.message ?? e?.message ?? 'Could not update AI context.' }),
 			},
@@ -757,7 +757,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				}
 				disableRestoreFocus
 			>
-				{/* Rename — not available for codex categories (fixed) */}
+				{/* Rename — not offered for a Codex Type; rename it in the Type editor */}
 				{menuNode?.type !== 'codex-category' && (
 					<MenuItem dense onClick={() => menuNode && startRename(menuNode.id)}>
 						<ListItemIcon>
@@ -891,7 +891,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				)}
 
 				{/* ── Share Codex with the AI ──────────────────────────────────
-				    Per-entry toggle (a codex-entry scene), per-category bulk, and
+				    Per-entry toggle (a codex-entry scene), per-Type bulk, and
 				    the Manage dialog (codex container). Flat MenuItems only — MUI
 				    indexes direct children, so no Fragment wrappers. */}
 				{menuNode?.type === 'scene' && menuNode?.codexCategory && <Divider />}

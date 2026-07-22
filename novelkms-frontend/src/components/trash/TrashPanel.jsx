@@ -30,7 +30,7 @@ const TYPE_META = {
 	BOOK:           { icon: MenuBookIcon,             label: 'Book' },
 	CHAPTER:        { icon: ArticleIcon,              label: 'Chapter' },
 	SCENE:          { icon: TheatersIcon,              label: 'Scene' },
-	CODEX_CATEGORY: { icon: CollectionsBookmarkIcon,  label: 'Codex Category' },
+	CODEX_CATEGORY: { icon: CollectionsBookmarkIcon,  label: 'Codex Type' },
 	CODEX_ENTRY:    { icon: DataObjectIcon,            label: 'Codex Entry' },
 	AI_REVIEW:      { icon: ArticleIcon,              label: 'AI Review' },
 }
