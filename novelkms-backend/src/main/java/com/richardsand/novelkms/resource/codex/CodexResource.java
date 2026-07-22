@@ -2,7 +2,6 @@ package com.richardsand.novelkms.resource.codex;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -89,13 +88,6 @@ public class CodexResource {
         public String title;
     }
 
-    public static class CreateCodexChapterRequest {
-        @JsonProperty
-        public String title;
-        @JsonProperty
-        public String codexCategory;
-    }
-
     public static class ReorderRequest {
         @JsonProperty
         public List<UUID> ids;
@@ -141,7 +133,12 @@ public class CodexResource {
     }
 
     // -------------------------------------------------------------------------
-    // Category lookup (drives dropdowns; seed + AI-promotion mapping source)
+    // Master category lookup. This is the seed template and the AI-promotion
+    // system_key map — NOT the live entry schema, which lives per-Type in
+    // codex_type_field (E3 cutover). The application no longer calls this route:
+    // seeding and promotion mapping both read CodexCategoryDao in-process, and
+    // E10 removed the last frontend client. It is retained deliberately
+    // (Decision 4) as the only external, read-only view of the seed template.
     // -------------------------------------------------------------------------
 
     @GET
@@ -438,26 +435,12 @@ public class CodexResource {
         }
     }
 
-    @POST
-    @Path("/codex/{codexId}/chapters")
-    public Response createCodexChapter(@PathParam("codexId") UUID codexId, CreateCodexChapterRequest req) {
-        logger.info("CodexResource.createCodexChapter invoked: codexId={}, category={}", codexId, req == null ? null : req.codexCategory);
-        if (req == null || req.title == null || req.title.isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("title is required").build();
-        }
-        try {
-            Optional<Codex> codex = codexDao.findById(codexId);
-            if (codex.isEmpty()) {
-                return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("Codex not found").build();
-            }
-            Chapter chapter = chapterDao.createCodexChapter(codexId, req.codexCategory, req.title);
-            return Response.status(Response.Status.CREATED).entity(chapter).build();
-        } catch (SQLException e) {
-            return serverError(e);
-        }
-    }
+    // Type creation is POST /codex/{codexId}/types only (see createCodexType
+    // above). The former POST /codex/{codexId}/chapters was removed in E10
+    // (Decision 2): it called ChapterDao.createCodexChapter directly and never
+    // wrote codex_type_field, so it produced a Type with no fields — exactly the
+    // failure E7's seeding and E8's promotion parity were built to eliminate.
+    // There is now exactly one code path that creates a Type, and it seeds.
 
     @PUT
     @Path("/codex/{codexId}/chapters/reorder")

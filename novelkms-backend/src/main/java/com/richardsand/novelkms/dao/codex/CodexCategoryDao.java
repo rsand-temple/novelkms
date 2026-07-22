@@ -17,15 +17,33 @@ import com.richardsand.novelkms.model.codex.CodexSchema;
 
 /**
  * Read access to the master list of codex categories. The table is a lookup /
- * reference table seeded by migration; this DAO is read-only for now (editing
- * the list is a future feature).
+ * reference table seeded by migration; this DAO is read-only.
  *
- * <p>Each row may carry an optional {@code schema} JSON column defining the
- * structured fields for that category's entries; it is parsed into a
- * {@link CodexSchema} here so both the categories endpoint and AI reference
- * assembly work with a typed structure rather than a raw string. A null or
- * malformed schema maps to a null {@code CodexSchema} (the category is then a
- * plain title-plus-body category).
+ * <p><b>This is NOT the live entry schema.</b> Since the E3 cutover, the schema
+ * that drives an entry form, the AI fill contract, and DOCX round-trip is the
+ * per-instance field set in {@code codex_type_field}, owned by the individual
+ * Type (the category chapter row). This table survives for exactly two jobs,
+ * and audit C1 confirmed it has no other live reader:
+ *
+ * <ol>
+ * <li><b>Seed template.</b> {@code CodexResource.seedDefaultChapters} and
+ *     {@code AiReviewService.getOrCreateProjectCodex} copy {@code field_schema}
+ *     verbatim into {@code codex_type_field} when a codex is created, so a new
+ *     Type owns its schema from birth.</li>
+ * <li><b>AI-promotion mapping.</b> {@code AiReviewService} resolves the AI's
+ *     broad category string against {@code category_key} to find the seeded
+ *     Type to promote into (§14 compatibility layer).</li>
+ * </ol>
+ *
+ * <p>Consequently, editing a row here changes what <em>future</em> codexes are
+ * seeded with; it does not reach any existing project's Types. Renaming or
+ * removing a field for a live project is a {@code codex_type_field} operation.
+ *
+ * <p>Each row may carry an optional {@code field_schema} JSON column, parsed
+ * into a {@link CodexSchema} so seeding and the read-only categories endpoint
+ * work with a typed structure rather than a raw string. A null or malformed
+ * schema maps to a null {@code CodexSchema} (the category then seeds no fields
+ * and its Types are plain title-plus-body).
  */
 public class CodexCategoryDao {
 

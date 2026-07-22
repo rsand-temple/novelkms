@@ -92,6 +92,13 @@ public class AiReviewService {
 
     private static final String SCENE_BREAK = "\n\n* * *\n\n";
 
+    /**
+     * The master category key used as the safe promotion target: both when the
+     * AI suggests a category we do not recognize ({@link #resolveCodexCategory})
+     * and when the mapped Type is no longer live in the codex (E10 Decision 1).
+     */
+    private static final String NOTES_CATEGORY = "NOTES";
+
     private final ChapterDao              chapterDao;
     private final SceneDao                sceneDao;
     private final BookDao                 bookDao;
@@ -975,8 +982,8 @@ public class AiReviewService {
         // Type in the promotion dialog, honor it: the id must be a live category
         // chapter of THIS project's codex, so promotion can never reach another
         // codex. Otherwise fall back to the §14 compatibility map — the AI's
-        // broad category → the seeded Type whose system_key matches — creating
-        // and field-seeding that Type if the codex doesn't have it yet.
+        // broad category → the seeded Type whose system_key matches — landing in
+        // NOTES when the author has trashed that Type (E10 Decision 1).
         Chapter categoryChapter;
         if (codexTypeIdOverride != null) {
             categoryChapter = findTypeInCodex(codex.getId(), codexTypeIdOverride)
@@ -1007,14 +1014,56 @@ public class AiReviewService {
         return codex;
     }
 
+    /**
+     * Resolves the seeded Type that the §14 compatibility map points at, for the
+     * promotion path where the author did not pick a Type explicitly.
+     *
+     * <p><b>E10 Decision 1.</b> Every codex is seeded with all seven master
+     * categories at creation ({@code getOrCreateProjectCodex} above, and
+     * {@code CodexResource.seedDefaultChapters}), and all seven master rows are
+     * {@code is_default}. So once E10 gave authors a way to trash a Type, a
+     * missing mapped Type means the author deliberately deleted it — not that it
+     * was never seeded. Re-creating it here would silently undo that deletion on
+     * the next promotion, so instead the entry lands in the codex's live NOTES
+     * Type, which is already the documented safe fallback in
+     * {@link #resolveCodexCategory}.
+     *
+     * <p>Only when NOTES itself is absent — the author trashed that too, or NOTES
+     * was the mapped key — is a Type created, and it is always NOTES. Promotion
+     * therefore never fails for want of a target, and an author who wants a
+     * different destination has the explicit {@code codexTypeId} picker.
+     *
+     * <p>{@code findByCodexId} excludes trashed chapters, so a Type sitting in
+     * Trash is correctly treated as absent.
+     */
     private Chapter getOrCreateCategoryChapter(UUID codexId, String categoryKey) throws SQLException {
-        for (Chapter ch : chapterDao.findByCodexId(codexId)) {
-            if (categoryKey.equals(ch.getCodexCategory()))
+        List<Chapter> live = chapterDao.findByCodexId(codexId);
+
+        Chapter mapped = findLiveType(live, categoryKey);
+        if (mapped != null)
+            return mapped;
+
+        if (!NOTES_CATEGORY.equalsIgnoreCase(categoryKey)) {
+            Chapter notes = findLiveType(live, NOTES_CATEGORY);
+            if (notes != null) {
+                logger.info("Codex type {} is not live in codex {}; promoting into {} instead",
+                        categoryKey, codexId, NOTES_CATEGORY);
+                return notes;
+            }
+        }
+
+        Chapter type = chapterDao.createCodexChapter(codexId, NOTES_CATEGORY, labelFor(NOTES_CATEGORY));
+        seedTypeFields(type.getId(), findDefaultCategory(NOTES_CATEGORY));
+        return type;
+    }
+
+    /** Live Type in the given list carrying this system key, or null. */
+    private static Chapter findLiveType(List<Chapter> chapters, String categoryKey) {
+        for (Chapter ch : chapters) {
+            if (categoryKey.equalsIgnoreCase(ch.getCodexCategory()))
                 return ch;
         }
-        Chapter type = chapterDao.createCodexChapter(codexId, categoryKey, labelFor(categoryKey));
-        seedTypeFields(type.getId(), findDefaultCategory(categoryKey));
-        return type;
+        return null;
     }
 
     /**
@@ -1073,7 +1122,7 @@ public class AiReviewService {
                     return cat.getCategoryKey();
             }
         }
-        return "NOTES";
+        return NOTES_CATEGORY;
     }
 
     private String labelFor(String categoryKey) throws SQLException {
