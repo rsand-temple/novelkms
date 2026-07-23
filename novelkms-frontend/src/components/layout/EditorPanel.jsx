@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { DOMSerializer } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
@@ -25,7 +25,7 @@ import { useChapter } from '../../hooks/useChapters';
 import { useCodexType } from '../../hooks/useCodex';
 import { useGlobalTemplate, useBookTemplate, TEMPLATE_KEYS } from '../../hooks/useTemplates';
 import { useBook } from '../../hooks/useBooks';
-import client from '../../api/client';
+import { useProjectWordCount, useBookWordCount, usePartWordCount } from '../../hooks/useWordCounts';
 import { useProject } from '../../hooks/useProjects';
 import { useGlobalStyles, useBookStyles } from '../../hooks/useStyles';
 import { scenesApi } from '../../api/scenes';
@@ -612,28 +612,24 @@ export default function EditorPanel({
 	// count (see toolbarPageConfig below) — the project-shelf query doesn't
 	// need it since the estimate isn't shown there (no single book/page size
 	// to estimate against), so only book/part responses are read for it.
-	const { data: projectWordCount } = useQuery({
-		queryKey: ['projects', projectId, 'word-count'],
-		queryFn: () => client.get(`/projects/${projectId}/word-count`).then(r => r.data.wordCount),
-		enabled: !!projectId && projectShelfMode,
-		staleTime: 60_000,
-	});
+	//
+	// All three go through hooks/useWordCounts so that this panel and the
+	// BookCoverPreview / PropertiesPanel observers share one queryFn per key.
+	// Declaring them inline here produced two different cached shapes for the
+	// same key (bare number vs. full DTO), which is what made the cover render
+	// "About NaN words" and the status bar read "0 words".
+	const { data: projectWordCountData } = useProjectWordCount(projectId, projectShelfMode);
 
-	const { data: bookWordCountData } = useQuery({
-		queryKey: ['books', bookId, 'word-count'],
-		queryFn: () => client.get(`/books/${bookId}/word-count`).then(r => r.data),
-		// Enabled for book draft/cover preview (status bar) and book-scope
-		// template mode (WORDS token in template editor preview).
-		enabled: !!bookId && (bookDraftMode || templateMode),
-		staleTime: 60_000,
-	});
+	// Enabled for book draft / cover preview (status bar) and book-scope
+	// template mode (WORDS token in the template editor preview). bookCoverMode
+	// is named explicitly even though it is currently equivalent to
+	// bookDraftMode — the override below reads both, and they must not drift.
+	const { data: bookWordCountData } = useBookWordCount(
+		bookId,
+		bookDraftMode || bookCoverMode || templateMode
+	);
 
-	const { data: partWordCountData } = useQuery({
-		queryKey: ['parts', partId, 'word-count'],
-		queryFn: () => client.get(`/parts/${partId}/word-count`).then(r => r.data),
-		enabled: !!partId && partDraftMode,
-		staleTime: 60_000,
-	});
+	const { data: partWordCountData } = usePartWordCount(partId, partDraftMode);
 
 	// Words contributed by the chapter heading (title + subtitle) displayed above
 	// the editor in multi-scene mode. These are outside the TipTap document so
@@ -656,7 +652,7 @@ export default function EditorPanel({
 	// Override the toolbar word count for modes where there is no live TipTap
 	// editor (or the TipTap count is stale/irrelevant).
 	const toolbarWordCountOverride = projectShelfMode
-		? (projectWordCount ?? 0)
+		? (projectWordCountData?.wordCount ?? 0)
 		: (bookDraftMode || bookCoverMode)
 			? (bookWordCountData?.wordCount ?? 0)
 			: partDraftMode

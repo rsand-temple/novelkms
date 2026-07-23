@@ -67,7 +67,12 @@ function toRoman(n) {
  */
 function formatWordCount(n) {
 	if (n == null) return ''
-	const rounded = Math.round(Number(n) / 500) * 500
+	// Defensive: anything that isn't a finite number renders blank rather than
+	// printing "About NaN" onto a cover page. This guards against a caller
+	// passing the whole { wordCount, paragraphCount } DTO instead of the number.
+	const num = Number(n)
+	if (!Number.isFinite(num)) return ''
+	const rounded = Math.round(num / 500) * 500
 	return 'About ' + rounded.toLocaleString('en-US')
 }
 

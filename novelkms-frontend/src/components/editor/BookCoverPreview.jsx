@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { Alert, Box, Button, Typography } from '@mui/material'
 
 import { useBookTemplate, useDeleteBookTemplate } from '../../hooks/useTemplates'
 import { useBookStyles } from '../../hooks/useStyles'
+import { useBookWordCount } from '../../hooks/useWordCounts'
 import { resolveValues, renderPreviewHtml } from '../../utils/tokenUtils'
 import { buildStyleSx } from '../../utils/styles'
 import { booksApi } from '../../api/books'
-import client from '../../api/client'
 
 /**
  * BookCoverPreview
@@ -55,13 +54,14 @@ export default function BookCoverPreview({ bookId, book, project, pageConfig, se
 	}
 
 	// Fetch the book-level word count so the WORDS token reflects this book only.
-	// (EditorPanel fetches the same key so TanStack Query deduplicates the request.)
-	const { data: wordCountData } = useQuery({
-		queryKey: ['books', bookId, 'word-count'],
-		queryFn: () => client.get(`/books/${bookId}/word-count`).then(r => r.data.wordCount),
-		enabled: !!bookId,
-	})
-	const wordCount = wordCountData ?? null
+	// EditorPanel observes the same key, so this must go through the shared
+	// hook — an inline useQuery here would race EditorPanel's for ownership of
+	// the cached shape and the loser would read garbage (see useWordCounts.js).
+	const { data: wordCountData } = useBookWordCount(bookId)
+
+	// null (not 0) while the request is in flight, so the WORDS token renders
+	// blank rather than briefly claiming the book has no words.
+	const wordCount = wordCountData?.wordCount ?? null
 
 	// Resolve template tokens against real book/project data.
 	const values = useMemo(

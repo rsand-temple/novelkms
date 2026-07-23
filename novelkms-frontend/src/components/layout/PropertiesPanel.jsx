@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
 	Box, Typography, TextField, Divider, CircularProgress,
 	Stack, Chip, Button, Select, MenuItem, FormControl,
@@ -10,6 +10,7 @@ import { useChapter } from '../../hooks/useChapters';
 import { usePart, PART_KEYS } from '../../hooks/useParts';
 import { useBook, BOOK_KEYS, useUploadCoverImage, useDeleteCoverImage } from '../../hooks/useBooks';
 import { useProject } from '../../hooks/useProjects';
+import { useProjectWordCount } from '../../hooks/useWordCounts';
 import { useUpdateProject } from '../../hooks/useProjects';
 import {
 	useGlobalTemplate, useBookTemplate,
@@ -19,7 +20,6 @@ import { scenesApi } from '../../api/scenes';
 import { chaptersApi } from '../../api/chapters';
 import { partsApi } from '../../api/parts';
 import { booksApi } from '../../api/books';
-import client from '../../api/client';
 import AiFormInstructionsEditor from '../ai/AiFormInstructionsEditor';
 import MemoryTemplateEditor from '../ai/MemoryTemplateEditor';
 import { useChapterMemoryVariants, useChapterMemoryStatus } from '../../hooks/useChapterMemory';
@@ -696,16 +696,11 @@ function ProjectForm({ project, projectId }) {
 
 	const { mutate: save, isPending } = useUpdateProject()
 
-	// Total word count — fetched separately; non-editable.
-	const { data: wcData } = useQuery({
-		queryKey: ['projects', projectId, 'word-count'],
-		queryFn: async () => {
-			const res = await client.get(`/projects/${projectId}/word-count`)
-			return res.data
-		},
-		enabled: !!projectId,
-		staleTime: 60_000,
-	})
+	// Total word count — fetched separately; non-editable. Goes through the
+	// shared hook because EditorPanel observes the same key in project-shelf
+	// mode; two inline queries under one key produced conflicting cached
+	// shapes (see hooks/useWordCounts.js).
+	const { data: wcData } = useProjectWordCount(projectId)
 	const totalWords = wcData?.wordCount ?? null
 
 	return (
