@@ -46,6 +46,7 @@ import ChapterReviewHistoryDialog from '../ai/ChapterReviewHistoryDialog'
 import ReviewRequestDialog from '../community/ReviewRequestDialog'
 import ManageCodexTypesDialog from '../codex/ManageCodexTypesDialog'
 import CodexTypeEditorDialog from '../codex/CodexTypeEditorDialog'
+import NestedMenuItem from './NestedMenuItem'
 
 import { useScenes, useReorderScenes, useDeleteScene } from '../../hooks/useScenes'
 import { useChapters, useDeleteChapter } from '../../hooks/useChapters'
@@ -1046,7 +1047,9 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				    direct children, and adjacent fragments can cross-wire a
 				    click to the wrong item. */}
 				{isManuscriptNode && (reviewNodeType === 'chapter' || reviewNodeType === 'scene') && <Divider />}
-				{isManuscriptNode && (reviewNodeType === 'chapter' || reviewNodeType === 'scene') && (
+
+				{/* Scenes only get the single run action — nothing else to nest. */}
+				{isManuscriptNode && reviewNodeType === 'scene' && (
 					<MenuItem
 						dense
 						disabled={!canRunReview}
@@ -1057,20 +1060,32 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 
-				{/* Review history — chapter nodes only (scene reviews are part of the
-				    parent chapter's history; right-click the chapter to see them). */}
+				{/* ── AI Review submenu — chapter nodes only ───────────────────── */}
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
-					<MenuItem
-						dense
-						onClick={() => { closeMenu(); setHistoryDialogOpen(true) }}
-					>
-						<ListItemIcon><ScheduleIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Review history…</ListItemText>
-					</MenuItem>
+					<NestedMenuItem label="AI Review" icon={<CheckCircleOutlinedIcon fontSize="small" />}>
+						<MenuItem
+							dense
+							disabled={!canRunReview}
+							onClick={() => { closeMenu(); setReviewError(null); setReviewDialogOpen(true) }}
+						>
+							<ListItemIcon><CheckCircleOutlinedIcon fontSize="small" /></ListItemIcon>
+							<ListItemText>Run AI Review</ListItemText>
+						</MenuItem>
+						<MenuItem
+							dense
+							onClick={() => { closeMenu(); setHistoryDialogOpen(true) }}
+						>
+							<ListItemIcon><ScheduleIcon fontSize="small" /></ListItemIcon>
+							<ListItemText>Review history…</ListItemText>
+						</MenuItem>
+					</NestedMenuItem>
 				)}
+
 				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
 				{/* Publish for Human Review — manuscript chapters only (never scenes
-				    or codex). The dialog self-gates on having claimed a handle. */}
+				    or codex). The dialog self-gates on having claimed a handle. Kept
+				    as its own top-level item — it isn't one of the AI Review /
+				    Memory Document / Summary / Editorial submenus. */}
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
 					<MenuItem
 						dense
@@ -1086,72 +1101,79 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 					</MenuItem>
 				)}
 				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
-				{/* Memory document — Generate and Clear only; editing is via the
-				    Memory nav leaf in the editor panel. */}
+
+				{/* ── Memory Document submenu — Generate and Clear only; editing is
+				    via the Memory nav leaf in the editor panel. ─────────────────── */}
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
-					<MenuItem
-						dense
-						disabled={!canRunReview || generatingMemory}
-						onClick={handleGenerateMemory}
-					>
-						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Generate memory document</ListItemText>
-					</MenuItem>
-				)}
-				{isManuscriptNode && reviewNodeType === 'chapter' && menuChapterHasDoc && (
-					<MenuItem
-						dense
-						onClick={() => { closeMenu(); openClearConfirm() }}
-					>
-						<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Clear memory document</ListItemText>
-					</MenuItem>
+					<NestedMenuItem label="Memory Document" icon={<AutoAwesomeIcon fontSize="small" />}>
+						<MenuItem
+							dense
+							disabled={!canRunReview || generatingMemory}
+							onClick={handleGenerateMemory}
+						>
+							<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
+							<ListItemText>Generate memory document</ListItemText>
+						</MenuItem>
+						{menuChapterHasDoc && (
+							<MenuItem
+								dense
+								onClick={() => { closeMenu(); openClearConfirm() }}
+							>
+								<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
+								<ListItemText>Clear memory document</ListItemText>
+							</MenuItem>
+						)}
+					</NestedMenuItem>
 				)}
 
-				{/* Chapter summary — Generate and Clear only; editing is via the
-				    Summary nav leaf in the editor panel. */}
+				{/* ── Summary submenu — Generate and Clear only; editing is via the
+				    Summary nav leaf in the editor panel. ─────────────────────────── */}
 				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
-					<MenuItem
-						dense
-						disabled={!canRunReview || generatingSummary}
-						onClick={handleGenerateChapterSummary}
-					>
-						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Generate chapter summary</ListItemText>
-					</MenuItem>
-				)}
-				{isManuscriptNode && reviewNodeType === 'chapter' && menuChapterHasSummary && (
-					<MenuItem
-						dense
-						onClick={() => { closeMenu(); openClearSummaryConfirm() }}
-					>
-						<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Clear chapter summary</ListItemText>
-					</MenuItem>
+					<NestedMenuItem label="Summary" icon={<AutoAwesomeIcon fontSize="small" />}>
+						<MenuItem
+							dense
+							disabled={!canRunReview || generatingSummary}
+							onClick={handleGenerateChapterSummary}
+						>
+							<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
+							<ListItemText>Generate chapter summary</ListItemText>
+						</MenuItem>
+						{menuChapterHasSummary && (
+							<MenuItem
+								dense
+								onClick={() => { closeMenu(); openClearSummaryConfirm() }}
+							>
+								<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
+								<ListItemText>Clear chapter summary</ListItemText>
+							</MenuItem>
+						)}
+					</NestedMenuItem>
 				)}
 
-				{/* Editorial — Generate and Clear only; editing is via the
-				    Editorial nav leaf in the editor panel. */}
+				{/* ── Editorial submenu — Generate and Clear only; editing is via
+				    the Editorial nav leaf in the editor panel. ───────────────────── */}
 				{isManuscriptNode && reviewNodeType === 'chapter' && <Divider />}
 				{isManuscriptNode && reviewNodeType === 'chapter' && (
-					<MenuItem
-						dense
-						disabled={!canRunReview || generatingEditorial}
-						onClick={handleGenerateEditorial}
-					>
-						<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Generate editorial</ListItemText>
-					</MenuItem>
-				)}
-				{isManuscriptNode && reviewNodeType === 'chapter' && menuChapterHasEditorial && (
-					<MenuItem
-						dense
-						onClick={() => { closeMenu(); openClearEditorialConfirm() }}
-					>
-						<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
-						<ListItemText>Clear editorial</ListItemText>
-					</MenuItem>
+					<NestedMenuItem label="Editorial" icon={<AutoAwesomeIcon fontSize="small" />}>
+						<MenuItem
+							dense
+							disabled={!canRunReview || generatingEditorial}
+							onClick={handleGenerateEditorial}
+						>
+							<ListItemIcon><AutoAwesomeIcon fontSize="small" /></ListItemIcon>
+							<ListItemText>Generate editorial</ListItemText>
+						</MenuItem>
+						{menuChapterHasEditorial && (
+							<MenuItem
+								dense
+								onClick={() => { closeMenu(); openClearEditorialConfirm() }}
+							>
+								<ListItemIcon><CloseIcon fontSize="small" /></ListItemIcon>
+								<ListItemText>Clear editorial</ListItemText>
+							</MenuItem>
+						)}
+					</NestedMenuItem>
 				)}
 
 				{/* Delete */}

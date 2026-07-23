@@ -811,3 +811,7 @@ before deploy: trash CHARACTER → promote a CHARACTER finding without the type
 picker → confirm it lands in Notes → restore CHARACTER from Trash → confirm
 fields and entries returned.
 
+## Chapter context menu: submenus
+- New `NestedMenuItem.jsx` (nav folder): self-built hover/click/keyboard submenu, no external dependency. Renders as a single flat MenuItem (portal-based nested Menu), preserving the "flat MenuItem children, no Fragments" rule at each level.
+- Chapter context menu now groups AI Review (Run AI Review, Review history…), Memory Document (Generate/Clear), Summary (Generate/Clear), and Editorial (Generate/Clear) into submenus. Publish for Human Review… remains a flat top-level item. Scene context menu is unchanged (single flat "AI Review" item).
+
