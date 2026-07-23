@@ -83,6 +83,8 @@ Project → Book → Part → Chapter → Scene hierarchy. Scene-level persisten
 
 TipTap rich text editor. Paragraph styles, headings, lists, block quotes, scene breaks, inline formatting. Base64 in-editor images. Book page layout preview. Cover/part templates with token insertion and preview. Search and replace (scene/chapter/part/book scope).
 
+**Autosave architecture.** Scene content autosave is debounced (1500 ms) but NOT late-bound: `buildSaveJob` runs synchronously inside TipTap's `onUpdate` and closes over the editing mode, target ids, and word count as they are at that moment. The timer callback only executes whatever job is already pending. On scope change (navigating between documents), a cleanup effect flushes the pending save rather than discarding it — React runs cleanup before the incoming effect body, so the outgoing document's save commits before the incoming document loads. The content-load effect gates itself while a save is pending or in flight and re-runs via a `saveEpoch` counter once caches have settled. Save responses seed `SCENE_KEYS.detail` and patch `SCENE_KEYS.byChapter` (and `draft-document` caches) via `setQueryData` rather than invalidating, so both the scene view and the chapter view go correct with no refetch and no cursor disruption.
+
 ### Import/export
 
 DOCX import and export (book/part/chapter/scene). PDF export (book/part/chapter/scene) via OpenHTMLtoPDF, mirroring DOCX's standard-manuscript formatting rather than the live Style cascade. Uses PDFBox standard fonts (WinAnsi-only; no embedded font file). Markdown and ePub planned; ePub menu wiring needs verification.

@@ -44,15 +44,12 @@ export const useUpdateScene = () => {
 	})
 }
 
-export const useUpdateSceneContent = () => {
-	const queryClient = useQueryClient()
-	return useMutation({
-		mutationFn: ({ id, content }) => scenesApi.updateContent(id, content),
-		onSuccess: (_, { id }) => {
-			queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(id) })
-		},
-	})
-}
+// useUpdateSceneContent is gone. Scene content is written only by EditorPanel's
+// autosave, which builds its own save job (it has to capture the editing mode and
+// target ids at the moment the keystroke happened, not at the moment the debounce
+// timer fires) and seeds SCENE_KEYS.detail / SCENE_KEYS.byChapter from the row the
+// server returns. This hook was never imported, and its onSuccess omitted the
+// byChapter invalidation, so reviving it would reintroduce the stale-chapter bug.
 
 /**
  * Saves a codex entry's structured field values (the schema-driven form).

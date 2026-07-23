@@ -693,6 +693,10 @@ export default function EditorPanel({
 	const { mutate: deleteScene } = useDeleteScene();
 
 	const [isSaving, setIsSaving] = useState(false);
+	// Bumped every time an autosave settles. The content-load effect refuses to
+	// run while a save is pending or in flight (see the gate at the top of that
+	// effect); this counter is what re-runs it once the caches have settled.
+	const [saveEpoch, setSaveEpoch] = useState(0);
 	const [previewActive, setPreviewActive] = useState(false);
 	const [splitDraft, setSplitDraft] = useState(null);
 	const [splitTitle, setSplitTitle] = useState('');
@@ -735,6 +739,14 @@ export default function EditorPanel({
 	const aggregateDraftModeRef = useRef(aggregateDraftMode);
 	const expectedSceneIdsRef = useRef([]);
 	const activeScenesRef = useRef([]);
+	// The debounced autosave's job, built at ARM time (see scheduleSave below).
+	const pendingSaveRef = useRef(null);
+	// True from the instant runPendingSave starts until its job settles. Set
+	// synchronously, before the first await, because the content-load effect runs
+	// on the same tick as a scope switch and has to see that a save is in flight.
+	const savingRef = useRef(false);
+	const flushSaveRef = useRef(null);
+	const mountedRef = useRef(true);
 
 	// A codex entry is a scene (single-scene mode) whose parent chapter is a
 	// codex entry — ground-truthed via chapterData.codexId (set on all codex
@@ -810,8 +822,11 @@ export default function EditorPanel({
 		}
 	}, [singleSceneMode]);
 
+	// Scope change resets the load guards. It does NOT touch the save timer: the
+	// flush effect below owns that, and it commits the pending save rather than
+	// discarding it. Clearing the timer here (as this used to) silently threw away
+	// the last 1.5 s of typing every time the author left a document.
 	useEffect(() => {
-		if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
 		loadedTemplateKeyRef.current = null;
 		loadedAiDocKeyRef.current = null;
 		loadedChapterIdRef.current = null;
@@ -822,138 +837,333 @@ export default function EditorPanel({
 	}, [templateMode, templateType, templateScope, aiDocType, selectedProvider, bookId, partId, chapterId]);
 
 	// ── save ─────────────────────────────────────────────────────────────────
+	//
+	// Autosave is DEBOUNCED BUT NOT LATE-BOUND. buildSaveJob runs synchronously
+	// inside onUpdate and closes over the editing mode, the target ids, and the
+	// live word count as they are AT THAT MOMENT; the timer callback only executes
+	// whatever job is already pending.
+	//
+	// The previous version read all of that at FIRE time instead, from refs. That
+	// was wrong in a way that cost text: moving between a scene and its parent
+	// chapter does not change chapterId, so nothing reset the timer, but the mode
+	// refs had already flipped by the time it fired. A save armed in one mode
+	// therefore fired in the other — a scene edit was dropped on the way up
+	// (the load effect cleared the timer), and on the way down an entire
+	// chapter's aggregate HTML was written into whichever single scene had just
+	// been selected. Capturing the job at arm time makes the save independent of
+	// navigation and of effect ordering.
 
-	const scheduleSave = useCallback((html) => {
-		if (saveTimer.current) clearTimeout(saveTimer.current);
-		saveTimer.current = setTimeout(async () => {
-			setIsSaving(true);
-			try {
-				if (aiDocTypeRef.current) {
-					const type = aiDocTypeRef.current;
-					const prov = aiDocProviderRef.current;
-					if (type === 'memory') {
-						const cid = chapterIdRef.current;
-						if (!cid) return;
-						const saved = await chapterMemoryApi.save(cid, html, prov);
-						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved.provider, saved);
-						queryClient.setQueryData(CHAPTER_MEMORY_KEYS.variants(cid), (old) => upsertVariant(old, saved));
-						queryClient.invalidateQueries({ queryKey: CHAPTER_MEMORY_KEYS.doc(cid) });
-						queryClient.invalidateQueries({ queryKey: CHAPTER_MEMORY_KEYS.status(bookIdRef.current) });
-					} else if (type === 'chapterSummary') {
-						const cid = chapterIdRef.current;
-						if (!cid) return;
-						const saved = await summaryApi.saveChapter(cid, html, prov);
-						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved.provider, saved);
-						queryClient.setQueryData(SUMMARY_KEYS.chapterVariants(cid), (old) => upsertVariant(old, saved));
-						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.chapterDoc(cid) });
-						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.chapters(bookIdRef.current) });
-						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bookIdRef.current) });
-					} else if (type === 'bookSummary') {
-						const bid = bookIdRef.current;
-						if (!bid) return;
-						const saved = await summaryApi.saveBook(bid, html, prov);
-						loadedAiDocKeyRef.current = aiDocKey(type, bid, saved.provider, saved);
-						queryClient.setQueryData(SUMMARY_KEYS.bookVariants(bid), (old) => upsertVariant(old, saved));
-						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookDoc(bid) });
-						queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bid) });
-					} else if (type === 'editorial') {
-						const cid = chapterIdRef.current;
-						if (!cid) return;
-						const saved = await editorialApi.save(cid, html, prov);
-						loadedAiDocKeyRef.current = aiDocKey(type, cid, saved.provider, saved);
-						queryClient.setQueryData(EDITORIAL_KEYS.variants(cid), (old) => upsertVariant(old, saved));
-						queryClient.invalidateQueries({ queryKey: EDITORIAL_KEYS.doc(cid) });
-					}
-					return;
-				}
-
-				if (templateModeRef.current) {
-					const type = templateTypeRef.current;
-					let saved;
-					if (templateScopeRef.current === 'global') {
-						saved = await templatesApi.updateGlobal(type, html);
-						loadedTemplateKeyRef.current = templateKey(saved);
-						queryClient.invalidateQueries({ queryKey: TEMPLATE_KEYS.global(type) });
-						// Books with no BOOK override resolve to the global via resolveForBook.
-						// Invalidate all cached book-template entries so BookCoverPreview and
-						// PartPagePreview re-fetch and reflect the updated global immediately.
-						queryClient.invalidateQueries({ queryKey: ['templates', 'book'] });
-					} else {
-						saved = await templatesApi.upsertBook(bookIdRef.current, type, html);
-						loadedTemplateKeyRef.current = templateKey(saved);
-						queryClient.invalidateQueries({ queryKey: TEMPLATE_KEYS.book(bookIdRef.current, type) });
-					}
-					return;
-				}
-
-				if (singleSceneModeRef.current) {
-					const sid = sceneIdRef.current;
-					if (!sid) return;
-					// Use TipTap's CharacterCount for the most accurate word count —
-					// it operates on the parsed document model, matching what the
-					// status bar displays.
-					const wc = editorRef.current?.storage?.characterCount?.words() ?? 0;
-					await scenesApi.updateContent(sid, html, wc);
-					queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(sid) });
-				} else {
-					let firstId = firstSceneIdRef.current;
-					if (!firstId) {
-						// Chapter mode with no scenes yet — auto-create the first scene so
-						// the user's typing is persisted without having to use Add Scene.
-						// creatingFirstSceneRef guards against duplicate creation on rapid typing.
-						const cid = chapterIdRef.current;
-						if (!cid || aggregateDraftModeRef.current || creatingFirstSceneRef.current) return;
-						creatingFirstSceneRef.current = true;
-						try {
-							const newScene = await scenesApi.create(cid, { title: '' });
-							firstId = newScene.id;
-							firstSceneIdRef.current = firstId;
-							expectedSceneIdsRef.current = [firstId];
-							// Pre-set the loaded-order refs so the upcoming query refetch
-							// doesn't see a scope/order change and re-blank the editor.
-							loadedChapterIdRef.current = `chapter:${cid}`;
-							loadedSceneOrderRef.current = firstId;
-							const wc = countWords(html);
-							await scenesApi.updateContent(firstId, html, wc);
-							queryClient.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(cid) });
-							queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(firstId) });
-						} catch (err) {
-							console.error('[EditorPanel] Failed to auto-create first scene:', err);
-						} finally {
-							creatingFirstSceneRef.current = false;
-						}
-						return;
-					}
-					const chunks = parseSceneChunks(html, firstId);
-					if (!chunks.length) return;
-					const expectedIds = expectedSceneIdsRef.current;
-					if (aggregateDraftModeRef.current) {
-						const actualIds = chunks.map(c => c.sceneId);
-						if (actualIds.length !== expectedIds.length || actualIds.some((id, i) => id !== expectedIds[i])) {
-							console.error('[EditorPanel] Draft scene boundaries changed; save aborted to protect scene ownership.');
-							return;
-						}
-					}
-					// Count words per chunk from the HTML — TipTap's CharacterCount
-					// only gives a total for the whole document, not per-scene.
-					// countWords() uses the same /\S+/g algorithm TipTap uses internally,
-					// so the per-scene values sum to the same total the status bar shows.
-					await Promise.all(
-						chunks.map(c => scenesApi.updateContent(c.sceneId, c.content, countWords(c.content)))
-					);
-					chunks.forEach(c =>
-						queryClient.invalidateQueries({ queryKey: SCENE_KEYS.detail(c.sceneId) })
-					);
-				}
-			} catch (err) {
-				console.error('[EditorPanel] Save failed:', err);
-			} finally {
-				setIsSaving(false);
+	// Seeds the two caches the editor reads scene content from, using the rows the
+	// server returns. PUT /scenes/{id}/content responds with the saved Scene, so
+	// there is nothing to refetch — and invalidating instead would pull the whole
+	// chapter back down every 1.5 s of typing, with the refetch landing mid-sentence.
+	//
+	// entries: [{ id, saved }]. saved is '' on a 204, in which case that key falls
+	// back to invalidation.
+	// listChapterId: the chapter whose scene list should be patched, or null in
+	// aggregate-draft mode where the scenes span several chapters.
+	const applySavedScenes = useCallback((entries, listChapterId) => {
+		const fresh = [];
+		entries.forEach(({ id, saved }) => {
+			const detailKey = SCENE_KEYS.detail(id);
+			if (!saved) {
+				queryClient.invalidateQueries({ queryKey: detailKey });
+				return;
 			}
-		}, AUTOSAVE_DELAY_MS);
+			// A GET issued at the moment the author navigated can still be in
+			// flight; cancel it first or it may resolve after this write and put
+			// pre-save content back into the cache. Safe for the detail key because
+			// we always have a row to substitute.
+			queryClient.cancelQueries({ queryKey: detailKey, exact: true });
+			queryClient.setQueryData(detailKey, saved);
+			fresh.push(saved);
+		});
+
+		if (!fresh.length) return;
+		const byId = new Map(fresh.map((row) => [row.id, row]));
+
+		if (listChapterId) {
+			const listKey = SCENE_KEYS.byChapter(listChapterId);
+			const existing = queryClient.getQueryData(listKey);
+			if (Array.isArray(existing)) {
+				queryClient.cancelQueries({ queryKey: listKey, exact: true });
+				queryClient.setQueryData(listKey, existing.map(
+					(s) => (byId.has(s.id) ? { ...s, ...byId.get(s.id) } : s)
+				));
+			} else {
+				// Nothing cached to patch (or a first fetch is in flight, which we
+				// must not cancel — there would be no list left to show).
+				queryClient.invalidateQueries({ queryKey: listKey });
+			}
+		}
+
+		// Whole-book / whole-part draft documents embed the same scene rows one
+		// level deeper. Patch them in place rather than invalidating: rebuilding a
+		// draft document refetches every chapter and every scene in the book.
+		queryClient.setQueriesData({ queryKey: ['draft-document'] }, (draft) => {
+			if (!draft?.groups) return draft;
+			let anyTouched = false;
+			const groups = draft.groups.map((group) => {
+				let groupTouched = false;
+				const chapters = (group.chapters || []).map((chapter) => {
+					let chapterTouched = false;
+					const scenes = (chapter.scenes || []).map((s) => {
+						if (!byId.has(s.id)) return s;
+						chapterTouched = true;
+						return { ...s, ...byId.get(s.id) };
+					});
+					if (!chapterTouched) return chapter;
+					groupTouched = true;
+					anyTouched = true;
+					return { ...chapter, scenes };
+				});
+				return groupTouched ? { ...group, chapters } : group;
+			});
+			// Identity is preserved all the way down when nothing matched, so an
+			// unrelated draft document in cache does not re-trigger the load effect.
+			return anyTouched ? { ...draft, groups } : draft;
+		});
 	}, [queryClient]);
 
+	// Builds the save closure for the document currently in the editor. Everything
+	// that depends on "which document is this" is read here, synchronously. Pure
+	// computation over the captured values (parsing scene chunks out of the HTML)
+	// is deliberately left inside the returned closure so it runs once per save
+	// rather than once per keystroke.
+	//
+	// Returns null when there is nothing savable, in which case no timer is armed.
+	const buildSaveJob = useCallback((html) => {
+		if (aiDocTypeRef.current) {
+			const type = aiDocTypeRef.current;
+			const prov = aiDocProviderRef.current;
+			const cid = chapterIdRef.current;
+			const bid = bookIdRef.current;
+
+			if (type === 'memory') {
+				if (!cid) return null;
+				return async () => {
+					const saved = await chapterMemoryApi.save(cid, html, prov);
+					loadedAiDocKeyRef.current = aiDocKey(type, cid, saved.provider, saved);
+					queryClient.setQueryData(CHAPTER_MEMORY_KEYS.variants(cid), (old) => upsertVariant(old, saved));
+					queryClient.invalidateQueries({ queryKey: CHAPTER_MEMORY_KEYS.doc(cid) });
+					queryClient.invalidateQueries({ queryKey: CHAPTER_MEMORY_KEYS.status(bid) });
+				};
+			}
+			if (type === 'chapterSummary') {
+				if (!cid) return null;
+				return async () => {
+					const saved = await summaryApi.saveChapter(cid, html, prov);
+					loadedAiDocKeyRef.current = aiDocKey(type, cid, saved.provider, saved);
+					queryClient.setQueryData(SUMMARY_KEYS.chapterVariants(cid), (old) => upsertVariant(old, saved));
+					queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.chapterDoc(cid) });
+					queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.chapters(bid) });
+					queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bid) });
+				};
+			}
+			if (type === 'bookSummary') {
+				if (!bid) return null;
+				return async () => {
+					const saved = await summaryApi.saveBook(bid, html, prov);
+					loadedAiDocKeyRef.current = aiDocKey(type, bid, saved.provider, saved);
+					queryClient.setQueryData(SUMMARY_KEYS.bookVariants(bid), (old) => upsertVariant(old, saved));
+					queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookDoc(bid) });
+					queryClient.invalidateQueries({ queryKey: SUMMARY_KEYS.bookStatus(bid) });
+				};
+			}
+			if (type === 'editorial') {
+				if (!cid) return null;
+				return async () => {
+					const saved = await editorialApi.save(cid, html, prov);
+					loadedAiDocKeyRef.current = aiDocKey(type, cid, saved.provider, saved);
+					queryClient.setQueryData(EDITORIAL_KEYS.variants(cid), (old) => upsertVariant(old, saved));
+					queryClient.invalidateQueries({ queryKey: EDITORIAL_KEYS.doc(cid) });
+				};
+			}
+			return null;
+		}
+
+		if (templateModeRef.current) {
+			const type = templateTypeRef.current;
+			const scope = templateScopeRef.current;
+			const bid = bookIdRef.current;
+			if (!type) return null;
+			if (scope !== 'global' && !bid) return null;
+			return async () => {
+				let saved;
+				if (scope === 'global') {
+					saved = await templatesApi.updateGlobal(type, html);
+					loadedTemplateKeyRef.current = templateKey(saved);
+					queryClient.invalidateQueries({ queryKey: TEMPLATE_KEYS.global(type) });
+					// Books with no BOOK override resolve to the global via resolveForBook.
+					// Invalidate all cached book-template entries so BookCoverPreview and
+					// PartPagePreview re-fetch and reflect the updated global immediately.
+					queryClient.invalidateQueries({ queryKey: ['templates', 'book'] });
+				} else {
+					saved = await templatesApi.upsertBook(bid, type, html);
+					loadedTemplateKeyRef.current = templateKey(saved);
+					queryClient.invalidateQueries({ queryKey: TEMPLATE_KEYS.book(bid, type) });
+				}
+			};
+		}
+
+		if (singleSceneModeRef.current) {
+			const sid = sceneIdRef.current;
+			if (!sid) return null;
+			const cid = chapterIdRef.current;
+			// Read the count NOW, off the document this html came from. TipTap's
+			// CharacterCount operates on the parsed model and matches the status bar;
+			// countWords is the fallback rather than 0, because a zero here is what
+			// historically corrupted scene.word_count.
+			const wc = editorRef.current?.storage?.characterCount?.words() ?? countWords(html);
+			return async () => {
+				const saved = await scenesApi.updateContent(sid, html, wc);
+				applySavedScenes([{ id: sid, saved }], cid);
+			};
+		}
+
+		const cid = chapterIdRef.current;
+		const isDraft = aggregateDraftModeRef.current;
+		const firstId = firstSceneIdRef.current;
+
+		if (!firstId) {
+			// Chapter mode with no scenes yet — auto-create the first scene so the
+			// author's typing is persisted without having to use Add Scene.
+			// creatingFirstSceneRef guards against duplicate creation on rapid typing.
+			if (!cid || isDraft || creatingFirstSceneRef.current) return null;
+			return async () => {
+				creatingFirstSceneRef.current = true;
+				try {
+					const newScene = await scenesApi.create(cid, { title: '' });
+					const newId = newScene.id;
+					firstSceneIdRef.current = newId;
+					expectedSceneIdsRef.current = [newId];
+					// Pre-set the loaded-order refs so the upcoming query refetch
+					// doesn't see a scope/order change and re-blank the editor.
+					loadedChapterIdRef.current = `chapter:${cid}`;
+					loadedSceneOrderRef.current = newId;
+					const saved = await scenesApi.updateContent(newId, html, countWords(html));
+					// The list gained a row, so it has to be refetched rather than
+					// patched; seed the detail key from the response.
+					queryClient.invalidateQueries({ queryKey: SCENE_KEYS.byChapter(cid) });
+					applySavedScenes([{ id: newId, saved }], null);
+				} catch (err) {
+					console.error('[EditorPanel] Failed to auto-create first scene:', err);
+				} finally {
+					creatingFirstSceneRef.current = false;
+				}
+			};
+		}
+
+		// Snapshot the scene roster the html was produced against; the boundary
+		// check below compares the parsed chunks to this, not to whatever the
+		// roster happens to be when the timer fires.
+		const expectedIds = expectedSceneIdsRef.current.slice();
+		// In aggregate-draft mode the scenes span several chapters, so each row's
+		// own chapterId is the only correct list key. flattenDraftScenes stamps it.
+		const chapterBySceneId = isDraft
+			? new Map((activeScenesRef.current || []).map((s) => [s.id, s.chapterId ?? null]))
+			: null;
+
+		return async () => {
+			const chunks = parseSceneChunks(html, firstId);
+			if (!chunks.length) return;
+			if (isDraft) {
+				const actualIds = chunks.map((c) => c.sceneId);
+				if (actualIds.length !== expectedIds.length || actualIds.some((id, i) => id !== expectedIds[i])) {
+					console.error('[EditorPanel] Draft scene boundaries changed; save aborted to protect scene ownership.');
+					return;
+				}
+			}
+			// Count words per chunk from the HTML — TipTap's CharacterCount only
+			// gives a total for the whole document, not per-scene. countWords() uses
+			// the same /\S+/g algorithm TipTap uses internally, so the per-scene
+			// values sum to the same total the status bar shows.
+			const results = await Promise.all(
+				chunks.map((c) => scenesApi.updateContent(c.sceneId, c.content, countWords(c.content)))
+			);
+			const entries = chunks.map((c, i) => ({ id: c.sceneId, saved: results[i] }));
+			if (!isDraft) {
+				applySavedScenes(entries, cid);
+				return;
+			}
+			// One call per owning chapter so each chapter's scene list gets patched.
+			const groupedByChapter = new Map();
+			entries.forEach((entry) => {
+				const owner = chapterBySceneId?.get(entry.id) ?? null;
+				if (!groupedByChapter.has(owner)) groupedByChapter.set(owner, []);
+				groupedByChapter.get(owner).push(entry);
+			});
+			groupedByChapter.forEach((group, owner) => applySavedScenes(group, owner));
+		};
+	}, [queryClient, applySavedScenes]);
+
+	// Executes whatever job is pending, immediately. Used both by the debounce
+	// timer and by the flush-on-scope-change effect.
+	const runPendingSave = useCallback(async () => {
+		if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+		const job = pendingSaveRef.current;
+		if (!job) return;
+		pendingSaveRef.current = null;
+		savingRef.current = true;
+		if (mountedRef.current) setIsSaving(true);
+		try {
+			await job();
+		} catch (err) {
+			console.error('[EditorPanel] Save failed:', err);
+		} finally {
+			savingRef.current = false;
+			if (mountedRef.current) {
+				setIsSaving(false);
+				setSaveEpoch((e) => e + 1);
+			}
+		}
+	}, []);
+
+	const scheduleSave = useCallback((html) => {
+		const job = buildSaveJob(html);
+		if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+		pendingSaveRef.current = job;
+		if (!job) return;
+		saveTimer.current = setTimeout(() => { runPendingSave(); }, AUTOSAVE_DELAY_MS);
+	}, [buildSaveJob, runPendingSave]);
+
+	const flushPendingSave = useCallback(() => {
+		if (!pendingSaveRef.current) return;
+		runPendingSave();
+	}, [runPendingSave]);
+
 	useEffect(() => { scheduleSaveRef.current = scheduleSave; }, [scheduleSave]);
+	useEffect(() => { flushSaveRef.current = flushPendingSave; }, [flushPendingSave]);
+
+	// Declared BEFORE the flush effect on purpose: cleanups run in declaration
+	// order, so on unmount this clears the flag first and the flush that follows
+	// commits its job without touching state on a component that is going away.
+	// The body (rather than the initializer) sets it so a StrictMode remount in
+	// development restores it.
+	useEffect(() => {
+		mountedRef.current = true;
+		return () => { mountedRef.current = false; };
+	}, []);
+
+	// Identifies the document the editor is currently editing. Any change to it
+	// means a pending autosave belongs to the OUTGOING document.
+	const saveScopeKey = aiDocMode
+		? `ai:${aiDocType}:${isBookSummaryDoc ? bookId : chapterId}:${selectedProvider}`
+		: templateMode
+			? `tpl:${templateScope}:${templateType}:${bookId}`
+			: singleSceneMode
+				? `scene:${sceneId}`
+				: aggregateDraftMode
+					? `draft:${partDraftMode ? 'part' : 'book'}:${partId || bookId}`
+					: `chapter:${chapterId}`;
+
+	useEffect(() => {
+		// Cleanup form on purpose: React runs every changed effect's cleanup before
+		// it runs any effect body, so this is guaranteed to commit the outgoing
+		// document's pending save before the incoming document's content loads.
+		// Also fires on unmount, where this used to be a bare clearTimeout.
+		return () => { flushSaveRef.current?.(); };
+	}, [saveScopeKey]);
 
 	// ── editor ────────────────────────────────────────────────────────────────
 
@@ -1144,10 +1354,16 @@ export default function EditorPanel({
 		const title = splitTitle.trim();
 		if (!draft || !title || splitPending || isSaving) return;
 
+		// Discard the pending autosave rather than flushing it: the split request
+		// already carries beforeContent/afterContent captured from the live editor,
+		// so committing a pre-split snapshot would only race it. The JOB has to go
+		// too — clearing the timer alone would leave it for the flush effect to
+		// commit on the next navigation, writing the pre-split document back.
 		if (saveTimer.current) {
 			clearTimeout(saveTimer.current);
 			saveTimer.current = null;
 		}
+		pendingSaveRef.current = null;
 
 		setSplitPending(true);
 		setIsSaving(true);
@@ -1248,6 +1464,15 @@ export default function EditorPanel({
 	useEffect(() => {
 		if (!isEditorReady(editor)) return;
 
+		// A pending or in-flight autosave belongs to the document the editor is
+		// leaving. Loading now would put that scope's cached, pre-save content on
+		// screen — and the guards below key on scene IDS, not content, so once the
+		// save settled they would refuse to reload it. The author would be looking
+		// at a stale document that the next keystroke writes back over the scenes.
+		// Wait instead: runPendingSave bumps saveEpoch when it settles, which
+		// re-runs this effect against caches it has already seeded.
+		if (pendingSaveRef.current || savingRef.current) return;
+
 		let cancelled = false;
 		const setEditorContent = (html) => {
 			queueMicrotask(() => {
@@ -1298,7 +1523,11 @@ export default function EditorPanel({
 		const orderChanged = newOrder !== loadedSceneOrderRef.current;
 
 		if (!scopeChanged && !orderChanged) return;
-		if (scopeChanged && saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+		// No clearTimeout here any more. This line was the mechanism by which a
+		// scene edit made inside the autosave window vanished when the author
+		// clicked up to the parent chapter: the pending save was thrown away
+		// before it ever reached the server. The flush effect commits it instead,
+		// and the gate at the top of this effect keeps us from loading until it has.
 
 		if (contentScenes.length === 0) {
 			loadedChapterIdRef.current = scopeKey;
@@ -1312,9 +1541,10 @@ export default function EditorPanel({
 		loadedChapterIdRef.current = scopeKey;
 		loadedSceneOrderRef.current = newOrder;
 		return setEditorContent(html);
-	}, [editor, scenes, activeScenes, draftDocument, aggregateDraftMode, partDraftMode, partId, bookId, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template, aiDocMode, aiDocLoading, aiDocCurrent, aiDocType, selectedProvider, isBookSummaryDoc]);
+		// saveEpoch is a dependency, not an input: it is what re-runs this effect
+		// after the gate above has held it back through an autosave.
+	}, [editor, scenes, activeScenes, draftDocument, aggregateDraftMode, partDraftMode, partId, bookId, chapterId, singleScene, sceneId, singleSceneMode, templateMode, template, aiDocMode, aiDocLoading, aiDocCurrent, aiDocType, selectedProvider, isBookSummaryDoc, saveEpoch]);
 
-	useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
 	// ── AI-doc generate / regenerate ──────────────────────────────────────────
 

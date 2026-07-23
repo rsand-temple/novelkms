@@ -520,6 +520,30 @@ matching the console rather than introducing react-query there); one `{reason, n
 dialog drives every moderation action, and profile suspension is keyed by handle because
 `ContentReportView` carries a target id but not a target handle.
 
+### Autosave arm-time capture fix (EditorPanel)
+
+**Root cause.** `scheduleSave` read the editing mode and target ids from refs at FIRE time (1500 ms after the keystroke), not ARM time. Moving between a scene and its parent chapter does not change `chapterId`, so the scope-change effect never reset the timer — but the mode refs had already flipped. Three defects compounded:
+
+1. **Scene → chapter**: the content-load effect cleared the timer on scope change, silently discarding the pending scene edit before it reached the server.
+2. **Chapter → scene**: no equivalent guard existed, so the timer fired with `singleSceneModeRef === true` and wrote the entire chapter's aggregate HTML into the newly selected single scene.
+3. **Neither save path invalidated `SCENE_KEYS.byChapter`**: with `staleTime: 30_000`, switching from scene to chapter served stale content for up to 30 seconds. The content-load effect's guard keyed on scene IDs (not content), so when the list finally refetched with the same IDs the effect early-returned and kept the stale document — the next keystroke autosaved it back, destroying the edit.
+
+**Fix: arm-time job capture.** `buildSaveJob(html)` runs synchronously in `onUpdate` and returns a closure that captures mode, target ids, and word count. `scheduleSave` stores the closure in `pendingSaveRef` and arms the timer; the timer only calls `runPendingSave()`, which executes whatever job is pending. A save always lands on the document it came from, independent of navigation and effect ordering.
+
+**Fix: flush on scope change.** A cleanup effect keyed on `saveScopeKey` (a composite of mode + entity ids) calls `flushPendingSave()`. React runs cleanup before the incoming effect body, so the outgoing document's save commits and seeds caches before the incoming document loads. Also fires on unmount, replacing the old discard-on-unmount `clearTimeout`.
+
+**Fix: gate content loading.** The content-load effect early-returns while `pendingSaveRef.current || savingRef.current`. Completing a save bumps `saveEpoch` (a state counter in the dependency array), which re-runs the effect against settled caches.
+
+**Fix: seed caches from save response.** `applySavedScenes` calls `setQueryData` on `SCENE_KEYS.detail(id)` and patches the matching row inside `SCENE_KEYS.byChapter(chapterId)` from the `Scene` row `PUT /scenes/{id}/content` returns. In-flight GETs for those keys are cancelled first (`cancelQueries`) so a fetch issued at the moment of navigation cannot resolve afterward and restore pre-save content. `draft-document` caches (whole-book/part editing) are patched identically. Falls back to `invalidateQueries` on a 204 or when no list is cached.
+
+**Scene split guard.** `handleSplitSceneConfirm` clears `pendingSaveRef` in addition to the timer — without this the flush effect would commit a pre-split document on the next navigation.
+
+**Dead code removal.** `useUpdateSceneContent` in `useScenes.js` was never imported; its `onSuccess` omitted the `byChapter` invalidation, so reviving it would reintroduce the stale-chapter bug. Removed with a comment recording why.
+
+**Single-scene word count fallback.** The word count captured in `buildSaveJob` falls back to `countWords(html)` instead of `0` when `CharacterCount` is unavailable. A zero there is what historically corrupted `scene.word_count` (pre-V37 autosave bug).
+
+- Autosave `buildSaveJob` reads `activeScenesRef` for the draft-mode chapter-by-scene map; if a scene is added or removed between arm and fire, the boundary check rejects the save. This is correct for protection but means a very rapid add-scene → type → save sequence could drop the first keystroke. Monitoring.
+
 ## Extensible Codex E6 — non-destructive field removal.
 - Soft-remove via codex_type_field.deleted_at (existing since V42); active reads
   already exclude removed rows. restoreField preserves original display_order.
@@ -694,3 +718,4 @@ migration replay: not applicable (no migration). Manual exercise confirmed:
 before deploy: trash CHARACTER → promote a CHARACTER finding without the type
 picker → confirm it lands in Notes → restore CHARACTER from Trash → confirm
 fields and entries returned.
+
