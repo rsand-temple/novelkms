@@ -2,6 +2,7 @@ package com.richardsand.novelkms.resource;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -159,6 +160,34 @@ public class ChapterResource {
         }
     }
 
+    /**
+     * GET /api/books/{bookId}/scratchpad
+     *
+     * <p>The book's Scratchpad — a holding pen for scenes that are not part of
+     * the manuscript. Get-or-create: there is no separate POST, because a
+     * Scratchpad is a structural fixture of every book rather than something the
+     * author decides to add, and V43 deliberately ships no backfill. The first
+     * read after upgrading creates the row.
+     *
+     * <p>Scenes are created inside it with the ordinary
+     * {@code POST /api/chapters/{chapterId}/scenes}, and moved in and out of the
+     * manuscript with the ordinary {@code PUT /api/scenes/{id}/move} — the
+     * Scratchpad needs no scene endpoints of its own.
+     *
+     * <p>Tenant authorization comes from the {@code books/{bookId}} segment, so
+     * a Scratchpad can only ever be created under a book the caller owns.
+     */
+    @GET
+    @Path("/books/{bookId}/scratchpad")
+    public Response getScratchpad(@PathParam("bookId") UUID bookId) {
+        logger.debug("ChapterResource.getScratchpad invoked: bookId={}", bookId);
+        try {
+            return Response.ok(chapterDao.getOrCreateScratchpad(bookId)).build();
+        } catch (SQLException e) {
+            return serverError(e);
+        }
+    }
+
     @POST
     @Path("/books/{bookId}/chapters")
     public Response createChapter(@PathParam("bookId") UUID bookId, CreateRequest req) {
@@ -196,6 +225,9 @@ public class ChapterResource {
         // Never persist null, since the title column is NOT NULL.
         String title = req.title != null ? req.title : "";
         try {
+            if (chapterDao.isScratchpad(id)) {
+                return scratchpadNotAllowed("The Scratchpad cannot be renamed or edited.");
+            }
             return chapterDao.update(id, title, req.subtitle, req.notes, req.resetsNumbering)
                     .map(ch -> Response.ok(ch).build())
                     .orElse(Response.noContent().build());
@@ -215,6 +247,11 @@ public class ChapterResource {
                     .entity("request body is required").build();
         }
         try {
+            // The Scratchpad sits outside the book outline entirely — it has no
+            // position to move to. Its scenes move freely; the container does not.
+            if (chapterDao.isScratchpad(id)) {
+                return scratchpadNotAllowed("The Scratchpad cannot be moved.");
+            }
             chapterDao.moveChapter(id,
                     req.sourcePartId, req.sourceItems,
                     req.partId, req.targetItems);
@@ -242,12 +279,31 @@ public class ChapterResource {
     public Response deleteChapter(@PathParam("id") UUID id, @Context ContainerRequestContext request) {
         logger.info("ChapterResource.deleteChapter invoked: id={}", id);
         try {
+            // TrashDao already refuses to stamp a Scratchpad, but that refusal is
+            // indistinguishable from "already gone" (204). Reject explicitly here
+            // so the author gets told why instead of watching nothing happen.
+            if (chapterDao.isScratchpad(id)) {
+                return scratchpadNotAllowed(
+                        "The Scratchpad cannot be deleted. Delete the scenes inside it instead.");
+            }
             return trashService.trashChapter(CurrentUser.id(request), id).isPresent()
                     ? Response.ok().build()
                     : Response.noContent().build();
         } catch (SQLException e) {
             return serverError(e);
         }
+    }
+
+    /**
+     * The Scratchpad is a fixture of its book, not a chapter: it cannot be
+     * renamed, moved, or deleted. Structural requests against it are rejected
+     * with a stable {@code not_scratchpad_operation} code so the frontend can
+     * distinguish this from a validation failure.
+     */
+    private Response scratchpadNotAllowed(String message) {
+        return Response.status(Response.Status.BAD_REQUEST)
+                .entity(Map.of("error", "not_scratchpad_operation", "message", message))
+                .build();
     }
 
     // Book-level chapter reordering used to live here as

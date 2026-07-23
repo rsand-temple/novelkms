@@ -45,6 +45,19 @@ public class Chapter {
     @JsonProperty
     private String codexCategory;
 
+    /**
+     * Nullable. Set for the one Scratchpad chapter of a book — a holding pen for
+     * scenes that are not part of the manuscript. NULL for every other chapter.
+     *
+     * <p>A Scratchpad chapter has {@code bookId}, {@code partId} and
+     * {@code codexId} all NULL, which is what keeps it out of every book-rooted
+     * query (numbering, outline, exports, rollups, AI context) without those
+     * queries needing to know it exists. Its content is never rendered into the
+     * book and never fed to any AI workflow.
+     */
+    @JsonProperty
+    private UUID scratchpadBookId;
+
     @JsonProperty
     private String title;
 

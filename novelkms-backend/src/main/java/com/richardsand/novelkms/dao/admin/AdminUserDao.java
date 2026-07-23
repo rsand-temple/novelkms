@@ -291,7 +291,8 @@ public class AdminUserDao {
                           LEFT JOIN book b ON b.id = ch.book_id
                           LEFT JOIN codex cx ON cx.id = ch.codex_id
                           LEFT JOIN book cb ON cb.id = cx.book_id
-                          JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id)
+                          LEFT JOIN book sb ON sb.id = ch.scratchpad_book_id
+                          JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id, sb.project_id)
                          WHERE p.owner_user_id = ?
                            AND p.deleted_at IS NULL
                            AND ch.deleted_at IS NULL
@@ -303,7 +304,8 @@ public class AdminUserDao {
                           LEFT JOIN book b ON b.id = ch.book_id
                           LEFT JOIN codex cx ON cx.id = ch.codex_id
                           LEFT JOIN book cb ON cb.id = cx.book_id
-                          JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id)
+                          LEFT JOIN book sb ON sb.id = ch.scratchpad_book_id
+                          JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id, sb.project_id)
                          WHERE p.owner_user_id = ?
                            AND p.deleted_at IS NULL
                            AND ch.deleted_at IS NULL
@@ -324,7 +326,8 @@ public class AdminUserDao {
                           LEFT JOIN book b ON b.id = ch.book_id
                           LEFT JOIN codex cx ON cx.id = ch.codex_id
                           LEFT JOIN book cb ON cb.id = cx.book_id
-                          JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id)
+                          LEFT JOIN book sb ON sb.id = ch.scratchpad_book_id
+                          JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id, sb.project_id)
                          WHERE p.owner_user_id = ?
                            AND p.deleted_at IS NULL
                            AND ar.deleted_at IS NULL

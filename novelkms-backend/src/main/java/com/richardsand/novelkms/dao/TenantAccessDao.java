@@ -50,10 +50,18 @@ public class TenantAccessDao {
     }
 
     /**
-     * A chapter belongs to a book (manuscript) OR a codex (world-building). The
-     * codex itself is either project-scoped or book-scoped, so the owning project
-     * is resolved through the first non-null of: the chapter's book, the codex's
-     * project, or the codex's book.
+     * A chapter belongs to a book (manuscript), a codex (world-building), or a
+     * book's Scratchpad. The codex itself is either project-scoped or
+     * book-scoped, so the owning project is resolved through the first non-null
+     * of: the chapter's book, the codex's project, the codex's book, or the
+     * Scratchpad's book.
+     *
+     * <p>The Scratchpad arm is not optional. A Scratchpad chapter deliberately
+     * has {@code book_id} NULL — that is what hides it from every book-rooted
+     * query — so without it here the chain resolves to no project and the tenant
+     * filter 404s the author out of their own Scratchpad. Every query in this
+     * codebase that COALESCEs a chapter to its owning project must carry all
+     * four arms.
      */
     public boolean ownsChapter(UUID userId, UUID chapterId) throws SQLException {
         return exists("""
@@ -61,14 +69,16 @@ public class TenantAccessDao {
                 LEFT JOIN book b   ON b.id  = c.book_id
                 LEFT JOIN codex cx ON cx.id = c.codex_id
                 LEFT JOIN book cb  ON cb.id = cx.book_id
-                JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id)
+                LEFT JOIN book sb  ON sb.id = c.scratchpad_book_id
+                JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id, sb.project_id)
                 WHERE c.id = ? AND p.owner_user_id = ?
                 """, chapterId, userId);
     }
 
     /**
-     * A scene's chapter may be a manuscript chapter or a codex chapter; ownership
-     * resolves through the same book-or-codex path as {@link #ownsChapter}.
+     * A scene's chapter may be a manuscript chapter, a codex chapter, or a
+     * book's Scratchpad; ownership resolves through the same four-arm path as
+     * {@link #ownsChapter}.
      */
     public boolean ownsScene(UUID userId, UUID sceneId) throws SQLException {
         return exists("""
@@ -77,7 +87,8 @@ public class TenantAccessDao {
                 LEFT JOIN book b   ON b.id  = c.book_id
                 LEFT JOIN codex cx ON cx.id = c.codex_id
                 LEFT JOIN book cb  ON cb.id = cx.book_id
-                JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id)
+                LEFT JOIN book sb  ON sb.id = c.scratchpad_book_id
+                JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id, sb.project_id)
                 WHERE s.id = ? AND p.owner_user_id = ?
                 """, sceneId, userId);
     }

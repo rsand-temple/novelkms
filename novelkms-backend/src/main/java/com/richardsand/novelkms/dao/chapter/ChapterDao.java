@@ -20,6 +20,13 @@ import com.richardsand.novelkms.model.chapter.Chapter;
 
 public class ChapterDao {
 
+    /**
+     * The fixed title of every book's Scratchpad chapter. It is not author-
+     * editable — the Scratchpad is a structural fixture of the book, like the
+     * Codex, not a chapter the author named.
+     */
+    public static final String SCRATCHPAD_TITLE = "Scratchpad";
+
     private final BasicDataSource ds;
 
     public ChapterDao(BasicDataSource ds) {
@@ -39,6 +46,7 @@ public class ChapterDao {
                 .partId(partId)
                 .codexId(rs.getObject("codex_id", UUID.class))
                 .codexCategory(rs.getString("codex_category"))
+                .scratchpadBookId(rs.getObject("scratchpad_book_id", UUID.class))
                 .title(rs.getString("title"))
                 .subtitle(rs.getString("subtitle"))
                 .displayOrder(rs.getInt("display_order"))
@@ -95,6 +103,7 @@ public class ChapterDao {
 
     private static final String CHAPTER_COLUMNS =
             "SELECT c.id, c.book_id, c.part_id, c.codex_id, c.codex_category, "
+            + "       c.scratchpad_book_id, "
             + "       c.title, c.subtitle, c.notes, c.resets_numbering, "
             + "       c.display_order, c.created_at, c.updated_at, ";
 
@@ -159,6 +168,7 @@ public class ChapterDao {
      */
     public List<Chapter> findByCodexId(UUID codexId) throws SQLException {
         String sql = "SELECT c.id, c.book_id, c.part_id, c.codex_id, c.codex_category, " +
+                "       c.scratchpad_book_id, " +
                 "       c.title, c.subtitle, c.notes, c.resets_numbering, " +
                 "       c.display_order, c.created_at, c.updated_at, " +
                 "       0 AS chapter_number " +
@@ -324,6 +334,96 @@ public class ChapterDao {
                 .createdAt(now).updatedAt(now)
                 .chapterNumber(0)
                 .build();
+    }
+
+    /**
+     * The book's Scratchpad chapter, creating it on first use.
+     *
+     * <p>The Scratchpad is a holding pen for scenes the author has written but
+     * has not placed in the manuscript. It is stored as a chapter row with
+     * {@code book_id}, {@code part_id} and {@code codex_id} all NULL and
+     * {@code scratchpad_book_id} naming the book — the same shape trick the
+     * codex uses, and the reason no book-rooted query (numbering, outline,
+     * exports, word rollups, AI context assembly) has to know it exists.
+     *
+     * <p>There is no migration backfill, so every book gets its row here the
+     * first time the Scratchpad is opened. Two concurrent first-opens race; the
+     * unique index {@code uq_chapter_scratchpad} decides the winner and the
+     * loser re-reads rather than failing, so the caller always gets the one row.
+     *
+     * <p>{@code display_order} is 0 and meaningless: the Scratchpad is the sole
+     * occupant of its container and is never sorted against anything.
+     */
+    public Chapter getOrCreateScratchpad(UUID bookId) throws SQLException {
+        Optional<Chapter> existing = findScratchpad(bookId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        UUID    id  = UUID.randomUUID();
+        Instant now = Instant.now();
+        String  sql = """
+                INSERT INTO chapter (id, book_id, part_id, codex_id, codex_category, scratchpad_book_id,
+                                     title, subtitle, display_order, notes, created_at, updated_at)
+                VALUES (?, NULL, NULL, NULL, NULL, ?, ?, NULL, 0, NULL, ?, ?)
+                """;
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, id);
+            ps.setObject(2, bookId);
+            ps.setString(3, SCRATCHPAD_TITLE);
+            ps.setTimestamp(4, Timestamp.from(now));
+            ps.setTimestamp(5, Timestamp.from(now));
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            // Lost the race against a concurrent first-open: the unique index
+            // rejected the second insert. The row we wanted exists either way.
+            return findScratchpad(bookId)
+                    .orElseThrow(() -> e);
+        }
+
+        return Chapter.builder()
+                .id(id).scratchpadBookId(bookId).title(SCRATCHPAD_TITLE)
+                .displayOrder(0)
+                .resetsNumbering(false)
+                .createdAt(now).updatedAt(now)
+                .chapterNumber(0)
+                .build();
+    }
+
+    /** The book's Scratchpad chapter if it has been created; empty otherwise. */
+    public Optional<Chapter> findScratchpad(UUID bookId) throws SQLException {
+        String sql = "SELECT c.id, c.book_id, c.part_id, c.codex_id, c.codex_category, "
+                + "       c.scratchpad_book_id, "
+                + "       c.title, c.subtitle, c.notes, c.resets_numbering, "
+                + "       c.display_order, c.created_at, c.updated_at, "
+                + "       0 AS chapter_number "
+                + "FROM chapter c "
+                + "WHERE c.scratchpad_book_id = ?";
+
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(map(rs)) : Optional.empty();
+            }
+        }
+    }
+
+    /**
+     * True when this chapter id is a book's Scratchpad. Callers use this to
+     * reject the structural operations a Scratchpad has no meaning for —
+     * renaming it, moving it into the outline, or trashing it.
+     */
+    public boolean isScratchpad(UUID chapterId) throws SQLException {
+        String sql = "SELECT 1 FROM chapter WHERE id = ? AND scratchpad_book_id IS NOT NULL";
+        try (Connection c = ds.getConnection();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
     }
 
     public Optional<Chapter> update(UUID id, String title, String subtitle, String notes,

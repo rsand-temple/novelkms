@@ -82,14 +82,29 @@ public class ArchiveDao {
                 projectId);
     }
 
+    /**
+     * Every non-codex chapter of the project's live books, including each book's
+     * Scratchpad.
+     *
+     * <p>The join is on {@code COALESCE(ch.book_id, ch.scratchpad_book_id)}
+     * rather than {@code ch.book_id} alone. A Scratchpad chapter has
+     * {@code book_id} NULL by design — that is what hides it from the manuscript
+     * — so a plain {@code book_id} join would drop it and every scene parked in
+     * it straight out of the backup. An archive that silently discards the
+     * author's unused scenes is worse than no archive, so the Scratchpad is
+     * exported like any other chapter and re-imported by the generic
+     * foreign-key remapper, which already rewrites any column ending in
+     * {@code _id}.
+     */
     public List<Map<String, Object>> findChaptersForProject(UUID projectId) throws SQLException {
         return queryRows(
                 """
                         SELECT ch.id, ch.book_id, ch.part_id, ch.codex_id, ch.codex_category,
+                               ch.scratchpad_book_id,
                                ch.title, ch.subtitle, ch.display_order, ch.notes,
                                ch.resets_numbering, ch.created_at, ch.updated_at
                         FROM chapter ch
-                        JOIN book b ON b.id = ch.book_id
+                        JOIN book b ON b.id = COALESCE(ch.book_id, ch.scratchpad_book_id)
                         WHERE b.project_id = ?
                           AND b.deleted_at IS NULL
                           AND ch.codex_id IS NULL

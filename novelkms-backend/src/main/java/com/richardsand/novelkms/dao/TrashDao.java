@@ -144,18 +144,30 @@ public class TrashDao {
                         rs.getInt("child_count"), "BOOK"));
     }
 
+    /**
+     * A Scratchpad chapter is deliberately excluded: it is a structural fixture
+     * of its book, created on demand and never removed, so there is nothing
+     * coherent for a restore to put back. Its scenes remain individually
+     * trashable, which is the operation an author actually wants. The predicate
+     * makes this a no-match rather than an error, so the endpoint answers 204
+     * (idempotently complete) exactly as it does for an already-deleted row;
+     * {@code ChapterResource} rejects the request explicitly before it gets
+     * here, so the author sees a real message rather than silence.
+     */
     public Optional<TrashItem> trashChapter(UUID userId, UUID id) throws SQLException {
         String ctx = """
                 SELECT c.title, c.codex_id,
-                       COALESCE(b.project_id, cx.project_id, cb.project_id) AS project_id,
+                       COALESCE(b.project_id, cx.project_id, cb.project_id, sb.project_id) AS project_id,
                        p.title AS project_title,
                        (SELECT COUNT(*) FROM scene WHERE chapter_id = c.id AND deleted_at IS NULL) AS child_count
                 FROM chapter c
                 LEFT JOIN book  b  ON b.id  = c.book_id
                 LEFT JOIN codex cx ON cx.id = c.codex_id
                 LEFT JOIN book  cb ON cb.id = cx.book_id
-                JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id)
+                LEFT JOIN book  sb ON sb.id = c.scratchpad_book_id
+                JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id, sb.project_id)
                 WHERE c.id = ? AND p.owner_user_id = ? AND c.deleted_at IS NULL
+                  AND c.scratchpad_book_id IS NULL
                 """;
         return doTrash(userId, id, ctx, "chapter", "CHAPTER",
                 (rs) -> {
@@ -169,14 +181,15 @@ public class TrashDao {
     public Optional<TrashItem> trashScene(UUID userId, UUID id) throws SQLException {
         String ctx = """
                 SELECT s.title, c.codex_id,
-                       COALESCE(b.project_id, cx.project_id, cb.project_id) AS project_id,
+                       COALESCE(b.project_id, cx.project_id, cb.project_id, sb.project_id) AS project_id,
                        p.title AS project_title
                 FROM scene s
                 JOIN chapter c ON c.id = s.chapter_id
                 LEFT JOIN book  b  ON b.id  = c.book_id
                 LEFT JOIN codex cx ON cx.id = c.codex_id
                 LEFT JOIN book  cb ON cb.id = cx.book_id
-                JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id)
+                LEFT JOIN book  sb ON sb.id = c.scratchpad_book_id
+                JOIN project p ON p.id = COALESCE(b.project_id, cx.project_id, cb.project_id, sb.project_id)
                 WHERE s.id = ? AND p.owner_user_id = ? AND s.deleted_at IS NULL
                 """;
         return doTrash(userId, id, ctx, "scene", "SCENE",
