@@ -27,6 +27,7 @@ import {
 	useDeletePart,
 } from '../../hooks/useParts'
 import { useReorderOutline } from '../../hooks/useOutline'
+import { useScratchpad } from '../../hooks/useScratchpad'
 import { toOutlineRefs } from '../../dnd/dndUtils'
 
 // ── Add-button label ──────────────────────────────────────────────────────────
@@ -45,6 +46,10 @@ const ADD_ENTRY_LABELS = {
 // label from the map above; an author-created Type (NULL system key) reads from
 // its own name, e.g. "Add Dragon".
 const getAddLabel = (selection, typeName) => {
+	// Scratchpad container selected — it is a chapter row, so it takes scenes.
+	// Checked before the book branch below, which would otherwise win (the
+	// Scratchpad selection carries bookId for context).
+	if (selection.scratchpadBookId && !selection.chapterId) return 'Add Scene'
 	// Codex container — entries are added under a Type, not the codex itself.
 	if (selection.codexId && !selection.chapterId) return null
 	if (selection.codexId && selection.chapterId) {
@@ -73,6 +78,11 @@ const CODEX_ENTRY_LABELS = {
 // `typeName` is the selected Codex Type's title, used only for the Type
 // confirm-dialog copy.
 function getDeleteContext(selection, typeName) {
+	// The Scratchpad is a fixture of its book — not deletable, and its selection
+	// carries bookId, so without this the trash button would offer "Delete Book".
+	// Scenes inside it are still deletable and fall through to the branch below.
+	if (selection.scratchpadBookId && !selection.sceneId) return null
+
 	if (selection.sceneId) {
 		const itemType = selection.codexId
 			? (CODEX_ENTRY_LABELS[selection.codexCategory] ?? 'Entry')
@@ -148,6 +158,7 @@ export default function NavToolbar({ selection, setSelection }) {
 	const isDirectChapterContext = isChapterContext && !selection.partId
 	const isPartContext = !selection.chapterId && !!selection.partId
 	const isBookContext = !selection.partId && !selection.chapterId && !!selection.bookId
+		&& !selection.scratchpadBookId
 	const isProjectContext = !selection.bookId && !selection.partId && !selection.chapterId && !!selection.projectId
 
 	// ── sibling lists (for reordering) ───────────────────────────────────────
@@ -182,6 +193,13 @@ export default function NavToolbar({ selection, setSelection }) {
 	const selectedTypeName = (selection.codexId && selection.chapterId)
 		? (codexTypes ?? []).find(t => t.id === selection.chapterId)?.title ?? null
 		: null
+	// The Scratchpad's chapter id, for the Add Scene dialog. Shares
+	// ScratchpadItem's cache key, so this costs no extra request.
+	const { data: selectedScratchpad } = useScratchpad(
+		selection.scratchpadBookId && !selection.chapterId ? selection.scratchpadBookId : null
+	)
+	const addSceneChapterId = selection.chapterId ?? selectedScratchpad?.id ?? null
+
 	const { mutate: createProjectCodex } = useCreateProjectCodex()
 	const { mutate: createBookCodex } = useCreateBookCodex()
 
@@ -308,7 +326,8 @@ export default function NavToolbar({ selection, setSelection }) {
 	const label = getAddLabel(selection, selectedTypeName)
 
 	const handleAdd = (e) => {
-		if (selection.codexId && selection.chapterId) setEntryDialogOpen(true)
+		if (selection.scratchpadBookId && !selection.chapterId) setSceneDialogOpen(true)
+		else if (selection.codexId && selection.chapterId) setEntryDialogOpen(true)
 		else if (selection.chapterId) setSceneDialogOpen(true)
 		else if (selection.partId) setPartChapterDialogOpen(true)
 		else if (selection.bookId) setAddMenuAnchor(e.currentTarget)  // opens menu
@@ -407,7 +426,7 @@ export default function NavToolbar({ selection, setSelection }) {
 			<AddProjectDialog open={projectDialogOpen} onClose={() => setProjectDialogOpen(false)} />
 			<AddBookDialog open={bookDialogOpen} onClose={() => setBookDialogOpen(false)} projectId={selection.projectId} />
 			<AddChapterDialog open={chapterDialogOpen} onClose={() => setChapterDialogOpen(false)} bookId={selection.bookId} />
-			<AddSceneDialog open={sceneDialogOpen} onClose={() => setSceneDialogOpen(false)} chapterId={selection.chapterId} />
+			<AddSceneDialog open={sceneDialogOpen} onClose={() => setSceneDialogOpen(false)} chapterId={addSceneChapterId} />
 			<AddCodexEntryDialog
 				open={entryDialogOpen}
 				onClose={() => setEntryDialogOpen(false)}

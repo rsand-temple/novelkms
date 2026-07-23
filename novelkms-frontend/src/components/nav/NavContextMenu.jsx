@@ -750,7 +750,11 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 			case 'book': return exportApi.bookDocxUrl(menuNode.id)
 			case 'part': return exportApi.partDocxUrl(menuNode.id)
 			case 'chapter': return exportApi.chapterDocxUrl(menuNode.id)
-			case 'scene': return exportApi.sceneDocxUrl(menuNode.id)
+			// ExportService resolves a scene's book through its chapter and throws
+			// when there isn't one. A codex entry and a Scratchpad scene both live
+			// under a chapter with a NULL book_id, so neither is exportable —
+			// offering it produced a 500 rather than a file.
+			case 'scene': return menuNode.bookId ? exportApi.sceneDocxUrl(menuNode.id) : null
 			default: return null
 		}
 	})()
@@ -762,7 +766,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 			case 'book': return exportApi.bookPdfUrl(menuNode.id)
 			case 'part': return exportApi.partPdfUrl(menuNode.id)
 			case 'chapter': return exportApi.chapterPdfUrl(menuNode.id)
-			case 'scene': return exportApi.scenePdfUrl(menuNode.id)
+			case 'scene': return menuNode.bookId ? exportApi.scenePdfUrl(menuNode.id) : null
 			default: return null
 		}
 	})()
@@ -774,9 +778,12 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 	const epubUrl = menuNode?.type === 'book' ? exportApi.bookEpubUrl(menuNode.id) : null
 
 	// For the AddSceneDialog chapterId:
-	// - right-clicked a chapter → chapterId = menuNode.id
-	// - right-clicked a scene   → chapterId = menuNode.chapterId
-	const addSceneChapterId = menuNode?.type === 'chapter' ? menuNode.id : menuNode?.chapterId
+	// - right-clicked a chapter    → chapterId = menuNode.id
+	// - right-clicked the Scratchpad → chapterId = menuNode.id (it is a chapter row)
+	// - right-clicked a scene      → chapterId = menuNode.chapterId
+	const addSceneChapterId = (menuNode?.type === 'chapter' || menuNode?.type === 'scratchpad')
+		? menuNode.id
+		: menuNode?.chapterId
 
 	// ── Render ────────────────────────────────────────────────────────────────
 
@@ -794,8 +801,10 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 				}
 				disableRestoreFocus
 			>
-				{/* Rename — not offered for a Codex Type; rename it in the Type editor */}
-				{menuNode?.type !== 'codex-category' && (
+				{/* Rename — not offered for a Codex Type (rename it in the Type editor)
+				    nor for the Scratchpad, which is a fixture of its book and has a
+				    fixed name; the server rejects a rename with not_scratchpad_operation. */}
+				{menuNode?.type !== 'codex-category' && menuNode?.type !== 'scratchpad' && (
 					<MenuItem dense onClick={() => menuNode && startRename(menuNode.id)}>
 						<ListItemIcon>
 							<DriveFileRenameOutlineIcon fontSize="small" />
@@ -904,7 +913,7 @@ export function NavContextMenuProvider({ children, selection, setSelection, navR
 						<ListItemText>Add Chapter</ListItemText>
 					</MenuItem>
 				)}
-				{(menuNode?.type === 'chapter' || menuNode?.type === 'scene') && (
+				{(menuNode?.type === 'chapter' || menuNode?.type === 'scene' || menuNode?.type === 'scratchpad') && (
 					<MenuItem dense onClick={handleAddScene}>
 						<ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
 						<ListItemText>Add Scene</ListItemText>

@@ -34,7 +34,7 @@ export default function BookSummaryItem({ bookId, selection, setSelection }) {
 				<SummarizeOutlinedIcon fontSize="small" sx={{ color: 'text.secondary' }} />
 			</ListItemIcon>
 			<ListItemText
-				primary="Summary"
+				primary="Book Summary"
 				slotProps={{ primary: { variant: 'body2', sx: { fontStyle: 'italic', color: 'text.secondary' } } }}
 			/>
 		</ListItemButton>

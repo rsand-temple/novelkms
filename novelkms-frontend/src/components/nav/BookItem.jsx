@@ -11,6 +11,7 @@ import PartItem from './PartItem'
 import ChapterItem from './ChapterItem'
 import ChapterListZone from './ChapterListZone'
 import CodexSection from './CodexSection'
+import ScratchpadItem from './ScratchpadItem'
 import BookSummaryItem from './BookSummaryItem'
 import { containerIds } from '../../dnd/dndUtils'
 import { useNavContextMenu } from './NavContextMenuContext'
@@ -31,7 +32,8 @@ export default function BookItem({ book, selection, setSelection }) {
 	const { data: parts } = useParts(open ? book.id : null)
 	const { data: chapters } = useChapters(open ? book.id : null)
 
-	const isSelected = selection.bookId === book.id && !selection.partId && !selection.chapterId && !selection.aiDocType
+	const isSelected = selection.bookId === book.id && !selection.partId && !selection.chapterId
+		&& !selection.aiDocType && !selection.scratchpadBookId
 
 	// ── Context menu & rename ─────────────────────────────────────────────────
 	const { openContextMenu, renamingId, endRename } = useNavContextMenu()
@@ -218,7 +220,13 @@ export default function BookItem({ book, selection, setSelection }) {
 						setSelection={setSelection}
 					/>
 
-					{/* Fixed bottom leaf — not manuscript text, not sortable. */}
+					{/* Fixed bottom leaves — not manuscript text, not sortable.
+					    The Scratchpad holds scenes that are not part of the book: it
+					    sits outside the outline SortableContext above precisely because
+					    it has no position in the book. Mounting it here (inside the
+					    Collapse) is what triggers its get-or-create fetch, so the row is
+					    written the first time the author opens the book. */}
+					<ScratchpadItem bookId={book.id} selection={selection} setSelection={setSelection} />
 					<BookSummaryItem bookId={book.id} selection={selection} setSelection={setSelection} />
 				</Box>
 			</Collapse>

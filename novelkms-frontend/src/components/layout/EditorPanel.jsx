@@ -377,7 +377,7 @@ function countWords(html) {
  * dimensions (6" × 9" Trade Paperback) so the canvas always renders.
  */
 export default function EditorPanel({
-	partId, chapterId, sceneId, projectId, bookId, codexId,
+	partId, chapterId, sceneId, projectId, bookId, codexId, scratchpadBookId,
 	templateType, templateScope, aiDocType, aiDocProvider, setSelection, onSelectBook,
 	onOpenContextSettings, contextSettingsLabel,
 }) {
@@ -393,10 +393,14 @@ export default function EditorPanel({
 	const isBookSummaryDoc = aiDocMode && aiDocType === 'bookSummary';
 	const isEditorialDoc = aiDocMode && aiDocType === 'editorial';
 	const templateMode = !aiDocMode && !!templateType;
+	// Scratchpad node selected (the container itself, not a scene inside it).
+	// It carries a bookId for context, so every book-level mode below has to
+	// exclude it explicitly or the book cover preview would claim the panel.
+	const scratchpadMode = !aiDocMode && !templateMode && !chapterId && !sceneId && !!scratchpadBookId;
 	const singleSceneMode = !aiDocMode && !templateMode && !!sceneId;
 	const multiSceneMode = !aiDocMode && !templateMode && !singleSceneMode && !!chapterId && !codexId;
 	const partDraftMode = !aiDocMode && !templateMode && !chapterId && !sceneId && !!partId && !!bookId;
-	const bookDraftMode = !aiDocMode && !templateMode && !partId && !chapterId && !sceneId && !!bookId;
+	const bookDraftMode = !aiDocMode && !templateMode && !partId && !chapterId && !sceneId && !!bookId && !scratchpadMode;
 	const aggregateDraftMode = partDraftMode || bookDraftMode;
 
 	// Review Mode is a layer on top of normal chapter editing: the rail shows
@@ -412,7 +416,7 @@ export default function EditorPanel({
 	// Page-layout preview: fires whenever a book (or part within a book) is
 	// selected with no chapter/scene/template/AI-doc active — regardless of
 	// whether page layout is configured on the book.
-	const pagePreviewEligible = !aiDocMode && !templateMode && !chapterId && !sceneId && !!bookId;
+	const pagePreviewEligible = !aiDocMode && !templateMode && !chapterId && !sceneId && !!bookId && !scratchpadMode;
 
 	const { data: previewPageBook } = useBook(pagePreviewEligible ? bookId : null);
 	const { data: previewPageProject } = useProject(pagePreviewEligible ? projectId : null);
@@ -1667,13 +1671,14 @@ export default function EditorPanel({
 	// showEmptyState only when nothing at all is selected (not even a project),
 	// OR when a codex container/category is selected (editing requires an entry).
 	const showEmptyState =
-		(!aiDocMode && !templateMode && !chapterId && !sceneId && !inPagePreviewMode && !projectShelfMode)
+		(!aiDocMode && !templateMode && !chapterId && !sceneId && !inPagePreviewMode && !projectShelfMode
+			&& !scratchpadMode)
 		|| (!!codexId && !sceneId && !templateMode && !aiDocMode);
 
 	// Toolbar gets a live editor reference only when actually editing;
 	// preview and shelf modes pass null so the gear icon stays accessible
 	// but formatting controls are inactive.
-	const toolbarEditor = projectShelfMode ? null : editor;
+	const toolbarEditor = (projectShelfMode || scratchpadMode) ? null : editor;
 	const canSplitScene = multiSceneMode
 		|| (singleSceneMode && !isCodexEntry && !!bookId && !!chapterId);
 
@@ -1736,6 +1741,28 @@ export default function EditorPanel({
 							projectId={projectId}
 							onSelectBook={onSelectBook}
 						/>
+					) : scratchpadMode ? (
+						/* The Scratchpad is a container, not a document. There is
+						   deliberately no aggregate editor here: its scenes have no
+						   reading order, no chapter heading, and no place in the
+						   book, so stitching them into one document would invent a
+						   structure that does not exist. Open a scene to edit it. */
+						<Box sx={{
+							flex: 1, display: 'flex', flexDirection: 'column',
+							alignItems: 'center', justifyContent: 'center',
+							gap: 1, px: 4, textAlign: 'center', color: 'text.disabled',
+						}}>
+							<Typography variant="body1">
+								Scratchpad
+							</Typography>
+							<Typography variant="body2" sx={{ maxWidth: 420 }}>
+								A holding pen for scenes that are not part of the book. Nothing here is
+								exported, counted toward word totals, or sent to the AI.
+							</Typography>
+							<Typography variant="body2" sx={{ maxWidth: 420 }}>
+								Drag a scene in to park it, or add a new one. Select a scene to edit it.
+							</Typography>
+						</Box>
 					) : showEmptyState ? (
 						<Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.disabled' }}>
 							<Typography variant="body1">

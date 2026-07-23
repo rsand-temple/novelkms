@@ -38,6 +38,20 @@ This document is the product-scope document, not an implementation log. Detailed
 - Cover and part templates with field tokens.
 - Search and replace across the current scene, chapter, part, or book scope.
 
+### Scratchpad
+
+Every book has a Scratchpad: somewhere to put scenes you have written but do not want in the
+book. Cut a scene that is not working, park an alternate opening, keep a fragment you might use
+later — drag it into the Scratchpad and it leaves the manuscript without being deleted.
+
+Nothing in the Scratchpad counts. It does not appear in exports, it is not included in your word
+count, and it is never sent to the AI for review, memory, summaries, or editorials. Drag a scene
+back into a chapter whenever you want it again.
+
+The Scratchpad sits near the bottom of each book in the navigation tree, below the Codex. You
+can add new scenes directly to it, rename and reorder them, and delete them individually — but
+the Scratchpad itself is a permanent part of the book and cannot be renamed or removed.
+
 ### Import and export
 
 - DOCX import into a new book.
@@ -66,9 +80,7 @@ This document is the product-scope document, not an implementation log. Detailed
 2. Finish/repair ePub export menu and endpoint wiring if it has regressed.
 3. Add a deliberate view/filter for deferred AI findings.
 4. Improve AI prompt context by selectively adding Codex/character/canon/timeline context.
-5. Move remaining localStorage project settings into backend persistence.
-6. Add a style-editor UI for paragraph style definitions.
-7. Expand Codex into richer first-class entities only after the authoring loop is stable.
+5. Add a style-editor UI for paragraph style definitions.
 
 ## Later product areas
 
@@ -77,7 +89,6 @@ This document is the product-scope document, not an implementation log. Detailed
 - Hugo/static-site generation.
 - Git integration.
 - Version history and manuscript snapshots.
-- Character records, relationships, voice sheets, canon records, timeline records, and research notes.
 - Continuity reports and “where is this mentioned?” discovery.
 - AI continuity, voice, and spoiler checks.
 - Collaboration and multi-author support.
@@ -87,6 +98,5 @@ This document is the product-scope document, not an implementation log. Detailed
 - General-purpose AI chat inside the app.
 - Automatic prose generation or manuscript rewriting.
 - Multi-provider orchestration.
-- Commercial billing or subscription logic.
 - Collaboration/multi-author workflows.
 - Full custom publishing/typesetting engine inside the live editor.

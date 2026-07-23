@@ -121,6 +121,8 @@ Security-first: role-aware authorization → audit logging → read-only support
 
 **Testing.** Moved to `NovelKmsTestBase` (Flyway-backed schema). `truncateAll()` order includes admin tables. Unique emails/Stripe IDs per fixture.
 
+
+
 ## Current architectural watchlist
 
 - Admin billing: trial extension, revoke-family design, webhook diagnostics, plan mapping, Stripe reconciliation.
@@ -543,6 +545,96 @@ dialog drives every moderation action, and profile suspension is keyed by handle
 **Single-scene word count fallback.** The word count captured in `buildSaveJob` falls back to `countWords(html)` instead of `0` when `CharacterCount` is unavailable. A zero there is what historically corrupted `scene.word_count` (pre-V37 autosave bug).
 
 - Autosave `buildSaveJob` reads `activeScenesRef` for the draft-mode chapter-by-scene map; if a scene is added or removed between arm and fire, the boundary check rejects the save. This is correct for protection but means a very rapid add-scene → type → save sequence could drop the first keystroke. Monitoring.
+
+### V43 — Book Scratchpad
+
+A per-book holding pen for scenes that are not part of the manuscript: parked drafts, cut
+scenes, alternate takes. Never rendered into the book, never counted, never sent to any AI.
+
+**The shape does the work.** A Scratchpad is a `chapter` row with `book_id`, `part_id` and
+`codex_id` all NULL and a new `scratchpad_book_id` naming the book. That NULL `book_id` is the
+entire exclusion mechanism, reusing V13's codex trick: every book-rooted read in the codebase
+filters `chapter.book_id`, so the Scratchpad drops out of the numbering CTE, `BookOutline` (all
+four statements), `bookChapterSummaries`, `ChapterMemoryDao`, `SceneDao.findContentForBook`
+(search), the word/paragraph rollups in `BookDao`/`ProjectDao`/`PartDao`, the trash child
+counts, and all three export services **without one line added to any of them**. It also fails
+safe: a book-rooted query written next year is excluded by default rather than needing to
+remember a guard. The rejected alternative — keeping `book_id` set plus a `chapter_role`
+discriminator — required editing ~14 existing statements and would have failed open forever.
+
+**Every AI guard was already correct.** `AiReviewService` (chapter review, scene review, memory,
+summary, editorial) and `ReviewPublishService` all gate on `chapter.getBookId() == null` and
+throw `not_manuscript`. A Scratchpad chapter satisfies that predicate, so the entire
+AI-exclusion requirement needed no code. Worth remembering as a design argument: choosing the
+shape an existing invariant already tests is cheaper than adding a parallel one.
+
+**The enumerable cost is the ownership chain.** Any query resolving a chapter to its owning
+project must now carry four arms, not three:
+`COALESCE(b.project_id, cx.project_id, cb.project_id, sb.project_id)` with
+`LEFT JOIN book sb ON sb.id = c.scratchpad_book_id`. Without it the tenant filter 404s the
+author out of their own Scratchpad. Updated: `TenantAccessDao.ownsChapter`/`ownsScene`,
+`TrashDao.trashChapter`/`trashScene`, and the five chapter-rooted counts in
+`AdminUserDao`/`AdminMetricsDao`. The two codex-rooted chains in those admin DAOs are correctly
+untouched. **Grep `cx.project_id` before adding any new chapter→project resolution.**
+
+**Archive would have silently eaten it.** `ArchiveDao.findChaptersForProject` joined on
+`ch.book_id`, which would have dropped the Scratchpad and every scene parked in it out of the
+backup. Now joins `COALESCE(ch.book_id, ch.scratchpad_book_id)` and exports the column.
+`ArchiveService` needed nothing: `remapForeignKeys`, `setParam` and `insertRow` are all generic
+over `_id`-suffixed columns, so the round trip works as soon as the column is exported.
+Archives taken before V43 simply lack the key and import with it NULL.
+
+**Not trashable, not renamable, not movable.** `trashChapter`'s context query carries
+`AND c.scratchpad_book_id IS NULL`, and `ChapterResource` rejects update/move/delete with 400
+`not_scratchpad_operation` so the author gets a message rather than a silent 204. Scenes inside
+are fully trashable and restore into place unchanged (`restoreScene` is parent-generic).
+
+**One per book, lazily created, no backfill.** `uq_chapter_scratchpad` on `scratchpad_book_id`;
+NULLs are distinct in a unique index in both dialects, so ordinary chapters do not collide
+(same property `uq_codex_project` relies on). `GET /api/books/{bookId}/scratchpad` is
+get-or-create; a lost insert race re-reads rather than failing. Tenant authorization comes free
+from the `books/{bookId}` segment.
+
+**Frontend.** `selection.scratchpadBookId` is keyed by **book**, not by the Scratchpad's chapter
+id — the id is unknown until the get-or-create fetch lands and the node must be selectable
+before then. It joins `setSelection`'s existing scrub list in `App.jsx` alongside `aiDocType`
+and `artifactFolderId`, which is why no other nav component needed touching: every click
+anywhere clears it. This deliberately avoids adding another sticky selection key of the kind
+that causes the known stale-`codexId` problem.
+
+`ScratchpadItem` is a fixed leaf between the Codex section and the book Summary, outside the
+outline `SortableContext` because it has no position in the book. Its contents are an ordinary
+`scenes-{chapterId}` `SortableContext`, so NavPanel's existing scene handlers move scenes in and
+out in both directions unchanged. The row itself is registered as a **droppable whose id is that
+container id** — without it an empty Scratchpad is undroppable (no sortable child to aim at, and
+the row is not a chapter node so NavPanel's "dropped on a chapter row" fallback does not apply);
+registering the container id directly means `resolveToContainer` picks it up through the
+existing `isContainerId` branch. Consequence: the scene list is fetched on mount, not on expand,
+because NavPanel builds the reorder payload from the TanStack cache and a miss would renumber
+the dropped scene to 0 on top of scenes already there.
+
+`SceneItem` is given `bookId={null}`, the same signal a codex entry carries, so
+`isManuscriptNode = !!menuNode.bookId` removes every AI action from the context menu with no new
+conditions — mirroring the server rule rather than restating it. `EditorPanel` gets a
+`scratchpadMode` placeholder rather than the aggregate chapter editor: the scenes have no
+reading order and no chapter heading, so stitching them into one document would invent a
+structure that does not exist.
+
+**Pre-existing bug fixed in passing.** `ExportService.exportScene` resolves a scene's book
+through its chapter and throws when there isn't one, so "Export as Word/PDF" on a **codex entry**
+has been returning 500 rather than a file. Both `exportUrl` and `exportPdfUrl` in
+`NavContextMenu` are now gated on `menuNode.bookId` for scenes, fixing codex and preventing the
+Scratchpad from acquiring the same broken path.
+
+**Verification.** Maven cannot run in the build environment. V1→V43 replayed on H2 2.4.240 (the
+pinned version) with 16 assertions: schema shape; unique index rejects a second Scratchpad while
+NULL rows still insert; exclusion from book-rooted chapter counts, word rollups,
+`BookOutline.nextPosition`, the memory/summary ordering CTE and `findContentForBook`; ownership
+resolving through the new arm for both chapter and scene; archive carrying both books'
+Scratchpads; the `trashChapter` predicate refusing the Scratchpad while still accepting a
+manuscript chapter; book delete cascading. Static: Java brace/package tokenizer, SQL bind and
+INSERT arity, every `map(rs)` query confirmed to select the new column, esbuild JSX transform,
+import-path and icon-presence checks.
 
 ## Extensible Codex E6 — non-destructive field removal.
 - Soft-remove via codex_type_field.deleted_at (existing since V42); active reads

@@ -81,6 +81,9 @@ const EMPTY_SELECTION = {
 	aiDocType: null,       // 'memory' | 'chapterSummary' | 'bookSummary' | 'editorial' | null
 	aiDocProvider: null,   // selected provider variant for the active AI doc; null = preferred (default provider)
 	artifactFolderId: null, // 'root' | <folderId> | null — active Artifacts Explorer folder
+	scratchpadBookId: null, // book whose Scratchpad node is selected; keyed by BOOK, not by the
+	                        // Scratchpad's chapter id, which is not known until its
+	                        // get-or-create fetch lands and the node must be selectable before then
 }
 
 function WorkspacePanelHeader({ icon, title, subtitle, actions }) {
@@ -303,6 +306,7 @@ export default function App() {
 				aiDocType: null,
 				aiDocProvider: null,
 				artifactFolderId: null,
+				scratchpadBookId: null,
 			}
 
 			const base = typeof update === 'function' ? update(cleanPrev) : update
@@ -318,6 +322,7 @@ export default function App() {
 				aiDocType: base.aiDocType ?? null,
 				aiDocProvider: base.aiDocProvider ?? null,
 				artifactFolderId: base.artifactFolderId ?? null,
+				scratchpadBookId: base.scratchpadBookId ?? null,
 			}
 		})
 	}, [])
@@ -832,6 +837,7 @@ export default function App() {
 									projectId={selection.projectId}
 									bookId={selection.bookId}
 									codexId={selection.codexId}
+									scratchpadBookId={selection.scratchpadBookId}
 									templateType={selection.templateType}
 									templateScope={selection.templateScope}
 									aiDocType={selection.aiDocType}

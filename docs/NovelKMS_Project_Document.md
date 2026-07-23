@@ -77,7 +77,15 @@ JAX-RS role infrastructure (`user_role`, `NovelKmsPrincipal`, `@RolesAllowed`). 
 
 ### Manuscript structure and editing
 
-Project → Book → Part → Chapter → Scene hierarchy. Scene-level persistence with aggregate editing (chapter/part/book). Drag-and-drop reordering/reparenting. Nav context menu, inline rename, F2 rename. Soft-delete Trash. Auto chapter/part numbering with blank-title fallbacks. Chapter reset numbering. Auto-create initial scene. Word count tracking.
+- Project → Book → Part → Chapter → Scene hierarchy. Scene-level persistence with aggregate editing (chapter/part/book). 
+  Drag-and-drop reordering/reparenting. Nav context menu, inline rename, F2 rename. Soft-delete Trash. Auto chapter/part
+  numbering with blank-title fallbacks. Chapter reset numbering. Auto-create initial scene. Word count tracking.
+
+- **Scratchpad** — one per book, a holding pen for scenes that are not part of the manuscript.
+  Scenes drag in and out of chapters freely. Never rendered into the book, never counted toward
+  word or paragraph totals, never exported, not searchable, and never fed to any AI workflow.
+  Created on demand the first time a book is opened; cannot be renamed, moved, or deleted, though
+  its scenes are individually trashable.
 
 ### Editor and formatting
 
@@ -312,6 +320,10 @@ Help topic `codex-types.md` updated for deletion and reordering. No migration.
 - Codex Types: deferred by design — cross-project type copy, a shared type library,
   changing an existing entry's Type, field types beyond the three, permanent purge of
   soft-removed field values, and "AI prompt includes the project's actual types".
+- Scratchpad: excluded from search by construction (search is book-rooted), so a parked scene
+  cannot be found by its text. Revisit if it proves annoying in practice.
+- Scratchpad: no word-count badge by design — its words are already outside every total, and a
+  separate count would invite the question of whether they are "real".
 
 ## Near-term next actions
 
@@ -321,6 +333,7 @@ Help topic `codex-types.md` updated for deletion and reordering. No migration.
 4. Deferred AI findings view.
 5. Style-editor UI.
 6. Provider-variants Phase 3: provider-aware coverage/staleness, review-history grouping, fallback note.
+7. Human Review slice 1F (blocking, reporting, admin removal) — final Phase 1 slice.
 
 ## Documentation maintenance rule
 
