@@ -57,6 +57,9 @@ Java 17+, Dropwizard/Jersey, Flyway, explicit JDBC DAO layer, Apache DBCP2, H2 (
 
 React + Vite, Material UI v6, React Router, TanStack Query v5, Axios, TipTap 3.x (pinned), dnd-kit. No Redux.
 
+### Testing
+JUnit 5 is used for backend unit testing. ALL JUnit classes must extends NovelKmsTestBase, which establishes the current schema via Flyway in a temporary database.
+
 ## Current production/deployment status
 
 - Fedora media server, rootless Podman Quadlet/systemd user services (PostgreSQL + NovelKMS + Caddy).
